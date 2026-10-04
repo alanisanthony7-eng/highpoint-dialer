@@ -1,0 +1,9 @@
+{
+  "name": "highpoint-dialer",
+  "private": true,
+  "type": "module",
+  "description": "Highpoint Dialer: browser phone, multi-line power dialing, local-presence numbers and call analytics on Twilio + Netlify",
+  "dependencies": {
+    "@netlify/blobs": ">=8.2.0"
+  }
+}

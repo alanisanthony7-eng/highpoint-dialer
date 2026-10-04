@@ -1,0 +1,85 @@
+--- a/desk-app.js
++++ b/desk-app.js
+@@ -44,7 +44,7 @@
+ /* ---------- navigation ---------- */
+ let view=(location.hash||"").slice(1);
+ if(!["pipeline","contacts","import","dialer","quoter","iul","assistant","screen","scripts","calendar","crew"].includes(view)) view=ls.get("hp.view","pipeline");
+-const CRUMB={crew:"Crew lobby",calendar:"Calendar",quoter:"Quote & compare",iul:"IUL illustrator",pipeline:"My CRM",contacts:"Clients",screen:"Screen a client",assistant:"Highpoint Bot",scripts:"Scripts",dialer:"WAVV dialer",import:"Import leads"};
++const CRUMB={crew:"Crew lobby",calendar:"Calendar",quoter:"Quote & compare",iul:"IUL illustrator",pipeline:"My CRM",contacts:"Clients",screen:"Screen a client",assistant:"Highpoint Bot",scripts:"Scripts",dialer:"Highpoint Dialer",import:"Import leads"};
+ function syncNav(){ $$(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.view===view?"page":"false")); $("#crumb").textContent=CRUMB[view]||""; }
+ function go(v){ if(!document.getElementById("v-"+v))v="pipeline"; view=v; ls.set("hp.view",v); $$("section[data-v]").forEach(s=>s.hidden=s.id!=="v-"+v); syncNav(); renderAll(); if(typeof crewPresence==="function")crewPresence(v); window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
+ $$(".nav").forEach(b=>b.onclick=()=>{if(b.dataset.view)go(b.dataset.view)});
+@@ -149,7 +149,7 @@
+ function prodFrom(s){s=String(s||"").toLowerCase();if(/fe|final|burial|funeral/.test(s))return"FE";if(/mort|mp\b/.test(s))return"MP";if(/iul|index|universal/.test(s))return"IUL";return""}
+ function buildRecords(){
+   if(!imp)return[];
+-  return imp.body.map(r=>{const o={};imp.map.forEach((k,i)=>{if(!k)return;const v=(r[i]||"").trim();if(!v)return;
++  return imp.body.map(r=>{const o={};imp.map.forEach((k,i)=>{const v=(r[i]||"").trim();if(!v)return;if(!k){const h=imp.head[i]||("Column "+(i+1));(o.fields=o.fields||{})[h]=v;return}
+       if(k==="full"){const p=v.split(/\s+/);if(!o.first)o.first=p.shift();if(!o.last)o.last=p.join(" ")}
+       else if(k==="product")o.product=prodFrom(v);
+       else if(k==="mortgageBalance"||k==="mortgagePayment")o[k]=Number(v.replace(/[^\d.]/g,""))||"";
+@@ -249,8 +249,8 @@
+   if(!l){$("#dCur").innerHTML=`<h2>Queue is empty</h2><p class="muted" style="margin:0">Pick another stage above, or import leads to start dialing.</p>`;saveSess();return}
+   $("#dCur").innerHTML=`
+     <div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="font-size:20px">${esc(fullName(l))}</h2><div class="muted" style="margin-top:3px">${[l.age&&l.age+" yrs",l.state,l.source].filter(Boolean).map(esc).join(" · ")}</div></div>${prodPill(l.product)}</div>
+-    <div class="row" style="justify-content:space-between"><span class="bigphone">${esc(fmtPhone(l.phone))}</span><div class="row"><button class="btn" id="dcCopy">Copy</button><button class="btn primary" id="dcStart">${callT0&&callLead===l.id?"End timer":"Start call"}</button></div></div>
+-    <div class="calltimer ${callT0&&callLead===l.id?"live":""}" id="dcTimer"><i></i><span class="num" id="dcClock">${callT0&&callLead===l.id?fmtDur(Date.now()-callT0):"00:00"}</span><span class="muted">${callT0&&callLead===l.id?"On call · log the outcome to save it":"Press Start call when you dial in WAVV. Duration is saved with the call."}</span></div>
++    <div class="row" style="justify-content:space-between"><span class="bigphone">${esc(fmtPhone(l.phone))}</span><div class="row"><button class="btn" id="dcCopy">Copy</button><button class="btn primary" id="dcStart">${callT0&&callLead===l.id?(window.hpDialer?.ready?"On call":"End timer"):(window.hpDialer?.ready?"Call now":"Start call")}</button></div></div>
++    <div class="calltimer ${callT0&&callLead===l.id?"live":""}" id="dcTimer"><i></i><span class="num" id="dcClock">${callT0&&callLead===l.id?fmtDur(Date.now()-callT0):"00:00"}</span><span class="muted">${callT0&&callLead===l.id?"On call · log the outcome to save it":(window.hpDialer?.ready?"Press Call now to dial from your browser. Talk time, recording and transcript save with the call.":"Press Start call when you dial. Duration is saved with the call.")}</span></div>
+     ${l.mortgageBalance?`<div class="muted">Mortgage <b class="num" style="color:var(--ink)">${money(l.mortgageBalance)}</b>${l.mortgagePayment?` · payment <b class="num" style="color:var(--ink)">${money(l.mortgagePayment)}</b>/mo`:""}${l.lender?` · ${esc(l.lender)}`:""}</div>`:""}
+     <div class="script"><span class="label" style="display:block;margin-bottom:4px">Opener</span>${(SCRIPTS[l.product]||SCRIPTS[""])(l)}</div>
+     <div class="stack"><span class="label">Log the call</span>
+@@ -265,9 +265,9 @@
+     <button class="btn" id="dcOpen" style="align-self:flex-start">Open full lead</button>`;
+   $("#dcCopy").onclick=async()=>{try{await navigator.clipboard.writeText(fmtPhone(l.phone));toast("Number copied")}catch{const s=getSelection(),r=document.createRange();r.selectNodeContents($(".bigphone"));s.removeAllRanges();s.addRange(r);toast("Number selected, press Ctrl/Cmd+C")}};
+   $("#dcOpen").onclick=()=>openDrawer(l.id);
+-  $("#dcStart").onclick=async()=>{if(callT0&&callLead===l.id){callStop();renderDialer();return}callT0=Date.now();callLead=l.id;window.dispatchEvent(new Event("hp:callstart"));try{await navigator.clipboard.writeText(normPhone(l.phone))}catch{}toast("Timer started · number copied for WAVV");tickCall();renderDialer()};
++  $("#dcStart").onclick=async()=>{if(window.hpDialer?.ready){if(window.hpDialer.busy){toast("Finish the current call first");return}window.hpDialer.dialLead(l);return}if(callT0&&callLead===l.id){callStop();renderDialer();return}callT0=Date.now();callLead=l.id;window.dispatchEvent(new Event("hp:callstart"));try{await navigator.clipboard.writeText(normPhone(l.phone))}catch{}toast("Timer started · number copied for WAVV");tickCall();renderDialer()};
+   $$("[data-dz]").forEach(b=>b.onclick=()=>dispo(l,b.dataset.dz));
+-  saveSess();
++  saveSess(); window.dispatchEvent(new Event("hp:leadchange"));
+ }
+ async function dispo(l,kind){
+   if((kind==="cb"||kind==="appt")&&$("#cbRow").hidden){$("#cbRow").hidden=false;const d=new Date(Date.now()+864e5);d.setMinutes(0);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());$("#cbAt").value=d.toISOString().slice(0,16);$("#cbSave").textContent=kind==="appt"?"Save appointment":"Save callback";$("#cbSave").onclick=()=>dispo(l,kind==="appt"?"apptgo":"cbgo");return}
+@@ -279,7 +279,8 @@
+   sess.d++; if(["cbgo","appt","apptgo","ni"].includes(kind))sess.c++; if(kind==="appt"||kind==="apptgo")sess.a++;
+   const at=new Date($("#cbAt")?.value||"").getTime();
+   const dur=callLead===l.id&&callT0?Date.now()-callT0:0; callStop();
+-  logCall({leadId:l.id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:""});
++  const hpm=window.hpDialer?.meta(l.id)||{}; window.hpDialer?.onDispo(l.id,lab,note);
++  logCall({leadId:l.id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:"",...hpm});
+   const q=dialQueue(); const idx=q.findIndex(x=>x.id===l.id); const nextId=q[idx+1]?.id||null;
+   try{await patchLead(l.id,patch);dCurId=nextId;
+     if((kind==="apptgo"||kind==="cbgo")&&!isNaN(at))await putAppt({leadId:l.id,leadName:fullName(l),title:fullName(l),at,dur:30,type:kind==="cbgo"?"Callback":"Phone call",done:false,createdAt:Date.now()});
+@@ -291,6 +292,31 @@
+ $("#wavvCsv").onclick=()=>{const q=dialQueue();if(!q.length){toast("Queue is empty");return}
+   offerFile(`wavv-${$("#dqStage").value}-${new Date().toISOString().slice(0,10)}.csv`,toCSV(["First Name","Last Name","Phone","Email","State","Notes"],q.map(l=>[l.first||"",l.last||"",normPhone(l.phone),l.email||"",l.state||"",[PROD[l.product],l.source].filter(Boolean).join(" · ")])))};
+ 
++/* ---------- Highpoint Dialer hooks ---------- */
++window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,renderDialer,openDrawer,
++  currentId:()=>dCurId,setCurrent(id){dCurId=id;if(view==="dialer")renderDialer()},
++  get calls(){return calls},get appts(){return appts},putAppt,addNoteObj,stageName,STAGES,PROD,go,
++  async dispoDirect(id,kind,o={}){const l=leads.get(id);if(!l)return;const note=o.note||"";
++    const lab={na:"No answer",vm:"Left voicemail",bad:"Bad number",cb:"Callback scheduled",appt:"Appointment set",ni:"Not interested",dnc:"Do not call"}[kind];
++    const patch={callCount:(l.callCount||0)+1,lastCallAt:Date.now(),lastDisposition:lab,notes:addNoteObj(l,`Call: ${lab}${o.at?" for "+new Date(o.at).toLocaleString():""}${note?" — "+note:""}`)};
++    if(kind==="appt")patch.stage="appointment";else if(kind==="ni"||kind==="bad"||kind==="dnc")patch.stage="lost";else if((l.stage||"new")==="new")patch.stage="contacted";
++    if(kind==="cb")patch.callbackAt=o.at||Date.now()+864e5;
++    sess.d++;if(["cb","appt","ni"].includes(kind))sess.c++;if(kind==="appt")sess.a++;saveSess();
++    const dur=callLead===id&&callT0?Date.now()-callT0:0;callStop();
++    const hpm=window.hpDialer?.meta(id)||{};window.hpDialer?.onDispo(id,lab,note);
++    logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:"",...hpm});
++    await patchLead(id,patch);
++    if((kind==="appt"||kind==="cb")&&o.at)await putAppt({leadId:id,leadName:fullName(l),title:fullName(l),at:o.at,dur:30,type:kind==="cb"?"Callback":"Phone call",done:false,createdAt:Date.now()});
++    if(kind==="appt"){celebrate(`Appointment set with ${fullName(l)}`);awardXP(30,"appointment set")}else awardXP(5,"call logged");
++    if(view==="dialer"&&dTab==="dial")renderDialer();return lab},
++  callStart(id){if(callT0)return;callT0=Date.now();callLead=id;window.dispatchEvent(new Event("hp:callstart"));tickCall();if(view==="dialer"&&dTab==="dial")renderDialer()},
++  callStop(){callStop();if(view==="dialer"&&dTab==="dial")renderDialer()},
++  async autoLog(id,lab,meta={}){const l=leads.get(id);if(!l)return;const patch={callCount:(l.callCount||0)+1,lastCallAt:Date.now(),lastDisposition:lab,notes:addNoteObj(l,`Call: ${lab} (Highpoint Dialer)`)};
++    if(lab==="Bad number"||lab==="Do not call")patch.stage="lost";sess.d++;saveSess();
++    logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur:0,note:"",transcript:"",summary:"",...meta});
++    try{await patchLead(id,patch)}catch{}if(view==="dialer"&&dTab==="dial")renderDialer()}};
++if(!window.hpDialer&&!document.querySelector('script[src="/hp-dialer.js"]')){const c=document.createElement("link");c.rel="stylesheet";c.href="/hp-dialer.css";document.head.append(c);const sc=document.createElement("script");sc.src="/hp-dialer.js";document.body.append(sc)}
++
+ /* ---------- quoting engines (illustrative) ---------- */
+ function interp(xs,ys,x){if(x<=xs[0])return ys[0];for(let i=1;i<xs.length;i++)if(x<=xs[i]){const t=(x-xs[i-1])/(xs[i]-xs[i-1]);return ys[i-1]+t*(ys[i]-ys[i-1])}const n=xs.length-1;return ys[n]+(x-xs[n])*(ys[n]-ys[n-1])/(xs[n]-xs[n-1])}
+ const FE_AGES=[45,50,55,60,65,70,75,80,85], FE_RATE=[2.4,2.9,3.4,4.1,5.0,6.4,8.4,11.4,15.5];
