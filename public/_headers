@@ -12,6 +12,8 @@
   Cache-Control: no-cache
 /hp-pro.js
   Cache-Control: no-cache
+/hp-avatar.js
+  Cache-Control: no-cache
 /hp-pro.css
   Cache-Control: no-cache
 /*.js

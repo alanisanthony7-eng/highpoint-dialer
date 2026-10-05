@@ -1640,7 +1640,7 @@ function avatar2SVG(c0,size=200,opts={}){const c=av3Resolve(av2Migrate(c0));cons
 /* ---------- crop support for tiles ---------- */
 const _av2=avatar2SVG;
 avatar2SVG=function(c,size,opts={}){let s=_av2(c,size,opts);if(opts.crop){const vb={face:"62 40 116 134",head:"40 8 160 176",body:"10 120 220 144",full:"0 0 240 264"}[opts.crop];s=s.replace('viewBox="0 0 240 264"',`viewBox="${vb}"`).replace(/width="[\d.]+" height="[\d.]+"/,`width="${size}" height="${size}"`)}return s};
-avatarSVG=function(c,size){return avatar2SVG(c,size)};
+avatarSVG=function(c,size){return window.hpAvatar?window.hpAvatar.render(c,size):avatar2SVG(c,size)};
 /* ---------- creator sheet ---------- */
 const CI=p=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 const CR_CATS=[
@@ -1659,6 +1659,10 @@ const CR_CATS=[
  {id:"bg",label:"Background",icon:CI('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 16l5-5 4 4 3-3 6 6"/>'),subs:[["Background","bg","bgopts"]]},
  {id:"profile",label:"Finish",icon:CI('<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'),subs:[]}];
 function openCreator(){if(!myId){toast("Sign in to create your character");return}
+  if(window.hpAvatar){window.hpAvatar.openCreator({char:myDoc?.char||null,handle:myDoc?.handle||"",motto:myDoc?.motto||"",
+    isTaken:h=>[...crew.entries()].some(([id,d])=>id!==myId&&(d.handle||"").toLowerCase()===h.toLowerCase()),
+    onSave:async({char,handle,motto})=>{myDoc=Object.assign(myDoc||{stats:emptyStats(),ach:{},createdAt:Date.now()},{char,handle,motto});crewCheckAch();clearTimeout(crewTimer);
+      const job=crewQ.then(()=>crewCol.doc(myId).set({...myDoc,stats:myStats(),updatedAt:Date.now()}));crewQ=job.catch(()=>{});await job;toast("Character saved");renderCrew();renderRank()}});return}
   const st={c:av2Migrate(myDoc?.char||av2Random()),handle:myDoc?.handle||"",motto:myDoc?.motto||"",cat:"skin",sub:0,undo:[],redo:[]};
   let el=$("#creator");if(el)el.remove();el=document.createElement("div");el.id="creator";el.setAttribute("role","dialog");el.setAttribute("aria-label","Character creator");document.body.append(el);
   const close=()=>{el.classList.add("out");setTimeout(()=>el.remove(),300);document.removeEventListener("keydown",onKey)};
