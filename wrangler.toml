@@ -17,4 +17,4 @@ database_id = "5dceed87-da4e-4420-8940-78ec50647f4b"
 HP_ADMIN_EMAILS = "alanisanthony7@gmail.com"
 HP_PUBLIC_URL = "https://highpoint-dialer.pages.dev"
 # Snap Login Kit public OAuth client ID (turns on "Use my Bitmoji"). Not a secret.
-HP_SNAP_CLIENT_ID = ""
+HP_SNAP_CLIENT_ID = "b290cc01-ca22-4c0c-8d4c-d5bc556db5be"
