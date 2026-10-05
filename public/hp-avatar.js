@@ -104,6 +104,7 @@
     if (!c) return { ...DEF, tune: {} };
     if (c.v === 4) {
       const o = { ...DEF, ...c, tune: { ...(c.tune || {}) } };
+      for (const k of Object.keys(o.tune)) if (typeof o.tune[k] !== "number" || !isFinite(o.tune[k])) delete o.tune[k];
       if (o.bg !== "solid") { o.bgColor = BGMAP[o.bg] || o.bgColor || "#FF4FA3"; o.bg = "solid"; }
       if (HAIRMAP[o.hair]) o.hair = HAIRMAP[o.hair];
       o.lipA = 0; o.shadowA = 0; o.liner = "none"; o.lashes = "none"; o.blush = 0.1; o.blushColor = null;
@@ -441,12 +442,31 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
         return { sides: { ...S0, y: 112, fade: 0.82 }, top: vol(cap, { tex: "coil", edge: 10 }) + list.map((p) => rope(p, 12.5)).join(""), sil: [cap] };
       },
       locs: () => {
-        const cap = cr([...rimL(6, 150), [0, 64], ...mirL(rimL(6, 150)), [88, 150], [80, 128], [66, 114], [40, 109], [0, 110], [-40, 109], [-66, 114], [-80, 128], [-88, 150]]);
-        const backL = [], frontL = [], topL = [];
-        for (let i = 0; i < 10; i++) for (const s of [-1, 1]) { const x0 = s * (4 + i * 9), y0 = 54 + i * 2.5, w = ((i * 7) % 5) - 2; backL.push(G4([[x0, y0], [s * (62 + i * 4), y0 - 2], [s * (99 + i * 0.8) + w * 3, 150], [s * (92 + i * 1.6) - w * 4, 232 + ((i * 17) % 34)]])); }
-        for (let i = 0; i < 3; i++) for (const s of [-1, 1]) { const x0 = s * (62 + i * 10); frontL.push(G4([[x0, 92 + i * 9], [s * (89 + i * 2), 118 + i * 6], [s * (94 + i), 176], [s * (90 + i * 2), 232 + i * 11]])); }
-        for (let i = 0; i < 8; i++) { const dx = -63 + i * 18; topL.push(G4([[dx, hlY(dx, 110, 3) - 2], [dx * 1.06, 88], [dx * 1.04, 70], [dx * 0.95, 60]])); }
-        return { back: backL.map((p) => rope(p, 11)).join(""), sides: { ...S0, y: 112, fade: 0.3 }, top: vol(cap, { tex: "coil", edge: 12 }) + topL.map((p) => rope(p, 10.5)).join("") + frontL.map((p) => rope(p, 11)).join(""), sil: [cap], longBack: 1 };
+        // real locs: round, twisted ropes with fuzzy texture, rooted in sections, falling to the shoulders
+        const cap = cr([...rimL(6, 150), [0, 62], ...mirL(rimL(6, 150)), [88, 150], [80, 128], [66, 114], [40, 109], [0, 110], [-40, 109], [-66, 114], [-80, 128], [-88, 150]]);
+        const tube = (p, w, tone = 0) => {
+          const d = cub(p), base = tone ? mix(hc, hcDD, 0.35) : hc;
+          let ridges = "";
+          const n = Math.max(4, Math.round((Math.hypot(p[3][0] - p[0][0], p[3][1] - p[0][1]) + 20) / (w * 0.62)));
+          for (let k = 1; k < n; k++) { const t = k / n, q = ptOn(p, t), q2 = ptOn(p, Math.min(0.999, t + 0.01)); const a = Math.atan2(q2[1] - q[1], q2[0] - q[0]), b = a + 1.05, h = w * 0.5; ridges += `M${PP(q[0] - Math.cos(b) * h, q[1] - Math.sin(b) * h)}L${PP(q[0] + Math.cos(b) * h, q[1] + Math.sin(b) * h)}`; }
+          return `<path d="${d}" fill="none" stroke="${hcDD}" stroke-width="${w + 2.6}" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${base}" stroke-width="${w}" stroke-linecap="round"/><path d="${ridges}" stroke="${hcDD}" stroke-width="${(w * 0.22).toFixed(1)}" opacity=".5" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${hcS}" stroke-width="${(w * 0.3).toFixed(1)}" stroke-linecap="round" opacity="${tone ? 0.18 : 0.32}" transform="translate(-${(w * 0.2).toFixed(1)} -0.6)" filter="url(#${u}g1)"/><path d="${d}" fill="none" stroke="#000" stroke-width="${(w * 0.35).toFixed(1)}" stroke-linecap="round" opacity=".22" transform="translate(${(w * 0.28).toFixed(1)} 0.6)" filter="url(#${u}g1)"/>`;
+        };
+        const fuzzOver = (paths, w) => { const id = `${u}lm${++hid}`; hdefs += `<mask id="${id}" maskUnits="userSpaceOnUse" x="-150" y="-200" width="700" height="900">${paths.map((p) => `<path d="${cub(p)}" fill="none" stroke="#fff" stroke-width="${w + 2}" stroke-linecap="round"/>`).join("")}</mask>`; return `<g mask="url(#${id})">${texR("cd", 0.55)}${texR("cl", 0.4)}</g>`; };
+        const J = (k) => (((k * 7919) % 97) / 97 - 0.5);
+        // back layer: behind the head, falling past the ears to the shoulders
+        const back = [];
+        for (let i = 0; i < 9; i++) for (const s of [-1, 1]) { const x0 = s * (10 + i * 10), y0 = 58 + i * 4, end = 238 + ((i * 23) % 40); back.push(G4([[x0, y0], [s * (70 + i * 5), y0 - 8], [s * (104 + i * 1.2 + J(i) * 6), 150], [s * (96 + i * 2.2 + J(i + 3) * 10), end]])); }
+        // top layer: roots in a grid, pulled back from the hairline over the crown
+        const top = [];
+        for (let i = 0; i < 9; i++) { const dx = -64 + i * 16; top.push(G4([[dx, hlY(dx, 112, 3) - 1], [dx * 1.04, 92], [dx * 1.0, 72], [dx * 0.86 + J(i) * 4, 54]])); }
+        // side layer: drops from the temples, in front of the ears
+        const side = [];
+        for (let i = 0; i < 4; i++) for (const s of [-1, 1]) { const x0 = s * (70 + i * 7); side.push(G4([[x0, 92 + i * 7], [s * (94 + i * 2), 112 + i * 6], [s * (100 + i * 1.5 + J(i) * 4), 170], [s * (95 + i * 2.5 + J(i + 5) * 6), 222 + i * 12 + ((i * 13) % 14)]])); }
+        const W = 10.5;
+        const backArt = back.map((p) => tube(p, W, 1)).join("") + fuzzOver(back, W);
+        const frontArt = top.map((p) => tube(p, W - 0.5)).join("") + fuzzOver(top, W - 0.5) + side.map((p) => tube(p, W)).join("") + fuzzOver(side, W);
+        const roots = `<g fill="${mix(hcDD, sk, 0.35)}" opacity=".5">${top.map((p) => `<ellipse cx="${p[0][0].toFixed(1)}" cy="${(p[0][1] + 2).toFixed(1)}" rx="5" ry="2.2"/>`).join("")}</g>`;
+        return { back: backArt, sides: { ...S0, y: 112, fade: 0.3 }, top: vol(cap, { tex: "coil", edge: 12 }) + frontArt + roots, sil: [cap], longBack: 1 };
       },
       braids: () => {
         let art = ""; const parts = [];
@@ -591,7 +611,7 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
 <ellipse cx="${CX + gap}" cy="${eyeY - 9}" rx="30" ry="18" fill="${skDD}" opacity=".32" filter="url(#${u}b8)"/>
 <ellipse cx="${CX - gap - 8}" cy="${eyeY + 34}" rx="22" ry="12" fill="#fff" opacity=".14" filter="url(#${u}b8)"/>
 <ellipse cx="${CX + gap + 8}" cy="${eyeY + 34}" rx="22" ry="12" fill="#fff" opacity=".08" filter="url(#${u}b8)"/>
-<ellipse cx="${CX}" cy="${(G.mouthY + 21).toFixed(1)}" rx="16" ry="6" fill="${skDD}" opacity=".32" filter="url(#${u}b4)"/>
+<ellipse cx="${CX}" cy="${(G.mouthY + 21).toFixed(1)}" rx="16" ry="6" fill="${skDD}" opacity=".32" filter="url(#${u}b4)"/><path d="M${CX - 5} ${(G.noseY + 9).toFixed(1)} L${CX - 6} ${(G.mouthY - 8).toFixed(1)} M${CX + 5} ${(G.noseY + 9).toFixed(1)} L${CX + 6} ${(G.mouthY - 8).toFixed(1)}" stroke="${skDD}" stroke-width="2.4" opacity=".22" filter="url(#${u}b1)"/><path d="M${CX - 26} ${(G.noseY - 2).toFixed(1)} C${CX - 36} ${(G.noseY + 12).toFixed(1)} ${CX - 38} ${(G.mouthY - 6).toFixed(1)} ${CX - 33} ${(G.mouthY + 4).toFixed(1)} M${CX + 26} ${(G.noseY - 2).toFixed(1)} C${CX + 36} ${(G.noseY + 12).toFixed(1)} ${CX + 38} ${(G.mouthY - 6).toFixed(1)} ${CX + 33} ${(G.mouthY + 4).toFixed(1)}" stroke="${skDD}" stroke-width="5" fill="none" opacity=".2" filter="url(#${u}b2)"/><ellipse cx="${CX - hw + 22}" cy="${eyeY + 46}" rx="18" ry="30" fill="${skDD}" opacity=".18" filter="url(#${u}b8)" transform="rotate(-18 ${CX - hw + 22} ${eyeY + 46})"/><ellipse cx="${CX + hw - 22}" cy="${eyeY + 46}" rx="18" ry="30" fill="${skDD}" opacity=".24" filter="url(#${u}b8)" transform="rotate(18 ${CX + hw - 22} ${eyeY + 46})"/><ellipse cx="${CX - gap - 4}" cy="${eyeY + 26}" rx="26" ry="8" fill="${skL}" opacity=".35" filter="url(#${u}b4)"/><ellipse cx="${CX + gap + 4}" cy="${eyeY + 26}" rx="26" ry="8" fill="${skL}" opacity=".2" filter="url(#${u}b4)"/>
 <ellipse cx="${CX - 4}" cy="${chinY - 14}" rx="17" ry="9" fill="#fff" opacity=".15" filter="url(#${u}b4)"/>
 <ellipse cx="${CX + hw - 4}" cy="200" rx="5" ry="64" fill="#fff" opacity=".13" filter="url(#${u}b4)"/></g>`;
     const blushArt = c.blush > 0 ? `<ellipse cx="${CX - gap - 14}" cy="${eyeY + 40}" rx="22" ry="13" fill="url(#${u}bl)" opacity="${(0.15 + c.blush * 0.6).toFixed(2)}"/><ellipse cx="${CX + gap + 14}" cy="${eyeY + 40}" rx="22" ry="13" fill="url(#${u}bl)" opacity="${(0.15 + c.blush * 0.6).toFixed(2)}"/>` : "";
@@ -607,7 +627,7 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
     };
     const [eTop, eBot] = ES[c.eyes] || ES.almond;
     const scl = `${eTop} ${eBot}Z`;
-    const irisR = { wide: 13, round: 12.5, monolid: 11, sleepy: 11.5 }[c.eyes] || 12;
+    const irisR = { wide: 11.6, round: 11.2, monolid: 10, sleepy: 10.4 }[c.eyes] || 10.8;
     const irisY = { sleepy: 2, hooded: 1, monolid: 1 }[c.eyes] || 0;
     const ic = okHex(c.eyeColor) ? c.eyeColor : DEF.eyeColor;
     defs = defs.replace("</defs>", `<clipPath id="${u}ey"><path d="${scl}"/></clipPath><radialGradient id="${u}ir" cx=".5" cy=".45" r=".55"><stop offset="0" stop-color="${sh(ic, 0.35)}"/><stop offset=".7" stop-color="${ic}"/><stop offset="1" stop-color="${sh(ic, -0.45)}"/></radialGradient></defs>`);
@@ -617,13 +637,13 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
       const inner = `${shadowA > 0 ? `<path d="${eTop} C18 -26 -16 -30 -24 2Z" fill="${okHex(c.shadowColor) ? c.shadowColor : "#B15CFF"}" opacity="${(shadowA * 0.65).toFixed(2)}"/>` : ""}
 <path d="${eTop.replace(/^M(-?\d+) (-?\d+)/, (m, a, b) => `M${a} ${+b - 8}`).replace(/C(-?\d+) (-?\d+) (-?\d+) (-?\d+) (-?\d+) (-?\d+)/, (m, a, b, cc, d, e, f) => `C${a} ${+b - 8} ${cc} ${+d - 8} ${e} ${+f - 7}`)}" fill="none" stroke="${skDD}" stroke-width="2.2" opacity="${c.eyes === "monolid" ? 0 : 0.45}" stroke-linecap="round"/>
 <ellipse cx="0" cy="-13" rx="24" ry="7" fill="${skL}" opacity=".35" filter="url(#${u}b2)"/><path d="${scl}" fill="url(#${u}sc)"/><ellipse cx="-20.5" cy="1.2" rx="3" ry="2.4" fill="#E9A2A6" opacity=".75"/>
-<g clip-path="url(#${u}ey)"><circle cx="1" cy="${1 + irisY}" r="${irisR}" fill="url(#${u}ir)"/><circle cx="1" cy="${1 + irisY}" r="${irisR}" fill="none" stroke="${sh(ic, -0.55)}" stroke-width="1.5"/><circle cx="1" cy="${1 + irisY}" r="${irisR * 0.42}" fill="#0C0B10"/><path d="${eTop} L24 -30 L-24 -30Z" fill="${skDD}" opacity=".18" transform="translate(0 4)"/>${c.eyes === "sleepy" || c.eyes === "hooded" ? `<path d="${eTop} L24 -30 L-24 -30Z" fill="${sk}" transform="translate(0 ${c.eyes === "sleepy" ? 5 : 3})"/>` : ""}</g>
-<path d="${eTop}" fill="none" stroke="#24160F" stroke-width="${c.lashes === "full" ? 4.2 : c.lashes === "natural" ? 3.7 : 3}" stroke-linecap="round"/><path d="${eTop}" fill="none" stroke="#000" stroke-width="5" stroke-linecap="round" opacity=".12" filter="url(#${u}b2)" transform="translate(0 2)"/>
-<path d="${eBot.replace(/^C/, "M24 -3 C")}" fill="none" stroke="${skLine}" stroke-width="1.4" opacity=".35"/>
+<g clip-path="url(#${u}ey)"><circle cx="1" cy="${1 + irisY}" r="${irisR}" fill="url(#${u}ir)"/><g stroke="${sh(ic, 0.45)}" stroke-width=".7" opacity=".45">${Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * Math.PI * 2; return `<path d="M${(1 + Math.cos(a) * irisR * 0.42).toFixed(2)} ${(1 + irisY + Math.sin(a) * irisR * 0.42).toFixed(2)}L${(1 + Math.cos(a) * irisR * 0.9).toFixed(2)} ${(1 + irisY + Math.sin(a) * irisR * 0.9).toFixed(2)}"/>`; }).join("")}</g><circle cx="1" cy="${1 + irisY}" r="${irisR - 0.6}" fill="none" stroke="${sh(ic, -0.6)}" stroke-width="1.6" opacity=".85"/><circle cx="1" cy="${1 + irisY}" r="${(irisR * 0.38).toFixed(2)}" fill="#0C0B10"/><path d="M-26 -18 C-10 -10 10 -10 26 -18 L26 -4 C10 2 -10 2 -26 -4Z" fill="#000" opacity=".16" filter="url(#${u}b2)"/><path d="${eTop} L24 -30 L-24 -30Z" fill="${skDD}" opacity=".18" transform="translate(0 4)"/>${c.eyes === "sleepy" || c.eyes === "hooded" ? `<path d="${eTop} L24 -30 L-24 -30Z" fill="${sk}" transform="translate(0 ${c.eyes === "sleepy" ? 5 : 3})"/>` : ""}</g>
+<path d="${eTop}" fill="none" stroke="#24160F" stroke-width="${c.lashes === "full" ? 4.2 : c.lashes === "natural" ? 3.7 : 2.6}" stroke-linecap="round"/><path d="M14 -9.5 l2.4 -2.6 M18.6 -7 l3 -2 M22 -4 l3.2 -1" stroke="#24160F" stroke-width="1.1" stroke-linecap="round" opacity=".7"/><path d="${eTop}" fill="none" stroke="#000" stroke-width="5" stroke-linecap="round" opacity=".12" filter="url(#${u}b2)" transform="translate(0 2)"/>
+<path d="${eBot.replace(/^C/, "M24 -3 C")}" fill="none" stroke="${skLine}" stroke-width="1.4" opacity=".4"/><path d="M-20 9 C-8 15 8 15 21 7" fill="none" stroke="${skDD}" stroke-width="2" opacity=".28" filter="url(#${u}b1)"/><path d="M-21 13 C-8 19 9 18 20 12" fill="none" stroke="${skL}" stroke-width="2" opacity=".25" filter="url(#${u}b1)"/>
 ${c.lashes === "full" ? `<path d="M15 -11 l3 -5 M19.5 -8 l4.5 -4 M23 -4.5 l5.5 -2" stroke="#24160F" stroke-width="2.2" stroke-linecap="round"/>` : c.lashes === "natural" ? `<path d="M20 -7.5 l4 -3.5 M23.5 -3.5 l5 -1.5" stroke="#24160F" stroke-width="1.8" stroke-linecap="round"/>` : ""}
 ${c.liner === "wing" ? `<path d="M18 -8 L34 -15 L24 -2Z" fill="#14100E"/>` : c.liner === "thin" ? `<path d="${eTop}" fill="none" stroke="#14100E" stroke-width="5.4" stroke-linecap="round" opacity=".55"/>` : ""}`;
       return `<g transform="translate(${x.toFixed(1)} ${eyeY.toFixed(1)}) rotate(${rot.toFixed(1)}) scale(${(s * es).toFixed(3)} ${es.toFixed(3)})">${inner}</g>`
-        + `<g transform="translate(${x.toFixed(1)} ${eyeY.toFixed(1)}) scale(${es.toFixed(3)})"><circle cx="${4.5}" cy="${-3.5 + irisY}" r="3.4" fill="#fff"/><circle cx="${-3}" cy="${5 + irisY}" r="1.5" fill="#fff" opacity=".75"/><path d="M-8 7.5 C-3 10 4 10 9 7" stroke="#fff" stroke-width="1.6" fill="none" opacity=".35" stroke-linecap="round" filter="url(#${u}b05)"/></g>`;
+        + `<g transform="translate(${x.toFixed(1)} ${eyeY.toFixed(1)}) scale(${es.toFixed(3)})"><circle cx="${4.2}" cy="${-3.4 + irisY}" r="2.2" fill="#fff" opacity=".95"/><circle cx="${-2.6}" cy="${4.6 + irisY}" r="1" fill="#fff" opacity=".55"/><path d="M-8 7.5 C-3 10 4 10 9 7" stroke="#fff" stroke-width="1.6" fill="none" opacity=".35" stroke-linecap="round" filter="url(#${u}b05)"/></g>`;
     };
     const eyesArt = eye(-1) + eye(1);
 
@@ -656,11 +676,12 @@ ${c.liner === "wing" ? `<path d="M18 -8 L34 -15 L24 -2Z" fill="#14100E"/>` : c.l
 <ellipse cx="${-nW + 1}" cy="0" rx="6.5" ry="6" fill="${skD}" filter="url(#${u}b1)"/><ellipse cx="${nW - 1}" cy="0" rx="6.5" ry="6" fill="${sh(skD, -0.06)}" filter="url(#${u}b1)"/>
 <circle cx="0" cy="-3" r="${nT}" fill="${sk}" filter="url(#${u}b05)"/><circle cx="-1.6" cy="-5" r="${(nT * 0.75).toFixed(1)}" fill="${skL}" opacity=".85" filter="url(#${u}b2)"/><circle cx="-2.6" cy="-7.2" r="${(nT * 0.28).toFixed(1)}" fill="#fff" opacity=".4" filter="url(#${u}b05)"/>
 <ellipse cx="${-nW + 5.5}" cy="3.4" rx="3.4" ry="2" fill="${nos}" opacity=".8" filter="url(#${u}b05)" transform="rotate(-14 ${-nW + 5.5} 3.4)"/><ellipse cx="${nW - 5.5}" cy="3.4" rx="3.4" ry="2" fill="${nos}" opacity=".8" filter="url(#${u}b05)" transform="rotate(14 ${nW - 5.5} 3.4)"/>
+<path d="M${-nW - 3} -11 C${-nW - 7} -3 ${-nW - 6} 4 ${-nW + 1} 7 M${nW + 3} -11 C${nW + 7} -3 ${nW + 6} 4 ${nW - 1} 7" stroke="${skDD}" stroke-width="2" fill="none" opacity=".35" filter="url(#${u}b05)"/><path d="M-6 -46 C-8 -34 -9 -24 -10 -16" stroke="${skDD}" stroke-width="5" fill="none" opacity=".16" filter="url(#${u}b2)"/>
 ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opacity=".2" filter="url(#${u}b1)"/>` : ""}</g>`;
 
     // mouth (center line at y=0)
     const MO = {
-      smile: `<path d="M-19 4 C-10 15 10 15 19 4 C10 8 -10 8 -19 4Z" fill="url(#${u}lp)"/><path d="M-27 -2 C-14 8 14 8 27 -2" stroke="${lipD}" filter="url(#${u}b05)" stroke-width="3.4" fill="none" stroke-linecap="round"/><path d="M-29 -5 C-28 -2 -27 -1 -25 0 M29 -5 C28 -2 27 -1 25 0" stroke="${lipD}" filter="url(#${u}b05)" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".6"/>`,
+      smile: `<path d="M-24 0 C-15 -6 -6 -6.5 0 -3.6 C6 -6.5 15 -6 24 0 C14 1.5 -14 1.5 -24 -1Z" fill="${sh(lip, -0.18)}" opacity=".85"/><path d="M-19 4 C-10 15 10 15 19 4 C10 8 -10 8 -19 4Z" fill="url(#${u}lp)"/><path d="M-27 -2 C-14 8 14 8 27 -2" stroke="${lipD}" filter="url(#${u}b05)" stroke-width="3.4" fill="none" stroke-linecap="round"/><path d="M-29 -5 C-28 -2 -27 -1 -25 0 M29 -5 C28 -2 27 -1 25 0" stroke="${lipD}" filter="url(#${u}b05)" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".6"/>`,
       softsmile: `<path d="M-23 -1 C-14 -7 -6 -6 0 -3 C6 -6 14 -7 23 -1 C12 3 -12 3 -23 -1Z" fill="${sh(lip, -0.12)}"/><path d="M-21 0 C-11 12 11 12 21 0 C10 3 -10 3 -21 0Z" fill="url(#${u}lp)"/><path d="M-24 -1 C-12 4 12 4 24 -1" stroke="${lipD}" filter="url(#${u}b05)" stroke-width="2.2" fill="none" stroke-linecap="round"/><ellipse cx="-2" cy="6" rx="7" ry="2" fill="#fff" opacity=".25"/>`,
       grin: `<path d="M-29 -4 C-14 2 14 2 29 -4 C23 21 -23 21 -29 -4Z" fill="#3A1218"/><path d="M-26 -2 C-13 3 13 3 26 -2 L24 6 C12 9 -12 9 -24 6Z" fill="#fff"/><path d="M-12 18 C-6 13 6 13 12 18" fill="#E05A70"/><path d="M-29 -4 C-14 2 14 2 29 -4 C23 21 -23 21 -29 -4Z" fill="none" stroke="${lipD}" filter="url(#${u}b05)" stroke-width="2.6" stroke-linejoin="round"/><path d="M-14 20 C-6 23 6 23 14 20" stroke="${lip}" stroke-width="3" fill="none" stroke-linecap="round" opacity=".7"/>`,
       laugh: `<path d="M-30 -6 C-14 0 14 0 30 -6 C26 30 -26 30 -30 -6Z" fill="#3A1218"/><path d="M-27 -4 C-13 1 13 1 27 -4 L25 4 C12 7 -12 7 -25 4Z" fill="#fff"/><ellipse cx="0" cy="18" rx="13" ry="7" fill="#E05A70"/><path d="M-30 -6 C-14 0 14 0 30 -6 C26 30 -26 30 -30 -6Z" fill="none" stroke="${lipD}" filter="url(#${u}b05)" stroke-width="2.6" stroke-linejoin="round"/>`,
@@ -1074,7 +1095,7 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
     const push = () => { st.undo.push(snapshot()); if (st.undo.length > 80) st.undo.shift(); st.redo = []; st.dirty = true; };
     const setVal = (k, v, opts2 = {}) => {
       if (!opts2.noHistory) push();
-      if (tuneKey(k)) st.c = { ...st.c, tune: { ...st.c.tune, [k]: v } }; else st.c = { ...st.c, [k]: v };
+      if (tuneKey(k) && !opts2.direct) st.c = { ...st.c, tune: { ...st.c.tune, [k]: v } }; else st.c = { ...st.c, [k]: v };
       if (opts2.also) for (const [kk, vv] of opts2.also) st.c[kk] = vv;
     };
     const cat = () => CATS.find((k) => k.id === st.cat) || CATS[0];
@@ -1138,7 +1159,7 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
         const k = b.dataset.k, v = b.dataset.v; if (st.c[k] === v) return;
         const also = [];
         if (k === "liner" && v !== "none" && st.c.lashes === "none") also.push(["lashes", "natural"]);
-        setVal(k, v, { also }); const y = p.scrollTop; refreshAfterChange(); p.scrollTop = y;
+        setVal(k, v, { also, direct: true }); const y = p.scrollTop; refreshAfterChange(); p.scrollTop = y;
         p.querySelector(`[data-k="${k}"][data-v="${v}"]`)?.focus({ preventScroll: true });
       }));
       p.querySelectorAll(".hpa-sws[data-k]").forEach((g) => {
