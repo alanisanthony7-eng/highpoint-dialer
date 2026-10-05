@@ -243,7 +243,7 @@
     const P = S.ps;
     box.innerHTML = `<div class="hpd-sm">${P ? `Phone session · lead ${P.i + 1} of ${P.ids.length}` : "Calling on your phone"}</div>
       <b style="font-size:17px">${esc(D.fullName(l))}</b><a class="num" href="${telHref(l.phone)}" style="color:inherit">${esc(fmt(l.phone))}</a>
-      <span class="hpd-sm">Your phone should be ringing them now. When you hang up, pick a result on the left${P ? " and the next lead opens" : ""}.</span>
+      <span class="hpd-sm">Your phone should be ringing them now. When you hang up, pick a result under Log the call${P ? " and the next lead opens" : ""}.</span>
       <div class="row" style="gap:6px;flex-wrap:wrap"><a class="btn primary" href="${telHref(l.phone)}">Call again</a>${P ? `<button type="button" class="btn" id="hpdPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hpdPsEnd">End session</button>` : `<button type="button" class="btn" id="hpdPsDone">Done</button>`}</div>`;
     $("#hpdPsSkip", box)?.addEventListener("click", () => phoneNext());
     $("#hpdPsEnd", box)?.addEventListener("click", () => phoneEnd());
