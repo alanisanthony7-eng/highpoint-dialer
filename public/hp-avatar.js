@@ -937,6 +937,7 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
             const look = { ...st.c, [s.key]: v };
             if (s.key === "liner" && v !== "none") look.lashes = look.lashes === "none" ? "natural" : look.lashes;
             if (s.key === "top") look.outer = "none";
+            if (s.key === "hair" || s.key === "face") look.hat = "none";
             return `<button type="button" class="hpa-tile" data-k="${s.key}" data-v="${v}" aria-pressed="${st.c[s.key] === v}">${render(look, 120, { crop: s.crop, slice: !s.tall, label: label(s.key, v) })}<span>${esc(label(s.key, v))}</span></button>`;
           }).join("")}</div></div>`;
         }
