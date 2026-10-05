@@ -156,7 +156,7 @@
     if (S.demo && !$("#hpdNote").innerHTML) note(`<b>Preview mode.</b> Calls here are simulated so you can try the flow. Real calling turns on once the dialer is deployed to your site and Twilio is connected.`, "warn");
   }
   function setupCard() {
-    if (!S.twilio) return `<div class="hpd-banner warn"><b>Almost there.</b> ${S.me?.admin ? "Add your Twilio keys in Netlify (TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN), redeploy, then come back and press Connect." : "Your admin needs to connect Twilio before you can call."}</div>`;
+    if (!S.twilio) return `<div class="hpd-banner warn"><b>Almost there.</b> ${location.hostname !== "highpoint-dialer.pages.dev" && /\.pages\.dev$/.test(location.hostname) ? `This is a test preview, which doesn't have the phone keys. <a href="https://highpoint-dialer.pages.dev/">Open the live desk</a> to make calls.` : S.me?.admin ? "Add your Twilio keys in Cloudflare Pages (Settings → Variables and secrets: TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN), redeploy, then come back and press Connect." : "Your admin needs to connect Twilio before you can call."}</div>`;
     return S.me?.admin ? `<div class="hpd-banner warn"><b>Twilio keys found.</b> Press once to finish setup.<div style="margin-top:8px"><button class="btn primary" id="hpdSetup" type="button">Connect Twilio</button></div></div>` : `<div class="hpd-banner warn">Your admin needs to finish dialer setup.</div>`;
   }
   async function runSetup() {
