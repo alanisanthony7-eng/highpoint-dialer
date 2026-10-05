@@ -57,3 +57,10 @@ html.hp-pro section[data-v] > .head::after{height:2px!important;background:linea
 #nnIntro .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#FF2E88,#FF9E3D);box-shadow:0 0 10px #FF2E88;transition:width 3.1s linear}
 #nnIntro.go .bar i{width:100%}
 @media (prefers-reduced-motion:reduce){#nnIntro,#nnIntro.out{transition:opacity .3s}#nnIntro.out{transform:none}}
+
+/* ---------- sign-in screen: the card is framed by a pink tube ---------- */
+#hpGate .g-card{border:1px solid rgba(255,79,163,.55)!important;box-shadow:0 40px 90px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06),0 0 0 1px rgba(255,46,136,.25),0 0 22px -4px rgba(255,46,136,.65),inset 0 0 22px -12px rgba(255,46,136,.6)!important;animation:gxIn .7s .08s cubic-bezier(.2,.8,.2,1) both,nnHum 4.2s 1s ease-in-out infinite}
+#hpGate .g-card::before{height:2px!important;box-shadow:0 0 10px #FF2E88,0 0 22px #FF2E88}
+#hpGate .gx-chips i{animation:nnBad 6.3s steps(1,end) infinite}
+#hpGate .gx-chips span:nth-child(2) i{animation-delay:-2.1s}#hpGate .gx-chips span:nth-child(3) i{animation-delay:-4.4s}#hpGate .gx-chips span:nth-child(4) i{animation-delay:-1.3s}
+@media (prefers-reduced-motion:reduce){#hpGate .g-card{animation:none}#hpGate .gx-chips i{animation:none}}

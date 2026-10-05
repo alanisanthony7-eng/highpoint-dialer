@@ -119,7 +119,7 @@
         if (m.type === "attributes" && m.attributeName === "hidden" && m.target.matches?.("section[data-v]") && !m.target.hidden) powerOn(m.target);
         if (m.type === "childList" && m.addedNodes.length) again = true;
       }
-      if (again) { cancelAnimationFrame(watch.raf); watch.raf = requestAnimationFrame(() => tag()); }
+      if (again) { clearTimeout(watch.t); watch.t = setTimeout(() => tag(), 30); }
     });
     mo.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["hidden"] });
     stutterLoop();
