@@ -6,7 +6,7 @@ compatibility_flags = ["nodejs_compat"]
 
 # Create a D1 database called "highpoint" in Cloudflare, then either bind it in
 # Pages → Settings → Bindings (variable name DB), or paste its id below.
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "highpoint"
-# database_id = "PASTE-ID-HERE"
+[[d1_databases]]
+binding = "DB"
+database_name = "highpoint"
+database_id = "5dceed87-da4e-4420-8940-78ec50647f4b"
