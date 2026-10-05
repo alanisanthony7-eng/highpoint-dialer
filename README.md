@@ -27,13 +27,13 @@ Twilio carries the calls.
    - Go to **Workers & Pages → Create → Pages → Connect to Git → GitHub** and pick `alanisanthony7-eng/highpoint-dialer`.
    - Framework preset: **None**. Build command: *(leave empty)*. Build output directory: `public`.
    - Click **Save and Deploy**.
-4. **Connect the database to the site.** In the Pages project, go to **Settings → Bindings → Add → D1 database**. Set the variable name to `DB` and the database to `highpoint`.
-5. **Add settings.** In the Pages project, go to **Settings → Variables and secrets**. Add these as **Secret** for the keys and **Text** for the rest:
+4. **Connect the database to the site.** Copy the D1 database's **Database ID** (on its page in Cloudflare) and paste it into `wrangler.toml` in this repo, or send it to Claude to do it. This file controls the site's database connection, so the dashboard's Bindings page is read-only.
+5. **Add settings.** In the Pages project, go to **Settings → Variables and secrets → Add** and choose type **Secret** for each one:
 
 | Name | Value |
 |---|---|
 | `TWILIO_ACCOUNT_SID` | from the Twilio console |
-| `TWILIO_AUTH_TOKEN` | from the Twilio console (Secret) |
+| `TWILIO_AUTH_TOKEN` | from the Twilio console |
 | `HP_ADMIN_EMAILS` | your email (comma-separate more admins) |
 | `HP_INVITE_CODE` | a team code agents type when they create an account, e.g. `HIGHPOINT2026` |
 | `HP_PUBLIC_URL` | your site address, e.g. `https://highpoint-dialer.pages.dev` |
