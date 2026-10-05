@@ -272,6 +272,7 @@
   async function dialLead(lead) {
     if (S.via === "phone") { if (!S.ps) phoneCall(lead); return; }
     if (S.call || S.power) return;
+    if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Your Twilio account is a free trial without a number. Upgrade it at console.twilio.com, then get a number here, or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast(S.ready ? "Phone is still connecting…" : "The dialer isn't set up yet"); return; }
     if (!(await micCheck())) return;
     note("");
@@ -364,6 +365,7 @@
 
   /* ================= power dialing ================= */
   async function startPower() {
+    if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Your Twilio account is a free trial without a number. Upgrade it at console.twilio.com, then get a number here, or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast("Phone is still connecting…"); return; }
     if (!(await micCheck())) return;
     note("");
