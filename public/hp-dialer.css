@@ -213,7 +213,7 @@ body.hpd-on .hpd-wavv,body.hpd-on .panel.wv{display:none!important}
 .hpf-card{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:14px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08)}
 .hpf-dz{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .hpf-dz .btn{justify-content:center;font-size:12.5px;padding:8px 6px}
-.hpf-dz [data-pdz="appt"]{grid-column:1/-1}
+.hpf-dz [data-pdz="appt"],.hpf-dz [data-pdz="sold"]{grid-column:auto}
 .hpf-kv{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px}
 .hpf-kv>span:nth-child(odd){color:#9AA1AE}
 .hpf-kv select{padding:4px 8px!important;font-size:13px!important}
@@ -379,3 +379,9 @@ body:has(#v-dialer:not([hidden])) .hpd-phonest{display:none}
 .hph-via button:focus-visible{outline:2px solid #8FB8FF;outline-offset:2px}
 .hpd-phonecard{position:fixed;left:18px;bottom:18px;z-index:9000;display:flex;flex-direction:column;gap:6px;max-width:320px;padding:14px 16px;border-radius:16px;background:rgba(18,12,30,.96);border:1px solid rgba(255,255,255,.12);box-shadow:0 20px 50px rgba(0,0,0,.5);color:#fff}
 @media (max-width:600px){.hpd-phonecard{left:12px;right:12px;bottom:12px;max-width:none}}
+
+/* selected toggles: dark glass with a lit gradient edge instead of a flat fill */
+.hph-lines button[aria-pressed="true"],.hph-via button[aria-pressed="true"]{
+  background:linear-gradient(180deg,rgba(255,61,127,.26),rgba(255,138,76,.10)) padding-box,linear-gradient(#171124,#171124) padding-box,linear-gradient(110deg,#FF3D7F,#FF9F4D) border-box!important;
+  border:1px solid transparent!important;color:#fff!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 0 18px -6px rgba(255,61,127,.7)}
+.hph-camp .hpd-meter i,.hpd-frow[data-s="live"]{background:linear-gradient(110deg,#D3176A,#FF3D7F 40%,#FF7148 78%,#FF9F4D)}

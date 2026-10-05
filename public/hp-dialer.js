@@ -1002,7 +1002,7 @@
         </section>
         <aside class="hpf-right">
           <div class="hpf-card"><b>Log the call</b>
-            <div class="hpf-dz">${[["na", "No answer"], ["vm", "Left voicemail"], ["bad", "Bad number"], ["cb", "Call back"], ["appt", "Appointment set"], ["ni", "Not interested"], ["dnc", "Do not call"]].map(([k, t]) => `<button type="button" class="btn ${k === "appt" ? "primary" : ""}" data-pdz="${k}">${t}</button>`).join("")}</div>
+            <div class="hpf-dz">${[["na", "No answer"], ["vm", "Left voicemail"], ["bad", "Bad number"], ["cb", "Call back"], ["appt", "Appointment set"], ["sold", "Sold"], ["ni", "Not interested"], ["dnc", "Do not call"]].map(([k, t]) => `<button type="button" class="btn ${k === "appt" ? "primary" : k === "sold" ? "sold" : ""}" data-pdz="${k}">${t}</button>`).join("")}</div>
             <div class="hpd-flex" id="hpfWhen" hidden><input type="datetime-local" id="hpfAt" style="flex:1;min-width:0"><button type="button" class="btn primary" id="hpfWhenGo">Save</button></div>
             <input id="hpfNote" placeholder="Note for this call (optional)">
           </div>

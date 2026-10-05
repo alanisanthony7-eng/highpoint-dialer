@@ -256,7 +256,7 @@ function renderDialer(){
     <div class="stack"><span class="label">Log the call</span>
       <div class="dispo">
         <button class="btn" data-dz="na">No answer</button><button class="btn" data-dz="vm">Left voicemail</button><button class="btn" data-dz="bad">Bad number</button>
-        <button class="btn" data-dz="cb">Call back</button><button class="btn primary" data-dz="appt">Appointment set</button><button class="btn" data-dz="ni">Not interested</button>
+        <button class="btn" data-dz="cb">Call back</button><button class="btn primary" data-dz="appt">Appointment set</button><button class="btn sold" data-dz="sold">Sold</button><button class="btn" data-dz="ni">Not interested</button>
       </div>
       <div class="row" id="cbRow" hidden><input type="datetime-local" id="cbAt" style="flex:1;width:auto"><button class="btn primary" id="cbSave">Save callback</button></div>
       <input id="dcNote" placeholder="Note for this call (optional)">
@@ -272,11 +272,11 @@ function renderDialer(){
 async function dispo(l,kind){
   if((kind==="cb"||kind==="appt")&&$("#cbRow").hidden){$("#cbRow").hidden=false;const d=new Date(Date.now()+864e5);d.setMinutes(0);d.setMinutes(d.getMinutes()-d.getTimezoneOffset());$("#cbAt").value=d.toISOString().slice(0,16);$("#cbSave").textContent=kind==="appt"?"Save appointment":"Save callback";$("#cbSave").onclick=()=>dispo(l,kind==="appt"?"apptgo":"cbgo");return}
   const note=$("#dcNote").value.trim();
-  const lab={na:"No answer",vm:"Left voicemail",bad:"Bad number",cbgo:"Callback scheduled",apptgo:"Appointment set",appt:"Appointment set",ni:"Not interested"}[kind];
+  const lab={na:"No answer",vm:"Left voicemail",bad:"Bad number",cbgo:"Callback scheduled",apptgo:"Appointment set",appt:"Appointment set",sold:"Sold",ni:"Not interested"}[kind];
   const patch={callCount:(l.callCount||0)+1,lastCallAt:Date.now(),lastDisposition:lab,notes:addNoteObj(l,`Call: ${lab}${note?" — "+note:""}`)};
-  if(kind==="apptgo"||kind==="appt")patch.stage="appointment"; else if(kind==="ni"||kind==="bad")patch.stage="lost"; else if(l.stage==="new")patch.stage="contacted";
+  if(kind==="sold")patch.stage="sold"; else if(kind==="apptgo"||kind==="appt")patch.stage="appointment"; else if(kind==="ni"||kind==="bad")patch.stage="lost"; else if(l.stage==="new")patch.stage="contacted";
   if(kind==="cbgo"){const t=new Date($("#cbAt").value).getTime();patch.callbackAt=isNaN(t)?Date.now()+864e5:t;patch.notes=addNoteObj(l,`Call: Callback set for ${new Date(patch.callbackAt).toLocaleString()}${note?" — "+note:""}`)}
-  sess.d++; if(["cbgo","appt","apptgo","ni"].includes(kind))sess.c++; if(kind==="appt"||kind==="apptgo")sess.a++;
+  sess.d++; if(["cbgo","appt","apptgo","ni","sold"].includes(kind))sess.c++; if(kind==="appt"||kind==="apptgo")sess.a++;
   const at=new Date($("#cbAt")?.value||"").getTime();
   const dur=callLead===l.id&&callT0?Date.now()-callT0:0; callStop();
   const hpm=window.hpDialer?.meta(l.id)||{}; window.hpDialer?.onDispo(l.id,lab,note);
@@ -284,7 +284,7 @@ async function dispo(l,kind){
   const q=dialQueue(); const idx=q.findIndex(x=>x.id===l.id); const nextId=q[idx+1]?.id||null;
   try{await patchLead(l.id,patch);dCurId=nextId;
     if((kind==="apptgo"||kind==="cbgo")&&!isNaN(at))await putAppt({leadId:l.id,leadName:fullName(l),title:fullName(l),at,dur:30,type:kind==="cbgo"?"Callback":"Phone call",done:false,createdAt:Date.now()});
-    if(kind==="apptgo"||kind==="appt"){celebrate(`Appointment set with ${fullName(l)}`);awardXP(30,"appointment set")}else{toast(`${fullName(l)}: ${lab}`);awardXP(5,"call logged")}renderDialer()}catch(e){toast("Couldn't log the call: "+e.message)}
+    if(kind==="sold"){celebrate(`Sold! ${fullName(l)} is on the books.`);awardXP(100,"policy sold")}else if(kind==="apptgo"||kind==="appt"){celebrate(`Appointment set with ${fullName(l)}`);awardXP(30,"appointment set")}else{toast(`${fullName(l)}: ${lab}`);awardXP(5,"call logged")}renderDialer()}catch(e){toast("Couldn't log the call: "+e.message)}
 }
 $("#dqStage").onchange=()=>{ls.set("hp.dqStage",$("#dqStage").value);dCurId=null;renderDialer()};$("#dqProduct").onchange=()=>{dCurId=null;renderDialer()};
 const wv=ls.get("hp.wavv",""); $("#wavvUrl").value=wv; if(/^https:\/\//.test(wv))$("#wavvOpen").href=wv;
@@ -297,17 +297,17 @@ window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,rende
   currentId:()=>dCurId,setCurrent(id){dCurId=id;if(view==="dialer")renderDialer()},
   get calls(){return calls},get appts(){return appts},putAppt,addNoteObj,stageName,STAGES,PROD,go,
   async dispoDirect(id,kind,o={}){const l=leads.get(id);if(!l)return;const note=o.note||"";
-    const lab={na:"No answer",vm:"Left voicemail",bad:"Bad number",cb:"Callback scheduled",appt:"Appointment set",ni:"Not interested",dnc:"Do not call"}[kind];
+    const lab={na:"No answer",vm:"Left voicemail",bad:"Bad number",cb:"Callback scheduled",appt:"Appointment set",sold:"Sold",ni:"Not interested",dnc:"Do not call"}[kind];
     const patch={callCount:(l.callCount||0)+1,lastCallAt:Date.now(),lastDisposition:lab,notes:addNoteObj(l,`Call: ${lab}${o.at?" for "+new Date(o.at).toLocaleString():""}${note?" — "+note:""}`)};
-    if(kind==="appt")patch.stage="appointment";else if(kind==="ni"||kind==="bad"||kind==="dnc")patch.stage="lost";else if((l.stage||"new")==="new")patch.stage="contacted";
+    if(kind==="sold")patch.stage="sold";else if(kind==="appt")patch.stage="appointment";else if(kind==="ni"||kind==="bad"||kind==="dnc")patch.stage="lost";else if((l.stage||"new")==="new")patch.stage="contacted";
     if(kind==="cb")patch.callbackAt=o.at||Date.now()+864e5;
-    sess.d++;if(["cb","appt","ni"].includes(kind))sess.c++;if(kind==="appt")sess.a++;saveSess();
+    sess.d++;if(["cb","appt","ni","sold"].includes(kind))sess.c++;if(kind==="appt")sess.a++;saveSess();
     const dur=callLead===id&&callT0?Date.now()-callT0:0;callStop();
     const hpm=window.hpDialer?.meta(id)||{};window.hpDialer?.onDispo(id,lab,note);
     logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:"",...hpm});
     await patchLead(id,patch);
     if((kind==="appt"||kind==="cb")&&o.at)await putAppt({leadId:id,leadName:fullName(l),title:fullName(l),at:o.at,dur:30,type:kind==="cb"?"Callback":"Phone call",done:false,createdAt:Date.now()});
-    if(kind==="appt"){celebrate(`Appointment set with ${fullName(l)}`);awardXP(30,"appointment set")}else awardXP(5,"call logged");
+    if(kind==="sold"){celebrate(`Sold! ${fullName(l)} is on the books.`);awardXP(100,"policy sold")}else if(kind==="appt"){celebrate(`Appointment set with ${fullName(l)}`);awardXP(30,"appointment set")}else awardXP(5,"call logged");
     if(view==="dialer"&&dTab==="dial")renderDialer();return lab},
   callStart(id){if(callT0)return;callT0=Date.now();callLead=id;window.dispatchEvent(new Event("hp:callstart"));tickCall();if(view==="dialer"&&dTab==="dial")renderDialer()},
   callStop(){callStop();if(view==="dialer"&&dTab==="dial")renderDialer()},

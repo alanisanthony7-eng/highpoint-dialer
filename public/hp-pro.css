@@ -125,3 +125,32 @@ html.hp-pro ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.26);bac
 @media (prefers-reduced-motion:reduce){html.hp-pro section[data-v]:not([hidden]),.hpk,.hpk-box{animation:none}html.hp-pro .card:hover{transform:none}}
 html.hp-pro .hpk-top input{border:0!important;box-shadow:none!important;background:transparent!important;padding:0!important;border-radius:0!important}
 html.hp-pro .hpd-srch input[readonly]{cursor:pointer}
+
+/* ===== Buttons v2: deeper magenta→coral, glass highlight, crisp edges, light sweep ===== */
+html.hp-pro{--pro-a:#FF3D7F;--pro-b:#FF8A4C;--pro-grad:linear-gradient(110deg,#D3176A 0%,#FF3D7F 40%,#FF7148 78%,#FF9F4D 100%);
+  --btn2-face:linear-gradient(180deg,rgba(255,255,255,.2) 0%,rgba(255,255,255,.05) 46%,rgba(0,0,0,0) 54%,rgba(0,0,0,.16) 100%);
+  --btn2-ring:inset 0 1px 0 rgba(255,255,255,.42),inset 0 -1px 0 rgba(0,0,0,.28),0 0 0 1px rgba(255,61,127,.32);
+  --btn2-glow:0 12px 28px -14px rgba(255,61,127,.85),0 2px 6px -2px rgba(0,0,0,.65)}
+html.hp-pro .btn.primary,html.hp-pro .topbar [data-new],html.hp-pro .hph-go,html.hp-pro .hpd .btn.primary{
+  background:var(--btn2-face),var(--pro-grad)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:12px!important;
+  box-shadow:var(--btn2-ring),var(--btn2-glow)!important;color:#fff!important;text-shadow:0 1px 1px rgba(80,0,30,.35);font-weight:650!important;letter-spacing:.01em;
+  position:relative;overflow:hidden;isolation:isolate;transition:transform .16s cubic-bezier(.2,.8,.2,1),box-shadow .2s,filter .2s!important}
+html.hp-pro .btn.primary::after,html.hp-pro .topbar [data-new]::after,html.hp-pro .hph-go::after{content:"";position:absolute;inset:-1px;z-index:-1;pointer-events:none;
+  background:linear-gradient(105deg,transparent 32%,rgba(255,255,255,.38) 50%,transparent 68%);transform:translateX(-130%);transition:transform .75s cubic-bezier(.2,.8,.2,1)}
+html.hp-pro .btn.primary:hover,html.hp-pro .topbar [data-new]:hover,html.hp-pro .hph-go:hover{transform:translateY(-1px);filter:saturate(1.08) brightness(1.05)!important;box-shadow:var(--btn2-ring),0 16px 34px -14px rgba(255,61,127,.95),0 2px 6px -2px rgba(0,0,0,.65)!important}
+html.hp-pro .btn.primary:hover::after,html.hp-pro .topbar [data-new]:hover::after,html.hp-pro .hph-go:hover::after{transform:translateX(130%)}
+html.hp-pro .btn.primary:active,html.hp-pro .topbar [data-new]:active,html.hp-pro .hph-go:active{transform:translateY(0) scale(.985);box-shadow:inset 0 2px 6px rgba(0,0,0,.35),0 0 0 1px rgba(255,61,127,.4)!important}
+html.hp-pro .btn.primary:disabled,html.hp-pro .hph-go:disabled{filter:grayscale(.6) brightness(.7)!important;box-shadow:none!important;transform:none}
+html.hp-pro .btn.primary:focus-visible,html.hp-pro .hph-go:focus-visible{outline:2px solid #fff;outline-offset:2px}
+/* secondary: dark glass with a top highlight; the edge lights up on hover */
+html.hp-pro .btn:not(.primary){background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.025))!important;border:1px solid rgba(255,255,255,.11)!important;border-radius:12px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 1px 2px rgba(0,0,0,.4)!important;transition:border-color .2s,background .2s,box-shadow .2s,transform .16s!important}
+html.hp-pro .btn:not(.primary):hover{background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.04))!important;border-color:rgba(255,120,150,.45)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 3px rgba(255,61,127,.08),0 6px 18px -10px rgba(255,61,127,.6)!important}
+html.hp-pro .btn:not(.primary):active{transform:scale(.985)}
+/* Sold: success green in the same finish */
+html.hp-pro .btn.sold{background:var(--btn2-face),linear-gradient(110deg,#0E9F6E,#2FD08A 60%,#7BE3A8)!important;border:1px solid rgba(255,255,255,.12)!important;color:#fff!important;font-weight:700!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),inset 0 -1px 0 rgba(0,0,0,.25),0 0 0 1px rgba(47,208,138,.35),0 12px 26px -14px rgba(47,208,138,.9)!important;text-shadow:0 1px 1px rgba(0,60,30,.35)}
+html.hp-pro .btn.sold:hover{filter:brightness(1.06)!important;transform:translateY(-1px)}
+
+/* segmented tab thumb (Dial / Call history …) in the same finish */
+html.hp-pro .segthumb{background:var(--btn2-face),var(--pro-grad)!important;border-radius:12px!important;box-shadow:var(--btn2-ring),0 10px 24px -14px rgba(255,61,127,.9)!important}
