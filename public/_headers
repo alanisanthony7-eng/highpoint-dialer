@@ -16,6 +16,8 @@
   Cache-Control: no-cache
 /hp-pro.css
   Cache-Control: no-cache
+/hp-dialer.css
+  Cache-Control: no-cache
 /*.js
   Content-Type: text/javascript; charset=utf-8
 /*.css

@@ -33,6 +33,8 @@
     mode: lsGet("hpd.mode", "single"), lines: lsGet("hpd.lines", 1), campaign: lsGet("hpd.campaign", ""),
     power: null, // {session, lines, paused, batch, waitingDispo, attempted:Set, poll}
     sidByLead: new Map(), txByLead: new Map(), liveTimer: 0, greetings: [], numbers: [], tab: null,
+    via: lsGet("hpd.via", "line"), // "line" = browser phone line (Twilio), "phone" = the agent's own phone
+    ps: null, // phone session {ids, i, cur}
   };
 
   /* ================= API ================= */
@@ -218,8 +220,57 @@
     catch { note("<b>Microphone blocked.</b> Allow microphone access for this site in your browser's address bar, then try again.", "warn"); return false; }
   }
 
+  /* ================= call from my own phone (no phone line needed) ================= */
+  const telHref = (ph) => { const d = d10(ph); return d.length === 10 ? "tel:+1" + d : "tel:" + String(ph || "").replace(/[^\d+]/g, ""); };
+  function ringMyPhone(lead) {
+    const a = document.createElement("a"); a.href = telHref(lead.phone); a.rel = "noopener"; a.style.display = "none";
+    document.body.append(a); a.click(); a.remove();
+  }
+  function phoneCall(lead) {
+    if (!lead?.phone) { toast("This lead has no phone number"); return; }
+    window.hpDesk.callStop();
+    S.phoneLead = lead.id; S.callLead = lead.id;
+    window.hpDesk.callStart(lead.id);
+    openProfile(lead.id, { keepList: PF.id != null });
+    ringMyPhone(lead);
+    phoneCard();
+  }
+  function phoneCard() {
+    const D = window.hpDesk, id = S.phoneLead, l = id && D.leads.get(id);
+    let box = document.getElementById("hpdPhoneCard");
+    if (!l) { box?.remove(); return; }
+    if (!box) { box = document.createElement("div"); box.id = "hpdPhoneCard"; box.className = "hpd hpd-phonecard"; box.setAttribute("role", "status"); document.body.append(box); }
+    const P = S.ps;
+    box.innerHTML = `<div class="hpd-sm">${P ? `Phone session · lead ${P.i + 1} of ${P.ids.length}` : "Calling on your phone"}</div>
+      <b style="font-size:17px">${esc(D.fullName(l))}</b><a class="num" href="${telHref(l.phone)}" style="color:inherit">${esc(fmt(l.phone))}</a>
+      <span class="hpd-sm">Your phone should be ringing them now. When you hang up, pick a result on the left${P ? " and the next lead opens" : ""}.</span>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><a class="btn primary" href="${telHref(l.phone)}">Call again</a>${P ? `<button type="button" class="btn" id="hpdPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hpdPsEnd">End session</button>` : `<button type="button" class="btn" id="hpdPsDone">Done</button>`}</div>`;
+    $("#hpdPsSkip", box)?.addEventListener("click", () => phoneNext());
+    $("#hpdPsEnd", box)?.addEventListener("click", () => phoneEnd());
+    $("#hpdPsDone", box)?.addEventListener("click", () => { window.hpDesk.callStop(); S.phoneLead = null; S.callLead = null; phoneCard(); renderHome(); });
+  }
+  function startPhoneSession() {
+    const ids = campaignQueue().map((l) => l.id);
+    if (!ids.length) { toast("Nobody to call in this list right now"); return; }
+    S.ps = { ids, i: -1 }; phoneNext();
+  }
+  function phoneNext() {
+    const P = S.ps; if (!P) return;
+    window.hpDesk.callStop();
+    const D = window.hpDesk;
+    do { P.i++; } while (P.i < P.ids.length && !D.leads.get(P.ids[P.i])?.phone);
+    if (P.i >= P.ids.length) { phoneEnd(true); return; }
+    phoneCall(D.leads.get(P.ids[P.i])); renderHome();
+  }
+  function phoneEnd(done) {
+    const n = S.ps ? Math.min(S.ps.i + 1, S.ps.ids.length) : 0;
+    S.ps = null; S.phoneLead = null; S.callLead = null; window.hpDesk.callStop(); phoneCard(); renderHome();
+    toast(done ? `List finished · ${n} lead${n === 1 ? "" : "s"} called` : "Phone session ended");
+  }
+
   /* ================= click-to-call ================= */
   async function dialLead(lead) {
+    if (S.via === "phone") { if (!S.ps) phoneCall(lead); return; }
     if (S.call || S.power) return;
     if (!S.device) { toast(S.ready ? "Phone is still connecting…" : "The dialer isn't set up yet"); return; }
     if (!(await micCheck())) return;
@@ -416,6 +467,10 @@
       setTimeout(nextBatch, 600);
     }
     if (S.call && S.callLead === leadId) S.call.disconnect();
+    if (S.via === "phone" && S.phoneLead === leadId) {
+      window.hpDesk.callStop();
+      if (S.ps) setTimeout(phoneNext, 700); else { S.phoneLead = null; S.callLead = null; phoneCard(); }
+    }
     setTimeout(() => { if (PF.id) renderProfile(); }, 300);
   }
   function meta(leadId) {
@@ -1282,8 +1337,8 @@
   }
   function renderHome() {
     const el = $("#hpdHome"); if (!el || !window.hpDesk) return;
-    const D = window.hpDesk, q = campaignQueue(), lines = Math.min(S.lines, S.settings.maxLines || 3);
-    const headset = S.call || S.power?.connected ? "live" : S.power ? "dial" : (S.deviceReady || S.demo) ? "on" : "off";
+    const D = window.hpDesk, q = campaignQueue(), lines = S.via === "phone" ? 1 : Math.min(S.lines, S.settings.maxLines || 3);
+    const headset = S.via === "phone" ? (S.phoneLead ? "live" : "on") : S.call || S.power?.connected ? "live" : S.power ? "dial" : (S.deviceReady || S.demo) ? "on" : "off";
     const t = usage?.today || {}, m = usage?.month || {};
     const estMin = (x) => Math.round(((x.talkSec || 0) + (x.dials || 0) * 25) / 60); // talk + ~25s ringing per dial, both legs billed per minute
     const cost = (min) => "$" + (min * 0.018).toFixed(2);
@@ -1296,9 +1351,11 @@
         <p class="hpd-sm" style="margin:0">Your lines, your leads, Highpoint's own phone.</p>
         <button type="button" class="btn" id="hphPick">Campaigns</button>
       </div>
-      ${!S.demo && !S.ready ? `<div class="hph-setup"><div><b>${S.twilio ? "One step left: connect your phone line" : "Phone line not connected"}</b><span>${S.twilio ? (S.me?.admin ? "Your Twilio keys are in. Press Connect once and every agent's dialer turns on." : "Your admin needs to press Connect Twilio once.") : "Your admin needs to add the Twilio keys in Cloudflare first."}</span></div>${S.twilio && S.me?.admin ? `<button type="button" class="btn primary" id="hphSetup">Connect Twilio</button>` : ""}</div>` : ""}
-      ${!S.demo && S.ready && !S.numbers.length ? `<div class="hph-setup"><div><b>Get your first phone number</b><span>You need a number to call from. Pick one in your area code; Twilio charges about $1.15 a month.</span></div><button type="button" class="btn primary" id="hphBuy">Get a number</button></div>` : ""}
-      <div class="hph-bar" data-h="${headset}"><span class="hph-dot"></span><b>${headset === "live" ? "On a call" : headset === "dial" ? "Headset on · dialing" : headset === "on" ? "Headset on" : "Headset off"}</b>
+      <div class="hph-via" role="group" aria-label="Call with"><span class="hpd-sm">Call with</span><button type="button" data-via="line" aria-pressed="${S.via !== "phone"}">Browser phone line</button><button type="button" data-via="phone" aria-pressed="${S.via === "phone"}">My phone</button></div>
+      ${S.via === "phone" ? `<div class="hph-setup"><div><b>Calling from your own phone</b><span>Each call opens on your phone: Phone Link on Windows, your iPhone on a Mac, or Google Voice. Leads see your cell number. One line at a time, and recording, voicemail drop and local caller ID need the browser phone line.</span></div></div>` : ""}
+      ${S.via !== "phone" && !S.demo && !S.ready ? `<div class="hph-setup"><div><b>${S.twilio ? "One step left: connect your phone line" : "Phone line not connected"}</b><span>${S.twilio ? (S.me?.admin ? "Your Twilio keys are in. Press Connect once and every agent's dialer turns on." : "Your admin needs to press Connect Twilio once.") : "Your admin needs to add the Twilio keys in Cloudflare first."}</span></div>${S.twilio && S.me?.admin ? `<button type="button" class="btn primary" id="hphSetup">Connect Twilio</button>` : ""}</div>` : ""}
+      ${S.via !== "phone" && !S.demo && S.ready && !S.numbers.length ? `<div class="hph-setup"><div><b>Get your first phone number</b><span>You need a number to call from. Pick one in your area code; Twilio charges about $1.15 a month.</span></div><button type="button" class="btn primary" id="hphBuy">Get a number</button></div>` : ""}
+      <div class="hph-bar" data-h="${headset}"><span class="hph-dot"></span><b>${S.via === "phone" ? (S.phoneLead ? "Calling on your phone" : "Your phone is ready") : headset === "live" ? "On a call" : headset === "dial" ? "Headset on · dialing" : headset === "on" ? "Headset on" : "Headset off"}</b>
         <span class="hpd-sm">${headset === "live" ? "Talk away. The lead's profile is open." : headset === "dial" ? `Calling ${lines} at a time from ${esc(listName())}. Whoever says hello first comes straight to you.` : headset === "on" ? "Line is ready. Press Start calling." : S.ready ? "Connecting your line… allow the microphone if your browser asks." : "Press Start calling; your browser joins the line first (allow the microphone)."}</span>
         <button type="button" class="btn hph-soundbtn" id="hphSound" aria-expanded="${S.sound.open}">Sound</button></div>
       <div class="hph-sound" id="hphSoundP" ${S.sound.open ? "" : "hidden"}>
@@ -1317,8 +1374,8 @@
         <div class="hph-ctl">
           <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
           <label class="hph-sel"><span>Who to call</span><select id="hphFilter" ${S.power ? "disabled" : ""}>${FILTERS.map(([k, n]) => `<option value="${k}" ${S.filter === k ? "selected" : ""}>${n} (${fCount[k]})</option>`).join("")}</select></label>
-          <div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>
-          ${S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
+          <div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.via === "phone" ? 1 : S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>
+          ${S.via === "phone" ? (S.ps ? `<button type="button" class="btn" id="hphPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hphPsEnd">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphPsGo" ${q.length ? "" : "disabled"}>${I.phone} Start calling</button>`) : S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
         </div>
       </div>
       <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Today</h3><span class="hpd-sm">Counted as you dial</span></div>
@@ -1352,6 +1409,10 @@
     $("#hphSrc").onchange = (e) => { setSrc(e.target.value); renderHome(); renderPhone(); };
     $("#hphFilter").onchange = (e) => { setFilter(e.target.value); renderHome(); renderPhone(); };
     $$("[data-hl]", el).forEach((b) => (b.onclick = () => { S.lines = +b.dataset.hl; lsSet("hpd.lines", S.lines); savePrefs({ lines: S.lines }); renderHome(); }));
+    $$("[data-via]", el).forEach((b) => (b.onclick = () => { if (S.call || S.power || S.ps) { toast("Finish the current calls first"); return; } S.via = b.dataset.via; lsSet("hpd.via", S.via); renderHome(); renderPhone(); }));
+    $("#hphPsGo")?.addEventListener("click", startPhoneSession);
+    $("#hphPsSkip")?.addEventListener("click", () => phoneNext());
+    $("#hphPsEnd")?.addEventListener("click", () => phoneEnd());
     $("#hphGo")?.addEventListener("click", () => { S.mode = "power"; lsSet("hpd.mode", "power"); renderPhone(); startPower(); });
     $("#hphPause")?.addEventListener("click", togglePause);
     $("#hphStop")?.addEventListener("click", stopPower);
@@ -1480,7 +1541,7 @@
     $("#hpdDncDel2")?.addEventListener("click", async () => { const n = nums(); if (!n.length) return; await api("/calls/dnc", { method: "DELETE", body: { numbers: n } }); toast(`${n.length} removed`); renderDnc(); });
   }
 
-  window.hpDialer = { openProfile: (id) => openProfile(id), get ready() { return !!S.device && (S.ready || S.demo); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power); } };
+  window.hpDialer = { openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
   window.addEventListener("hp:leadchange", () => { if (!S.call && !S.power) renderActions(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();

@@ -371,3 +371,11 @@ body:has(#v-dialer:not([hidden])) .hpd-phonest{display:none}
 .hph-setup{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 18px;border-radius:16px;background:linear-gradient(90deg,rgba(255,46,136,.16),rgba(255,158,61,.08));border:1px solid rgba(255,79,163,.45)}
 .hph-setup>div{display:flex;flex-direction:column;gap:3px;min-width:0}
 .hph-setup b{font-size:15px}.hph-setup span{font-size:13px;color:#D3D6DE}
+
+/* call with: browser line vs my phone */
+.hph-via{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0 10px}
+.hph-via button{all:unset;cursor:pointer;padding:7px 12px;border-radius:999px;font-weight:700;font-size:13px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04)}
+.hph-via button[aria-pressed="true"]{background:linear-gradient(135deg,#FF2E88,#FF9E3D);border-color:transparent;color:#fff}
+.hph-via button:focus-visible{outline:2px solid #8FB8FF;outline-offset:2px}
+.hpd-phonecard{position:fixed;right:18px;bottom:18px;z-index:60;display:flex;flex-direction:column;gap:6px;max-width:320px;padding:14px 16px;border-radius:16px;background:rgba(18,12,30,.96);border:1px solid rgba(255,255,255,.12);box-shadow:0 20px 50px rgba(0,0,0,.5);color:#fff}
+@media (max-width:600px){.hpd-phonecard{left:12px;right:12px;bottom:12px;max-width:none}}
