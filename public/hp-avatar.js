@@ -45,7 +45,7 @@
     piercing: ["none", "nosestud", "nosering", "septum", "brow", "lip"],
     glasses: ["none", "rect", "round", "aviator", "cateye", "browline", "sunglasses", "sport", "oversized", "rimless"],
     hat: ["none", "cap", "backcap", "beanie", "bucket", "fedora", "cowboy", "visor", "headband", "beret", "headphones"],
-    top: ["tee", "vneck", "tank", "polo", "buttondown", "hoodie", "sweater", "turtleneck", "graphic", "stripes", "jersey", "blouse", "tropical"],
+    top: ["hpjersey", "tee", "vneck", "tank", "polo", "buttondown", "hoodie", "sweater", "turtleneck", "graphic", "stripes", "jersey", "blouse", "tropical"],
     outer: ["none", "blazer", "suit", "leather", "bomber", "denim", "varsity", "vest", "cardigan"],
     neck: ["none", "tie", "bowtie", "chain", "pendant", "pearls", "lanyard"],
     earrings: ["none", "studs", "hoops", "drops"],
@@ -65,7 +65,7 @@
     nosestud: "Nose stud", nosering: "Nose ring", septum: "Septum", brow: "Brow",
     rect: "Classic", aviator: "Aviator", cateye: "Cat-eye", browline: "Browline", sunglasses: "Shades", sport: "Sport", oversized: "Oversized", rimless: "Rimless",
     cap: "Cap", backcap: "Backwards cap", beanie: "Beanie", bucket: "Bucket hat", fedora: "Fedora", cowboy: "Cowboy", visor: "Visor", headband: "Headband", beret: "Beret", headphones: "Headphones",
-    tee: "T-shirt", vneck: "V-neck", tank: "Tank top", polo: "Polo", buttondown: "Button-down", hoodie: "Hoodie", sweater: "Sweater", turtleneck: "Turtleneck", graphic: "Highpoint tee", stripes: "Stripes", jersey: "Jersey", blouse: "Blouse", tropical: "Tropical",
+    hpjersey: "Highpoint jersey", tee: "T-shirt", vneck: "V-neck", tank: "Tank top", polo: "Polo", buttondown: "Button-down", hoodie: "Hoodie", sweater: "Sweater", turtleneck: "Turtleneck", graphic: "Highpoint tee", stripes: "Stripes", jersey: "Jersey", blouse: "Blouse", tropical: "Tropical",
     blazer: "Blazer", suit: "Suit jacket", leather: "Leather", bomber: "Bomber", denim: "Denim", varsity: "Varsity", vest: "Puffer vest", cardigan: "Cardigan",
     tie: "Tie", bowtie: "Bow tie", chain: "Chain", pendant: "Pendant", pearls: "Pearls", lanyard: "Badge",
     studs: "Studs", hoops: "Hoops", drops: "Drops", gold: "Gold", silver: "Silver", rose: "Rose gold", black: "Black",
@@ -79,7 +79,7 @@
     lipColor: "#B5475A", lipA: 0, blush: 0.25, blushColor: "#FF6F9C", shadowColor: "#B15CFF", shadowA: 0, liner: "none",
     freckles: 0, mole: "none", piercing: "none", age: 0,
     glasses: "none", glassColor: "#121318", hat: "none", hatColor: "#16295A",
-    top: "tee", topColor: "#FFFFFF", top2: "#FF4FA3", outer: "none", outerColor: "#2B2D36", neck: "none", earrings: "none", metal: "gold",
+    top: "hpjersey", topColor: "#FFFFFF", top2: "#E5383B", outer: "none", outerColor: "#2B2D36", neck: "none", earrings: "none", metal: "gold",
     bg: "sunset", bgColor: "#FF4FA3", tune: {},
   };
 
@@ -462,6 +462,11 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
       turtleneck: baseTop() + folds + `<path d="M${CX - nw - 4} 290 C${CX - nw - 8} 320 ${CX - nw - 10} 340 ${CX - nw - 6} 352 C${CX - 20} 366 ${CX + 20} 366 ${CX + nw + 6} 352 C${CX + nw + 10} 340 ${CX + nw + 8} 320 ${CX + nw + 4} 290 C${CX + 20} 300 ${CX - 20} 300 ${CX - nw - 4} 290Z" fill="url(#${u}tp)"/><g stroke="${tcD}" stroke-width="2.2" opacity=".55" fill="none"><path d="M${CX - nw - 2} 306 C${CX - 20} 316 ${CX + 20} 316 ${CX + nw + 2} 306"/><path d="M${CX - nw - 4} 322 C${CX - 20} 332 ${CX + 20} 332 ${CX + nw + 4} 322"/><path d="M${CX - nw - 6} 338 C${CX - 20} 348 ${CX + 20} 348 ${CX + nw + 6} 338"/></g>`,
       graphic: baseTop() + folds + crew + (() => { const k = ink(tc, t2); return LOGO(CX, 362, 74, k, lum(tc) > 0.7 ? "#3D8BFF" : "#9CC3F0") + `<text x="${CX}" y="432" text-anchor="middle" font-family="Montserrat,Inter,Arial,sans-serif" font-weight="800" font-size="14" letter-spacing="4" fill="${k}">HIGHPOINT</text><text x="${CX}" y="444" text-anchor="middle" font-family="Montserrat,Inter,Arial,sans-serif" font-weight="700" font-size="7.5" letter-spacing="5" fill="${k}" opacity=".85">FINANCIAL</text>`; })(),
       stripes: baseTop() + `<g clip-path="url(#${u}tor)"><g fill="${t2}">${Array.from({ length: 9 }, (_, i) => `<rect x="0" y="${366 + i * 24}" width="400" height="10"/>`).join("")}</g></g>` + folds + crew,
+      hpjersey: (() => {
+        const J = `M${CX - SW + 42} 446 C${CX - SW + 74} 430 ${CX - 92} 392 ${CX - 74} 330 L${CX - nw - 4} 330 C${CX - nw + 2} 394 ${CX + nw - 2} 394 ${CX + nw + 4} 330 L${CX + 74} 330 C${CX + 92} 392 ${CX + SW - 74} 430 ${CX + SW - 42} 446 L${CX + SW - 30} 620 L${CX - SW + 30} 620Z`;
+        const k = ink(tc, t2);
+        return `<path d="${torso}" fill="url(#${u}nk)"/><defs><clipPath id="${u}jc"><path d="${J}"/></clipPath><pattern id="${u}jp" width="22" height="19" patternUnits="userSpaceOnUse"><path d="M11 1 L21 9.5 L11 18 L1 9.5Z" fill="none" stroke="${sh(tc, lum(tc) > 0.5 ? -0.25 : 0.25)}" stroke-width="1.4"/></pattern></defs><path d="${J}" fill="url(#${u}tp)"/><g clip-path="url(#${u}jc)"><rect x="0" y="300" width="400" height="320" fill="url(#${u}jp)" opacity=".35"/></g><path d="${J}" fill="none" stroke="${t2}" stroke-width="9" clip-path="url(#${u}jc)"/><path d="${J}" fill="none" stroke="#fff" stroke-width="2.5" opacity=".85" clip-path="url(#${u}jc)" transform="translate(0 0)"/>${LOGO(CX, 384, 58, k)}<text x="${CX}" y="500" text-anchor="middle" font-family="Montserrat,Inter,Arial,sans-serif" font-weight="900" font-size="62" fill="${k}" stroke="${sh(tc, -0.4)}" stroke-width="2" paint-order="stroke">1</text>`;
+      })(),
       jersey: baseTop() + folds + neckSkinV(372) + `<path d="M${CX - nw - 8} 328 L${CX} 374 L${CX + nw + 8} 328" stroke="${t2}" stroke-width="9" fill="none" stroke-linejoin="round"/>${LOGO(CX - 64, 384, 34, ink(tc, t2))}<text x="${CX + 10}" y="500" text-anchor="middle" font-family="Montserrat,Inter,Arial,sans-serif" font-weight="900" font-size="78" fill="${t2}" stroke="${lum(t2) > 0.6 ? "#16161E" : "#fff"}" stroke-width="3" paint-order="stroke">1</text><path d="M${CX - SW - 14} 470 L${CX - SW + 40} 470 M${CX + SW + 14} 470 L${CX + SW - 40} 470" stroke="${t2}" stroke-width="10"/>`,
       blouse: baseTop() + folds + neckSkinV(388) + `<path d="M${CX - nw - 10} 326 C${CX - nw} 356 ${CX - 12} 382 ${CX} 390 C${CX + 12} 382 ${CX + nw} 356 ${CX + nw + 10} 326" stroke="${sh(tc, 0.18)}" stroke-width="10" fill="none" stroke-linecap="round"/><path d="M${CX - nw - 10} 326 C${CX - nw} 356 ${CX - 12} 382 ${CX} 390 C${CX + 12} 382 ${CX + nw} 356 ${CX + nw + 10} 326" stroke="${tcD}" stroke-width="2" fill="none" stroke-dasharray="4 4"/>`,
       tropical: baseTop() + `<g clip-path="url(#${u}tor)"><g fill="${t2}" opacity=".85">${[[90, 420, -30], [300, 410, 30], [150, 500, 20], [260, 510, -25], [60, 520, 40], [340, 520, -40], [200, 440, 10]].map(([x, y, r]) => `<g transform="rotate(${r} ${x} ${y})"><ellipse cx="${x}" cy="${y}" rx="26" ry="10"/><path d="M${x - 24} ${y} h48" stroke="${sh(t2, -0.3)}" stroke-width="2"/></g>`).join("")}</g><g fill="${sh(tc, 0.35)}">${[[120, 470], [280, 460], [210, 520], [70, 460], [330, 470]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="7"/>`).join("")}</g></g>` + folds + neckSkinV(380) + `<path d="M${CX - nw - 10} 324 L${CX - 2} 382 L${CX - 30} 376 L${CX - nw - 30} 340Z M${CX + nw + 10} 324 L${CX + 2} 382 L${CX + 30} 376 L${CX + nw + 30} 340Z" fill="${sh(tc, 0.12)}" stroke="${tcD}" stroke-width="2.5" stroke-linejoin="round"/>`,
@@ -729,320 +734,321 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
     return svg;
   }
 
-  /* ======================= character creator ======================= */
-  const ICON = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+  /* ======================= character creator (game-style layout) ======================= */
+  const ICO = (p, w = 2) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
   const I = {
-    face: ICON('<path d="M12 3c4.4 0 7 3.4 7 8 0 5-3.2 10-7 10s-7-5-7-10c0-4.6 2.6-8 7-8z"/><path d="M9.5 11h.01M14.5 11h.01M10 15.5c1.2.8 2.8.8 4 0"/>'),
-    skin: ICON('<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>'),
-    hair: ICON('<path d="M5 14c0-6 3-10 7-10s7 4 7 10"/><path d="M5 14c2-4 5-5.5 9-5 2 .3 3.5 1.6 5 5"/><path d="M6 14v5M18 14v5"/>'),
-    eyes: ICON('<path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
-    brows: ICON('<path d="M3 11c3-3 6-3.5 9-2M13 9c3-1.5 6-1 8 2"/><path d="M6 16h.01M18 16h.01"/>'),
-    nose: ICON('<path d="M12 4v9l-3 3.5c1.6 1.4 4.4 1.4 6 0"/>'),
-    mouth: ICON('<path d="M4 11c3 5 13 5 16 0"/><path d="M4 11c4 1.5 12 1.5 16 0"/>'),
-    beard: ICON('<path d="M5 9c0 7 3.5 12 7 12s7-5 7-12"/><path d="M8.5 13c2-1.5 5-1.5 7 0"/>'),
-    makeup: ICON('<path d="M9 21V11l3-7 3 7v10z"/><path d="M9 14h6"/>'),
-    details: ICON('<path d="M12 3l2.4 5 5.6.8-4 3.9 1 5.5L12 15.6 7 18.2l1-5.5-4-3.9 5.6-.8z"/>'),
-    glasses: ICON('<circle cx="6.5" cy="13" r="3.5"/><circle cx="17.5" cy="13" r="3.5"/><path d="M10 13h4M3 13 2 9M21 13l1-4"/>'),
-    hat: ICON('<path d="M4 15c0-6 3.5-9 8-9s8 3 8 9z"/><path d="M2 15h20"/>'),
-    top: ICON('<path d="M8 4 3 8l3 3 2-2v11h8V9l2 2 3-3-5-4c-1 2-2.4 3-4 3S9 6 8 4z"/>'),
-    outer: ICON('<path d="M8 4 3 8v12h6V9M16 4l5 4v12h-6V9"/><path d="m8 4 4 6 4-6"/>'),
-    extras: ICON('<path d="M7 7c0 7 10 7 10 0"/><path d="M12 13.5v3"/><circle cx="12" cy="18.5" r="2"/>'),
-    bg: ICON('<rect x="3" y="4" width="18" height="16" rx="3"/><path d="m3 16 5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/>'),
-    name: ICON('<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M7 11h6M7 15h10"/>'),
-    undo: ICON('<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>'),
-    redo: ICON('<path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/>'),
-    dice: ICON('<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01"/>'),
-    x: ICON('<path d="M6 6l12 12M18 6 6 18"/>'),
-    zoom: ICON('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5M8 11h6M11 8v6"/>'),
-    body: ICON('<circle cx="12" cy="6" r="3"/><path d="M5 21c0-5 3-8 7-8s7 3 7 8"/>'),
-    plus: ICON('<path d="M12 5v14M5 12h14"/>'),
-    reset: ICON('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'),
+    x: ICO('<path d="M6 6l12 12M18 6 6 18"/>'), up: ICO('<path d="m6 15 6-6 6 6"/>', 2.6), down: ICO('<path d="m6 9 6 6 6-6"/>', 2.6), chev: ICO('<path d="m9 6 6 6-6 6"/>', 2.4),
+    undo: ICO('<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>'), redo: ICO('<path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/>'),
+    dice: ICO('<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01"/>', 2.2), edit: ICO('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>'),
+    plus: ICO('<path d="M12 5v14M5 12h14"/>', 2.6), reset: ICO('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'),
   };
-  const CATS = [
-    { id: "face", label: "Face", zoom: "head", sec: [{ t: "tiles", key: "face", title: "Face shape", crop: "head" }, { t: "sliders", title: "Shape it", items: [["headW", "Face width"], ["jaw", "Jaw"], ["chin", "Chin length"], ["ears", "Ears"]] }] },
-    { id: "skin", label: "Skin", zoom: "head", sec: [{ t: "colors", key: "skin", title: "Skin tone", pal: "skin" }, { t: "amount", key: "blush", title: "Blush" }, { t: "colors", key: "blushColor", title: "Blush color", pal: "lip", small: true }] },
-    { id: "hair", label: "Hair", zoom: "head", sec: [{ t: "tiles", key: "hair", title: "Hairstyle", crop: "head" }, { t: "colors", key: "hairColor", title: "Hair color", pal: "hair" }] },
-    { id: "eyes", label: "Eyes", zoom: "head", sec: [{ t: "tiles", key: "eyes", title: "Eye shape", crop: "eyes" }, { t: "colors", key: "eyeColor", title: "Eye color", pal: "eye" }, { t: "tiles", key: "lashes", title: "Lashes", crop: "eyes", few: true }, { t: "sliders", title: "Fine-tune", items: [["eyeSize", "Size"], ["eyeGap", "Spacing"], ["eyeY", "Height"], ["eyeTilt", "Tilt"]] }] },
-    { id: "brows", label: "Brows", zoom: "head", sec: [{ t: "tiles", key: "brows", title: "Brow shape", crop: "eyes" }, { t: "colors", key: "browColor", title: "Brow color", pal: "hair", auto: "Match hair" }, { t: "sliders", title: "Fine-tune", items: [["browY", "Height"], ["browW", "Thickness"]] }] },
-    { id: "nose", label: "Nose", zoom: "head", sec: [{ t: "tiles", key: "nose", title: "Nose", crop: "face" }, { t: "sliders", title: "Fine-tune", items: [["noseSize", "Size"], ["noseY", "Height"]] }] },
-    { id: "mouth", label: "Mouth", zoom: "head", sec: [{ t: "tiles", key: "mouth", title: "Expression", crop: "mouth" }, { t: "sliders", title: "Fine-tune", items: [["mouthW", "Width"], ["mouthY", "Height"], ["lips", "Lip fullness"]] }] },
-    { id: "beard", label: "Facial hair", zoom: "head", sec: [{ t: "tiles", key: "beard", title: "Facial hair", crop: "beard" }, { t: "colors", key: "beardColor", title: "Color", pal: "hair", auto: "Match hair" }] },
-    { id: "makeup", label: "Makeup", zoom: "head", sec: [{ t: "amount", key: "lipA", title: "Lip color" }, { t: "colors", key: "lipColor", title: "Lip shade", pal: "lip", small: true, bump: ["lipA", 0.6] }, { t: "tiles", key: "liner", title: "Eyeliner", crop: "eyes", few: true }, { t: "amount", key: "shadowA", title: "Eyeshadow" }, { t: "colors", key: "shadowColor", title: "Shadow color", pal: "shadow", small: true, bump: ["shadowA", 0.5] }] },
-    { id: "details", label: "Details", zoom: "head", sec: [{ t: "amount", key: "freckles", title: "Freckles" }, { t: "amount", key: "age", title: "Smile & age lines" }, { t: "tiles", key: "mole", title: "Beauty mark", crop: "face", few: true }, { t: "tiles", key: "piercing", title: "Piercings", crop: "face" }] },
-    { id: "glasses", label: "Glasses", zoom: "head", sec: [{ t: "tiles", key: "glasses", title: "Glasses", crop: "head" }, { t: "colors", key: "glassColor", title: "Frame color", pal: "frame" }] },
-    { id: "hat", label: "Headwear", zoom: "bust", sec: [{ t: "tiles", key: "hat", title: "Headwear", crop: "hat" }, { t: "colors", key: "hatColor", title: "Color", pal: "cloth" }] },
-    { id: "top", label: "Top", zoom: "bust", sec: [{ t: "tiles", key: "top", title: "Top", crop: "body" }, { t: "colors", key: "topColor", title: "Color", pal: "cloth" }, { t: "colors", key: "top2", title: "Accent color", pal: "cloth", small: true }] },
-    { id: "outer", label: "Jacket", zoom: "bust", sec: [{ t: "tiles", key: "outer", title: "Jacket", crop: "body" }, { t: "colors", key: "outerColor", title: "Color", pal: "cloth" }] },
-    { id: "extras", label: "Accessories", zoom: "bust", sec: [{ t: "tiles", key: "neck", title: "Neck", crop: "body" }, { t: "tiles", key: "earrings", title: "Earrings", crop: "head", few: true }, { t: "chips", key: "metal", title: "Metal" }] },
-    { id: "body", label: "Build", zoom: "bust", sec: [{ t: "sliders", title: "Build", items: [["build", "Shoulders"], ["neck", "Neck"]] }] },
-    { id: "bg", label: "Background", zoom: "bust", sec: [{ t: "tiles", key: "bg", title: "Background", crop: "bust", tall: true }, { t: "colors", key: "bgColor", title: "Solid color", pal: "bg", small: true, set: ["bg", "solid"] }] },
-    { id: "name", label: "Name tag", zoom: "bust", sec: [{ t: "name" }] },
-  ];
+  // menu tree: branches list items; leaves are editing screens
+  const MENU = {
+    root: { title: "Appearance", items: [["head", "Head Editor"], ["body", "Body"], ["clothing", "Clothing"], ["accessories", "Accessories"], ["bg", "Background"], ["name", "Name & Motto"]] },
+    head: { title: "Head Editor", parent: "root", items: [["skin", "Skin Tone"], ["face", "Face Shape"], ["eyes", "Eyes"], ["brows", "Eyebrows"], ["nose", "Nose"], ["mouth", "Mouth"], ["hair", "Hair"], ["beard", "Facial Hair"], ["makeup", "Makeup"], ["details", "Details"]] },
+    clothing: { title: "Clothing", parent: "root", items: [["top", "Tops"], ["outer", "Jackets"], ["hat", "Headwear"]] },
+    accessories: { title: "Accessories", parent: "root", items: [["glasses", "Glasses"], ["neck", "Neckwear"], ["earrings", "Earrings"]] },
+  };
+  const LEAF = {
+    skin: { parent: "head", zoom: "head", direct: [{ t: "colors", key: "skin", title: "Skin tone", pal: "skin" }, { t: "amount", key: "blush", title: "Blush" }, { t: "colors", key: "blushColor", title: "Blush color", pal: "lip", small: true }] },
+    face: { parent: "head", zoom: "head", grid: { key: "face", crop: "head", mono: true }, edit: [{ t: "sliders", title: "Shape", items: [["headW", "Face width"], ["jaw", "Jaw"], ["chin", "Chin length"], ["ears", "Ears"]] }] },
+    eyes: { parent: "head", zoom: "face", grid: { key: "eyes", crop: "eyes", mono: true }, edit: [{ t: "colors", key: "eyeColor", title: "Eye color", pal: "eye" }, { t: "chips", key: "lashes", title: "Lashes" }, { t: "sliders", title: "Fine-tune", items: [["eyeSize", "Size"], ["eyeGap", "Spacing"], ["eyeY", "Height"], ["eyeTilt", "Tilt"]] }] },
+    brows: { parent: "head", zoom: "face", grid: { key: "brows", crop: "eyes", mono: true }, edit: [{ t: "colors", key: "browColor", title: "Brow color", pal: "hair", auto: "Match hair" }, { t: "sliders", title: "Fine-tune", items: [["browY", "Height"], ["browW", "Thickness"]] }] },
+    nose: { parent: "head", zoom: "face", grid: { key: "nose", crop: "face", mono: true }, edit: [{ t: "sliders", title: "Fine-tune", items: [["noseSize", "Size"], ["noseY", "Height"]] }] },
+    mouth: { parent: "head", zoom: "face", grid: { key: "mouth", crop: "mouth", mono: true }, edit: [{ t: "sliders", title: "Fine-tune", items: [["mouthW", "Width"], ["mouthY", "Height"], ["lips", "Lip fullness"]] }] },
+    hair: { parent: "head", zoom: "head", grid: { key: "hair", crop: "head", mono: true }, edit: [{ t: "colors", key: "hairColor", title: "Hair color", pal: "hair" }] },
+    beard: { parent: "head", zoom: "head", grid: { key: "beard", crop: "beard", mono: true }, edit: [{ t: "colors", key: "beardColor", title: "Facial hair color", pal: "hair", auto: "Match hair" }] },
+    makeup: { parent: "head", zoom: "face", direct: [{ t: "amount", key: "lipA", title: "Lip color" }, { t: "colors", key: "lipColor", title: "Lip shade", pal: "lip", small: true, bump: ["lipA", 0.6] }, { t: "chips", key: "liner", title: "Eyeliner" }, { t: "amount", key: "shadowA", title: "Eyeshadow" }, { t: "colors", key: "shadowColor", title: "Shadow color", pal: "shadow", small: true, bump: ["shadowA", 0.5] }] },
+    details: { parent: "head", zoom: "head", direct: [{ t: "amount", key: "freckles", title: "Freckles" }, { t: "amount", key: "age", title: "Smile & age lines" }, { t: "chips", key: "mole", title: "Beauty mark" }, { t: "chips", key: "piercing", title: "Piercings" }, { t: "chips", key: "metal", title: "Metal" }] },
+    body: { parent: "root", title: "Body", zoom: "bust", direct: [{ t: "sliders", title: "Build", items: [["build", "Shoulders"], ["neck", "Neck"]] }] },
+    top: { parent: "clothing", zoom: "bust", grid: { key: "top", crop: "body" }, edit: [{ t: "colors", key: "topColor", title: "Color", pal: "cloth" }, { t: "colors", key: "top2", title: "Trim / accent", pal: "cloth", small: true }] },
+    outer: { parent: "clothing", zoom: "bust", grid: { key: "outer", crop: "body" }, edit: [{ t: "colors", key: "outerColor", title: "Color", pal: "cloth" }] },
+    hat: { parent: "clothing", zoom: "head", grid: { key: "hat", crop: "hat" }, edit: [{ t: "colors", key: "hatColor", title: "Color", pal: "cloth" }] },
+    glasses: { parent: "accessories", zoom: "head", grid: { key: "glasses", crop: "head", mono: true }, edit: [{ t: "colors", key: "glassColor", title: "Frame color", pal: "frame" }] },
+    neck: { parent: "accessories", zoom: "bust", grid: { key: "neck", crop: "body" }, edit: [{ t: "chips", key: "metal", title: "Metal" }, { t: "colors", key: "top2", title: "Tie / badge color", pal: "cloth", small: true }] },
+    earrings: { parent: "accessories", zoom: "head", grid: { key: "earrings", crop: "head", mono: true }, edit: [{ t: "chips", key: "metal", title: "Metal" }] },
+    bg: { parent: "root", title: "Background", zoom: "bust", grid: { key: "bg", crop: "bust", tall: true }, edit: [{ t: "colors", key: "bgColor", title: "Solid color", pal: "bg", set: ["bg", "solid"] }] },
+    name: { parent: "root", title: "Name & Motto", zoom: "bust", direct: [{ t: "name" }] },
+  };
+  const titleOf = (id) => MENU[id]?.title || LEAF[id]?.title || Object.values(MENU).flatMap((m) => m.items).find((x) => x[0] === id)?.[1] || id;
+  const crumbsOf = (id) => { const out = []; let p = (MENU[id] || LEAF[id])?.parent; while (p) { out.unshift(titleOf(p)); p = MENU[p]?.parent; } return out; };
+  const CAM = { head: "scale(1.28)", face: "scale(1.7)", bust: "none" };
+  const MONO = { skin: "#D9DADF", hairColor: "#26262B", beardColor: "#26262B", browColor: "#2E2E33", eyeColor: "#5D6068", hatColor: "#4A4B53", topColor: "#C8C9CF", outerColor: "#8A8B93", lipA: 0, shadowA: 0, blush: 0, freckles: 0, bg: "slate" };
+  const BACKDROP = `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a2a30"/><stop offset="1" stop-color="#121216"/></linearGradient></defs><g fill="url(#g)" stroke="#000" stroke-opacity=".55" stroke-width="3"><path d="M120 8 L232 120 L120 232 L8 120Z"/></g><g fill="none" stroke="#3a3a42" stroke-opacity=".5" stroke-width="2"><path d="M120 34 L206 120 L120 206 L34 120Z"/></g></svg>')}")`;
   const CSS = `
-.hpa{position:fixed;inset:0;z-index:2147482000;display:grid;place-items:center;background:rgba(6,4,12,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-family:var(--f-ui,"Inter",system-ui,sans-serif);color:#F4F5F8;opacity:0;transition:opacity .2s}
+.hpa{position:fixed;inset:0;z-index:2147482000;display:grid;grid-template-columns:minmax(380px,520px) 1fr;grid-template-rows:auto 1fr auto;color:#F2F2F4;font-family:var(--f-ui,"Inter",system-ui,sans-serif);background:#0B0B0E;opacity:0;transition:opacity .25s;overflow:hidden}
 .hpa.in{opacity:1}
 .hpa *{box-sizing:border-box}
-.hpa-sheet{width:min(1180px,calc(100vw - 24px));height:min(820px,calc(100vh - 24px));display:flex;flex-direction:column;border-radius:26px;overflow:hidden;background:linear-gradient(160deg,#1B0F2E 0%,#120A1F 55%,#0D0816 100%);border:1px solid rgba(255,255,255,.1);box-shadow:0 40px 120px rgba(0,0,0,.6),0 0 0 1px rgba(255,79,163,.08);transform:translateY(10px) scale(.985);transition:transform .25s cubic-bezier(.2,.8,.2,1)}
-.hpa.in .hpa-sheet{transform:none}
-.hpa-top{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
-.hpa-top h2{margin:0 auto 0 4px;font:800 19px/1.2 var(--f-head,var(--f-ui,system-ui));letter-spacing:-.01em}
-.hpa-ib{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:#E9EAF0;cursor:pointer;transition:background .15s,border-color .15s}
+.hpa::before{content:"";position:absolute;inset:0;background:${BACKDROP} 0 0/240px 240px;opacity:.55;pointer-events:none}
+.hpa::after{content:"";position:absolute;inset:0;background:radial-gradient(60% 75% at 66% 52%,rgba(255,255,255,.07),transparent 60%),linear-gradient(90deg,rgba(0,0,0,.92) 0%,rgba(0,0,0,.7) 30%,rgba(0,0,0,.1) 52%,rgba(0,0,0,.35) 100%);pointer-events:none}
+.hpa>*{position:relative;z-index:1}
+.hpa-head{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:22px 40px 0}
+.hpa-brand{display:flex;align-items:center;gap:12px;font:900 21px/1 var(--f-head,Montserrat,Inter,system-ui);letter-spacing:.02em;text-transform:none}
+.hpa-brand svg{height:30px;width:auto}
+.hpa-sp{flex:1}
+.hpa-ib{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:rgba(20,20,24,.7);color:#E9E9EE;cursor:pointer}
 .hpa-ib svg{width:20px;height:20px}
-.hpa-ib:hover:not(:disabled){background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22)}
-.hpa-ib:disabled{opacity:.35;cursor:default}
-.hpa-btn{height:40px;padding:0 16px;display:inline-flex;align-items:center;gap:8px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#fff;font:700 14px var(--f-ui,system-ui);cursor:pointer;white-space:nowrap}
+.hpa-ib:hover:not(:disabled){background:rgba(255,255,255,.12)}
+.hpa-ib:disabled{opacity:.3;cursor:default}
+.hpa-btn{height:44px;padding:0 18px;display:inline-flex;align-items:center;gap:9px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(20,20,24,.7);color:#fff;font:800 14px var(--f-ui,system-ui);cursor:pointer;white-space:nowrap}
 .hpa-btn svg{width:18px;height:18px}
 .hpa-btn:hover{background:rgba(255,255,255,.12)}
-.hpa-btn.pri{border:0;background:linear-gradient(135deg,#FF4FA3,#FF9E3D);box-shadow:0 8px 24px rgba(255,79,163,.35)}
-.hpa-btn.pri:hover{filter:brightness(1.07)}
+.hpa-btn.pri{border:0;background:#FFD447;color:#111}
+.hpa-btn.pri:hover{background:#FFE07A}
 .hpa-btn:disabled{opacity:.6;cursor:default}
-.hpa-main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(300px,40%) 1fr}
-.hpa-stage{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:22px;background:radial-gradient(70% 60% at 50% 45%,rgba(255,79,163,.16),transparent 70%);border-right:1px solid rgba(255,255,255,.07)}
-.hpa-av{width:min(100%,380px);aspect-ratio:344/430;border-radius:28px;overflow:hidden;box-shadow:0 30px 70px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.12);background:#1a1026}
-.hpa-av svg{display:block;width:100%;height:100%}
-.hpa-av.pop{animation:hpaPop .28s cubic-bezier(.2,.9,.3,1.3)}
-@keyframes hpaPop{0%{transform:scale(.97)}100%{transform:none}}
-.hpa-views{display:flex;gap:8px}
-.hpa-seg{display:inline-flex;padding:4px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
-.hpa-seg button{height:32px;padding:0 14px;white-space:nowrap;border:0;border-radius:9px;background:none;color:#C9CBD6;font:700 13px var(--f-ui,system-ui);cursor:pointer}
-.hpa-seg button[aria-pressed="true"]{background:linear-gradient(135deg,#FF4FA3,#FF9E3D);color:#fff}
-.hpa-edit{min-width:0;min-height:0;display:flex;flex-direction:column}
-.hpa-cats{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:4px;padding:10px 12px;overflow-x:auto;scrollbar-width:thin;border-bottom:1px solid rgba(255,255,255,.07);flex:none}
-.hpa-cat{flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;padding:8px 6px 7px;border-radius:14px;border:1px solid transparent;background:none;color:#AEB2C0;font:700 11.5px var(--f-ui,system-ui);cursor:pointer;transition:background .15s,color .15s}
-.hpa-cat svg{width:22px;height:22px}.hpa-cat span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.hpa-cat:hover{background:rgba(255,255,255,.06);color:#fff}
-.hpa-cat[aria-selected="true"]{background:linear-gradient(160deg,rgba(255,79,163,.24),rgba(255,158,61,.14));border-color:rgba(255,79,163,.45);color:#fff}
-.hpa-panel{flex:1;min-height:0;overflow-y:auto;padding:6px 20px 28px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
-.hpa-sec{padding-top:18px}
-.hpa-sec h3{margin:0 0 10px;display:flex;align-items:center;gap:8px;font:800 12px var(--f-ui,system-ui);letter-spacing:.1em;text-transform:uppercase;color:#9EA3B3}
-.hpa-sec h3 .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:700;color:#FF8CC6;background:none;border:0;cursor:pointer;font-size:12.5px;display:inline-flex;gap:5px;align-items:center}
-.hpa-sec h3 .r svg{width:14px;height:14px}
-.hpa-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px}
-.hpa-tiles.few{grid-template-columns:repeat(auto-fill,minmax(104px,128px))}
-.hpa-tile{position:relative;padding:0;border-radius:16px;overflow:hidden;border:2px solid rgba(255,255,255,.08);background:#20142F;cursor:pointer;transition:transform .12s,border-color .15s,box-shadow .15s;text-align:center}
+.hpa-side{min-height:0;min-width:0;display:flex;flex-direction:column;padding:16px 40px 0}
+.hpa-crumb{font:600 15px var(--f-ui,system-ui);color:#D6D6DC;letter-spacing:.01em;min-height:20px}
+.hpa-crumb b{font-weight:600;color:#9a9aa3;margin:0 6px}
+.hpa-title{margin:4px 0 18px;font:800 34px/1.05 var(--f-head,Montserrat,Inter,system-ui);letter-spacing:-.01em}
+.hpa-body{flex:1;min-height:0;display:flex;flex-direction:column}
+.hpa-list{display:flex;flex-direction:column;gap:6px;overflow-y:auto;padding:2px 4px 20px 0;scrollbar-width:thin}
+.hpa-row{display:flex;align-items:center;gap:12px;width:100%;min-height:54px;padding:0 18px;border:0;border-left:4px solid transparent;background:rgba(255,255,255,.04);color:#E7E7EC;font:700 18px var(--f-ui,system-ui);text-align:left;cursor:pointer;transition:background .12s,border-color .12s,padding .12s}
+.hpa-row svg{width:18px;height:18px;margin-left:auto;opacity:.5}
+.hpa-row span.v{margin-left:auto;font-weight:600;font-size:14px;color:#9a9aa3}
+.hpa-row span.v+svg{margin-left:6px}
+.hpa-row:hover,.hpa-row:focus-visible{background:rgba(255,255,255,.1);outline:none}
+.hpa-row.act,.hpa-row:focus-visible{border-left-color:#FFD447;background:linear-gradient(90deg,rgba(255,212,71,.22),rgba(255,255,255,.06));color:#fff;padding-left:22px}
+.hpa-gridwrap{display:flex;flex-direction:column;min-height:0;flex:1}
+.hpa-gtop{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.hpa-sel{font:800 17px var(--f-ui,system-ui);color:#fff}
+.hpa-edit{margin-left:auto;display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(20,20,24,.75);color:#fff;font:800 14px var(--f-ui,system-ui);cursor:pointer}
+.hpa-edit svg{width:16px;height:16px}
+.hpa-edit:hover{background:rgba(255,255,255,.14)}
+.hpa-arrow{display:grid;place-items:center;height:22px;color:#fff;opacity:.85;border:0;background:none;cursor:pointer}
+.hpa-arrow svg{width:22px;height:22px}
+.hpa-arrow:disabled{opacity:.15;cursor:default}
+.hpa-grid{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:4px 10px 4px 2px;align-content:start;scrollbar-width:thin;scrollbar-color:#FFD447 rgba(255,255,255,.08);scroll-behavior:smooth}
+.hpa-grid.tall{grid-template-columns:repeat(3,minmax(0,1fr))}
+.hpa-tile{position:relative;padding:0;border:3px solid transparent;border-radius:3px;background:radial-gradient(90% 90% at 50% 35%,#5c5d64,#2b2c31 75%);cursor:pointer;outline:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.14),0 2px 6px rgba(0,0,0,.5);transition:transform .1s}
 .hpa-tile svg{display:block;width:100%;height:auto;aspect-ratio:1}
-.hpa-tiles.tall .hpa-tile svg{aspect-ratio:344/430}
-.hpa-tile span{display:block;padding:6px 4px 7px;font:700 12px var(--f-ui,system-ui);color:#D7D9E2;background:rgba(10,6,18,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hpa-tile:hover{transform:translateY(-2px);border-color:rgba(255,255,255,.25)}
-.hpa-tile[aria-pressed="true"]{border-color:#FF4FA3;box-shadow:0 0 0 3px rgba(255,79,163,.28)}
-.hpa-tile[aria-pressed="true"] span{background:linear-gradient(135deg,#FF4FA3,#FF7A5C);color:#fff}
-.hpa-tile:focus-visible,.hpa-sw:focus-visible,.hpa-cat:focus-visible,.hpa-chip:focus-visible{outline:2px solid #3DF5FF;outline-offset:2px}
-.hpa-sws{display:flex;flex-wrap:wrap;gap:9px}
-.hpa-sw{position:relative;width:40px;height:40px;border-radius:50%;border:0;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),inset 0 -6px 10px rgba(0,0,0,.18);transition:transform .12s}
-.hpa-sws.sm .hpa-sw{width:34px;height:34px}
-.hpa-sw:hover{transform:scale(1.08)}
-.hpa-sw[aria-pressed="true"]{box-shadow:0 0 0 3px #120A1F,0 0 0 5px #FF4FA3}
-.hpa-sw[aria-pressed="true"]::after{content:"";position:absolute;inset:0;margin:auto;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
-.hpa-sw.custom{display:grid;place-items:center;background:conic-gradient(#FF4FA3,#FFD447,#2FBF71,#3DF5FF,#3D8BFF,#B15CFF,#FF4FA3);overflow:hidden}
-.hpa-sw.custom svg{width:18px;height:18px;color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))}
+.hpa-grid.tall .hpa-tile svg{aspect-ratio:344/430}
+.hpa-tile.mono svg{filter:grayscale(1) contrast(1.08) brightness(1.06)}
+.hpa-tile:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.4),0 2px 6px rgba(0,0,0,.5)}
+.hpa-tile.cur{border-color:#FFD447;box-shadow:0 0 0 1px #FFD447,0 0 18px rgba(255,212,71,.35)}
+.hpa-tile:focus-visible{border-color:#fff}
+.hpa-tile.cur:focus-visible{border-color:#FFD447;box-shadow:0 0 0 3px #fff}
+.hpa-tile i{position:absolute;right:5px;bottom:5px;width:18px;height:18px;border-radius:50%;background:#111;border:2px solid #FFD447;display:none}
+.hpa-tile.cur i{display:block}
+.hpa-tile i::after{content:"";position:absolute;inset:3px;border-radius:50%;background:#FFD447}
+.hpa-panel{flex:1;min-height:0;overflow-y:auto;padding:0 8px 24px 0;scrollbar-width:thin}
+.hpa-sec{padding:14px 0 4px}
+.hpa-sec h3{margin:0 0 10px;display:flex;align-items:center;font:800 12.5px var(--f-ui,system-ui);letter-spacing:.14em;text-transform:uppercase;color:#B9B9C2}
+.hpa-sec h3 .r{margin-left:auto;display:inline-flex;align-items:center;gap:5px;border:0;background:none;color:#FFD447;font:700 13px var(--f-ui,system-ui);letter-spacing:0;text-transform:none;cursor:pointer}
+.hpa-sec h3 .r svg{width:14px;height:14px}
+.hpa-sws{display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));gap:7px}
+.hpa-sws.sm{grid-template-columns:repeat(auto-fill,minmax(34px,1fr))}
+.hpa-sw{position:relative;aspect-ratio:1;border:2px solid rgba(0,0,0,.6);border-radius:3px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);outline:none}
+.hpa-sw[aria-pressed="true"]{border-color:#FFD447;box-shadow:0 0 0 2px #FFD447}
+.hpa-sw:focus-visible{border-color:#fff}
+.hpa-sw.custom{display:grid;place-items:center;background:conic-gradient(#FF4FA3,#FFD447,#2FBF71,#3DF5FF,#3D8BFF,#B15CFF,#FF4FA3)}
+.hpa-sw.custom svg{width:16px;height:16px;color:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7))}
 .hpa-sw.custom input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:0;padding:0}
-.hpa-chip{height:36px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#E4E6EE;font:700 13px var(--f-ui,system-ui);cursor:pointer;display:inline-flex;align-items:center;gap:8px}
-.hpa-chip i{width:16px;height:16px;border-radius:50%;display:inline-block}
-.hpa-chip[aria-pressed="true"]{border-color:#FF4FA3;background:rgba(255,79,163,.18);color:#fff}
-.hpa-sl{display:grid;grid-template-columns:120px 1fr 44px;align-items:center;gap:12px;padding:7px 0}
-.hpa-sl label{font:700 13.5px var(--f-ui,system-ui);color:#E4E6EE}
-.hpa-sl output{font:700 12px var(--f-num,var(--f-ui,system-ui));color:#9EA3B3;text-align:right}
+.hpa-chips{display:flex;flex-wrap:wrap;gap:7px}
+.hpa-chip{height:40px;padding:0 16px;border:2px solid rgba(255,255,255,.14);border-radius:3px;background:rgba(255,255,255,.05);color:#E7E7EC;font:700 14px var(--f-ui,system-ui);cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.hpa-chip i{width:14px;height:14px;border-radius:50%}
+.hpa-chip[aria-pressed="true"]{border-color:#FFD447;background:rgba(255,212,71,.14);color:#fff}
+.hpa-chip:focus-visible{outline:2px solid #fff}
+.hpa-sl{display:grid;grid-template-columns:130px 1fr 40px;align-items:center;gap:14px;padding:9px 0}
+.hpa-sl label{font:700 15px var(--f-ui,system-ui);color:#E7E7EC}
+.hpa-sl output{font:800 14px var(--f-num,var(--f-ui,system-ui));color:#FFD447;text-align:right}
 .hpa-range{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:none;cursor:pointer;--p:50%}
-.hpa-range::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:linear-gradient(90deg,#FF4FA3,#FF9E3D) 0/var(--p) 100% no-repeat,rgba(255,255,255,.12)}
-.hpa-range::-moz-range-track{height:6px;border-radius:3px;background:rgba(255,255,255,.12)}
-.hpa-range::-moz-range-progress{height:6px;border-radius:3px;background:linear-gradient(90deg,#FF4FA3,#FF9E3D)}
-.hpa-range::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-8px;border-radius:50%;background:#fff;border:0;box-shadow:0 2px 8px rgba(0,0,0,.45),0 0 0 4px rgba(255,79,163,.35)}
-.hpa-range::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:0;box-shadow:0 2px 8px rgba(0,0,0,.45),0 0 0 4px rgba(255,79,163,.35)}
-.hpa-range:focus-visible{outline:2px solid #3DF5FF;outline-offset:2px;border-radius:6px}
-.hpa-field{display:flex;flex-direction:column;gap:7px;margin-bottom:16px}
-.hpa-field span{font:700 13px var(--f-ui,system-ui);color:#C9CBD6}
-.hpa-field input{height:46px;padding:0 14px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#fff;font:600 15px var(--f-ui,system-ui)}
-.hpa-field input:focus{outline:none;border-color:#FF4FA3;box-shadow:0 0 0 3px rgba(255,79,163,.22)}
-.hpa-note{font-size:12.5px;color:#9EA3B3;margin:0}
-.hpa-err{color:#FF8CA8;font-size:13px;font-weight:700;min-height:18px}
-.hpa-discard{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:14px;background:rgba(20,12,32,.97);border:1px solid rgba(255,255,255,.14);box-shadow:0 16px 40px rgba(0,0,0,.5);font-weight:700;font-size:14px;z-index:3;white-space:nowrap}
-@media (max-width:820px){
-  .hpa-sheet{width:100vw;height:100dvh;border-radius:0;border:0}
-  .hpa-top{padding:10px 12px;gap:6px}.hpa-top h2{font-size:16px}
-  .hpa-btn.txt-sm span{display:none}.hpa-btn.txt-sm{padding:0 11px}
-  .hpa-main{grid-template-columns:1fr;grid-template-rows:auto 1fr}
-  .hpa-stage{flex-direction:row;padding:12px;gap:12px;border-right:0;border-bottom:1px solid rgba(255,255,255,.07)}
-  .hpa-av{width:auto;height:min(30vh,230px);border-radius:20px}
-  .hpa-views{flex-direction:column}
-  .hpa-cats{display:flex;padding:10px}.hpa-cat{min-width:66px}
-  .hpa-panel{padding:4px 14px 24px}
-  .hpa-tiles{grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
-  .hpa-sl{grid-template-columns:96px 1fr 38px}
+.hpa-range::-webkit-slider-runnable-track{height:8px;background:linear-gradient(90deg,#FFD447,#FFD447) 0/var(--p) 100% no-repeat,rgba(255,255,255,.14)}
+.hpa-range::-moz-range-track{height:8px;background:rgba(255,255,255,.14)}
+.hpa-range::-moz-range-progress{height:8px;background:#FFD447}
+.hpa-range::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:26px;margin-top:-9px;background:#fff;border:0;box-shadow:0 2px 6px rgba(0,0,0,.6)}
+.hpa-range::-moz-range-thumb{width:12px;height:26px;border:0;border-radius:0;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.6)}
+.hpa-range:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.hpa-field{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.hpa-field span{font:700 14px var(--f-ui,system-ui);color:#C9C9D1}
+.hpa-field input{height:50px;padding:0 16px;border:2px solid rgba(255,255,255,.16);border-radius:3px;background:rgba(0,0,0,.45);color:#fff;font:700 17px var(--f-ui,system-ui)}
+.hpa-field input:focus{outline:none;border-color:#FFD447}
+.hpa-note{font-size:13px;color:#A6A6AF;margin:0}
+.hpa-err{color:#FF8CA8;font-size:14px;font-weight:700;min-height:20px}
+.hpa-stage{position:relative;min-width:0;min-height:0;display:grid;place-items:end center;perspective:1400px;cursor:grab;touch-action:none;user-select:none;overflow:hidden}
+.hpa-stage:active{cursor:grabbing}
+.hpa-floor{position:absolute;left:50%;bottom:-6%;width:70%;height:18%;transform:translateX(-50%);background:radial-gradient(closest-side,rgba(0,0,0,.65),transparent);pointer-events:none}
+.hpa-cam{width:min(92%,640px);height:100%;display:flex;align-items:flex-end;justify-content:center;transform-origin:50% 44%;transition:transform .55s cubic-bezier(.2,.75,.2,1)}
+.hpa-turn{width:100%;transform-style:preserve-3d;transition:transform .08s linear}
+.hpa-turn.ease{transition:transform .5s cubic-bezier(.2,.75,.2,1)}
+.hpa-turn svg{display:block;width:100%;height:auto;filter:drop-shadow(0 30px 40px rgba(0,0,0,.55))}
+.hpa-foot{grid-column:1/-1;display:flex;align-items:center;gap:22px;padding:14px 40px 20px;font:700 14px var(--f-ui,system-ui);color:#E2E2E8;flex-wrap:wrap}
+.hpa-key{display:inline-flex;align-items:center;gap:8px}
+.hpa-key kbd{min-width:26px;height:26px;padding:0 7px;display:inline-grid;place-items:center;border-radius:50%;border:2px solid #E2E2E8;font:800 11px var(--f-ui,system-ui);color:#fff;background:rgba(0,0,0,.4)}
+.hpa-key kbd.w{border-radius:6px}
+.hpa-discard{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;display:flex;flex-direction:column;gap:14px;align-items:center;padding:26px 30px;background:rgba(14,14,18,.97);border:2px solid #FFD447;box-shadow:0 30px 80px rgba(0,0,0,.7);font-weight:800;font-size:18px;text-align:center}
+.hpa-discard div{display:flex;gap:10px}
+@media (max-width:900px){
+  .hpa{grid-template-columns:1fr;grid-template-rows:auto 38vh 1fr}
+  .hpa::after{background:linear-gradient(180deg,rgba(0,0,0,.2),rgba(0,0,0,.2) 40%,rgba(0,0,0,.92) 52%)}
+  .hpa-head{padding:10px 12px 0;gap:6px}.hpa-brand{font-size:14px;gap:8px}.hpa-brand span{max-width:96px;line-height:1.1}.hpa-brand svg{height:20px}.hpa-ib{width:40px;height:40px}.hpa-btn{height:40px}[data-a="redo"]{display:none}
+  .hpa-btn.txt span{display:none}.hpa-btn.txt{padding:0 12px}
+  .hpa-stage{grid-row:2;order:0}
+  .hpa-side{grid-row:3;padding:8px 14px 0}
+  .hpa-title{font-size:26px;margin:2px 0 10px}
+  .hpa-foot{display:none}
+  .hpa-cam{width:auto;height:100%}.hpa-turn{height:100%}.hpa-turn svg{height:100%;width:auto}
+  .hpa-grid{gap:6px}
 }
-@media (prefers-reduced-motion:reduce){.hpa,.hpa-sheet,.hpa-tile,.hpa-sw{transition:none}.hpa-av.pop{animation:none}}`;
+@media (prefers-reduced-motion:reduce){.hpa,.hpa-cam,.hpa-turn,.hpa-tile{transition:none}}`;
 
   function openCreator(o = {}) {
-    if (!document.getElementById("hpa-style")) { const st = document.createElement("style"); st.id = "hpa-style"; st.textContent = CSS; document.head.append(st); }
+    if (!document.getElementById("hpa-style2")) { document.getElementById("hpa-style")?.remove(); const st = document.createElement("style"); st.id = "hpa-style2"; st.textContent = CSS; document.head.append(st); }
     document.querySelector(".hpa")?.remove();
-    const st = { c: migrate(o.char || random()), handle: o.handle || "", motto: o.motto || "", cat: "face", zoom: null, undo: [], redo: [], dirty: false };
-    if (!o.char) st.cat = "skin";
+    const st = { c: migrate(o.char || random()), handle: o.handle || "", motto: o.motto || "", at: "root", editing: false, undo: [], redo: [], dirty: false, rot: 0, last: {} };
     const root = document.createElement("div");
-    root.className = "hpa"; root.setAttribute("role", "dialog"); root.setAttribute("aria-modal", "true"); root.setAttribute("aria-label", "Character creator");
-    root.innerHTML = `<div class="hpa-sheet">
-  <header class="hpa-top">
-    <button class="hpa-ib" data-a="close" aria-label="Close">${I.x}</button>
-    <h2>${esc(o.title || "Your character")}</h2>
-    <button class="hpa-ib" data-a="undo" aria-label="Undo" title="Undo (Ctrl+Z)">${I.undo}</button>
-    <button class="hpa-ib" data-a="redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)">${I.redo}</button>
-    <button class="hpa-btn txt-sm" data-a="rand" title="Random look">${I.dice}<span>Surprise me</span></button>
-    <button class="hpa-btn pri" data-a="save">Save</button>
-  </header>
-  <div class="hpa-main">
-    <section class="hpa-stage" aria-label="Preview">
-      <div class="hpa-av" id="hpaAv"></div>
-      <div class="hpa-views"><div class="hpa-seg" role="group" aria-label="Preview view"><button type="button" data-v="head">Close-up</button><button type="button" data-v="bust">Full</button></div></div>
-    </section>
-    <section class="hpa-edit">
-      <nav class="hpa-cats" role="tablist" aria-label="What to change">${CATS.map((k) => `<button type="button" class="hpa-cat" role="tab" id="hpaTab-${k.id}" aria-controls="hpaPanel" data-cat="${k.id}">${I[k.id] || I.details}<span>${k.label}</span></button>`).join("")}</nav>
-      <div class="hpa-panel" id="hpaPanel" role="tabpanel"></div>
-    </section>
-  </div></div>`;
+    root.className = "hpa"; root.setAttribute("role", "dialog"); root.setAttribute("aria-modal", "true"); root.setAttribute("aria-label", "Create your character");
+    const logo = `<svg viewBox="0 0 132 96" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#fff">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#fff">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="#fff"/><path d="M104 22 L128 12 L118 30 L113 24 Z" fill="#fff"/><path d="M113 24 L118 30 L112 31Z" fill="#9CC3F0"/></svg>`;
+    root.innerHTML = `
+<header class="hpa-head"><div class="hpa-brand">${logo}<span>Create Your Character</span></div><span class="hpa-sp"></span>
+  <button class="hpa-ib" data-a="undo" aria-label="Undo" title="Undo (Ctrl+Z)">${I.undo}</button><button class="hpa-ib" data-a="redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)">${I.redo}</button>
+  <button class="hpa-btn txt" data-a="rand">${I.dice}<span>Randomize</span></button><button class="hpa-btn pri" data-a="save">Save</button><button class="hpa-ib" data-a="close" aria-label="Close">${I.x}</button></header>
+<section class="hpa-side"><div class="hpa-crumb" id="hpaCrumb"></div><h2 class="hpa-title" id="hpaTitle"></h2><div class="hpa-body" id="hpaBody"></div></section>
+<section class="hpa-stage" id="hpaStage" aria-label="Character preview. Drag to turn."><div class="hpa-floor"></div><div class="hpa-cam" id="hpaCam"><div class="hpa-turn" id="hpaTurn"></div></div></section>
+<footer class="hpa-foot" aria-hidden="true"><span class="hpa-key"><kbd class="w">Drag</kbd>Rotate</span><span class="hpa-key"><kbd>↵</kbd>Select</span><span class="hpa-key"><kbd>E</kbd>Edit</span><span class="hpa-key"><kbd class="w">Esc</kbd>Back</span><span class="hpa-key"><kbd>R</kbd>Randomize</span><span class="hpa-key"><kbd class="w">Ctrl Z</kbd>Undo</span></footer>`;
     document.body.append(root);
     const $ = (s) => root.querySelector(s), $$ = (s) => [...root.querySelectorAll(s)];
     const prevFocus = document.activeElement;
-    const tuneKey = (k) => TUNE.includes(k);
-    const get = (k) => (tuneKey(k) ? +(st.c.tune?.[k] || 0) : st.c[k]);
-    const snapshot = () => JSON.stringify(st.c);
-    const push = () => { st.undo.push(snapshot()); if (st.undo.length > 80) st.undo.shift(); st.redo = []; st.dirty = true; };
-    const setVal = (k, v, opts2 = {}) => {
-      if (!opts2.noHistory) push();
-      if (tuneKey(k)) st.c = { ...st.c, tune: { ...st.c.tune, [k]: v } }; else st.c = { ...st.c, [k]: v };
-      if (opts2.also) for (const [kk, vv] of opts2.also) st.c[kk] = vv;
-    };
-    const cat = () => CATS.find((k) => k.id === st.cat) || CATS[0];
-    const view = () => st.zoom || cat().zoom;
+    const isTune = (k) => TUNE.includes(k);
+    const get = (k) => (isTune(k) ? +(st.c.tune?.[k] || 0) : st.c[k]);
+    const snap = () => JSON.stringify(st.c);
+    const push = () => { st.undo.push(snap()); if (st.undo.length > 80) st.undo.shift(); st.redo = []; st.dirty = true; };
+    const setVal = (k, v, x = {}) => { if (!x.noHistory) push(); if (isTune(k)) st.c = { ...st.c, tune: { ...st.c.tune, [k]: v } }; else st.c = { ...st.c, [k]: v }; for (const [a, b] of x.also || []) st.c[a] = b; };
+    const node = () => MENU[st.at] || LEAF[st.at];
     let raf = 0;
-    const paintAv = (pop) => {
+    const paintAv = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        const v = view(), av = $("#hpaAv");
-        av.style.aspectRatio = v === "head" ? "1" : "344/430";
-        av.innerHTML = render(st.c, 380, { crop: v === "head" ? "close" : v, slice: v === "head", label: "Your character preview" });
-        const svg = av.querySelector("svg"); svg.removeAttribute("width"); svg.removeAttribute("height");
-        if (pop) { av.classList.remove("pop"); void av.offsetWidth; av.classList.add("pop"); }
-        $$(".hpa-seg [data-v]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+        $("#hpaTurn").innerHTML = render(st.c, 640, { crop: "bust", noBg: true, label: "Your character" });
+        const svg = $("#hpaTurn svg"); svg.removeAttribute("width"); svg.removeAttribute("height");
         $('[data-a="undo"]').disabled = !st.undo.length; $('[data-a="redo"]').disabled = !st.redo.length;
       });
     };
-    const swatch = (color, on, lab) => `<button type="button" class="hpa-sw" data-col="${color}" aria-pressed="${on}" aria-label="${esc(lab || color)}" style="background:radial-gradient(circle at 35% 30%,${sh(color, 0.25)},${color} 55%,${sh(color, -0.18)})"></button>`;
-    const pct = (v, min, max) => `${(((v - min) / (max - min)) * 100).toFixed(1)}%`;
-    function paintPanel() {
-      const k = cat(), p = $("#hpaPanel");
-      $$(".hpa-cat").forEach((b) => { const on = b.dataset.cat === k.id; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; });
-      p.setAttribute("aria-labelledby", "hpaTab-" + k.id);
-      p.innerHTML = k.sec.map((s, si) => {
-        if (s.t === "tiles") {
-          const opts = OPT[s.key];
-          return `<div class="hpa-sec"><h3>${esc(s.title)}</h3><div class="hpa-tiles${s.few ? " few" : ""}${s.tall ? " tall" : ""}" role="group" aria-label="${esc(s.title)}">${opts.map((v) => {
-            const look = { ...st.c, [s.key]: v };
-            if (s.key === "liner" && v !== "none") look.lashes = look.lashes === "none" ? "natural" : look.lashes;
-            if (s.key === "top") look.outer = "none";
-            if (s.key === "hair" || s.key === "face") look.hat = "none";
-            return `<button type="button" class="hpa-tile" data-k="${s.key}" data-v="${v}" aria-pressed="${st.c[s.key] === v}">${render(look, 120, { crop: s.crop, slice: !s.tall, label: label(s.key, v) })}<span>${esc(label(s.key, v))}</span></button>`;
-          }).join("")}</div></div>`;
-        }
-        if (s.t === "colors") {
-          const cur = st.c[s.key], list = PAL[s.pal];
-          const custom = okHex(cur) && !list.includes(cur);
-          return `<div class="hpa-sec"><h3>${esc(s.title)}</h3><div class="hpa-sws${s.small ? " sm" : ""}" role="group" aria-label="${esc(s.title)}" data-k="${s.key}" data-si="${si}">${s.auto ? `<button type="button" class="hpa-chip" data-auto="1" aria-pressed="${!okHex(cur)}">${esc(s.auto)}</button>` : ""}${list.map((col) => swatch(col, cur === col)).join("")}${custom ? swatch(cur, true, "Custom color") : ""}<label class="hpa-sw custom" title="Pick any color">${I.plus}<input type="color" value="${okHex(cur) ? cur : "#888888"}" aria-label="Pick a custom ${esc(s.title.toLowerCase())}"></label></div></div>`;
-        }
-        if (s.t === "amount") {
-          const v = +(st.c[s.key] || 0);
-          return `<div class="hpa-sec"><div class="hpa-sl"><label for="hpaA-${s.key}">${esc(s.title)}</label><input class="hpa-range" id="hpaA-${s.key}" type="range" min="0" max="1" step="0.05" value="${v}" data-amt="${s.key}" style="--p:${pct(v, 0, 1)}"><output>${Math.round(v * 100)}%</output></div></div>`;
-        }
-        if (s.t === "sliders") {
-          return `<div class="hpa-sec"><h3>${esc(s.title)}<button type="button" class="r" data-reset="${s.items.map((x) => x[0]).join(",")}">${I.reset}Reset</button></h3>${s.items.map(([tk, lab]) => { const v = get(tk); return `<div class="hpa-sl"><label for="hpaT-${tk}">${esc(lab)}</label><input class="hpa-range" id="hpaT-${tk}" type="range" min="-1" max="1" step="0.05" value="${v}" data-tune="${tk}" style="--p:${pct(v, -1, 1)}"><output>${v > 0 ? "+" : ""}${Math.round(v * 100)}</output></div>`; }).join("")}</div>`;
-        }
-        if (s.t === "chips") {
-          return `<div class="hpa-sec"><h3>${esc(s.title)}</h3><div class="hpa-sws" role="group" aria-label="${esc(s.title)}">${OPT[s.key].map((v) => `<button type="button" class="hpa-chip" data-k="${s.key}" data-v="${v}" aria-pressed="${st.c[s.key] === v}"><i style="background:linear-gradient(135deg,${METAL[v][0]},${METAL[v][1]})"></i>${esc(label(s.key, v))}</button>`).join("")}</div></div>`;
-        }
-        if (s.t === "name") {
-          return `<div class="hpa-sec"><label class="hpa-field"><span>Callsign (what the team sees)</span><input id="hpaHandle" maxlength="20" autocomplete="off" placeholder="e.g. Maverick" value="${esc(st.handle)}"></label><label class="hpa-field"><span>Motto (optional)</span><input id="hpaMotto" maxlength="60" autocomplete="off" placeholder="Every no gets me closer to a yes" value="${esc(st.motto)}"></label><div class="hpa-err" id="hpaErr" role="alert"></div><p class="hpa-note">Your character, callsign and motto are visible to everyone on the team.</p></div>`;
-        }
-        return "";
-      }).join("");
-      wirePanel();
+    const camera = () => { const L = LEAF[st.at]; $("#hpaCam").style.transform = CAM[L ? L.zoom : "bust"] || "none"; };
+    const swatch = (col, on) => `<button type="button" class="hpa-sw" data-col="${col}" aria-pressed="${on}" aria-label="${col}" style="background:${col}"></button>`;
+    const pct = (v, a, b) => `${(((v - a) / (b - a)) * 100).toFixed(1)}%`;
+    const secHTML = (sec, si) => {
+      if (sec.t === "colors") {
+        const cur = st.c[sec.key], list = PAL[sec.pal], custom = okHex(cur) && !list.includes(cur);
+        return `<div class="hpa-sec"><h3>${esc(sec.title)}</h3><div class="hpa-sws${sec.small ? " sm" : ""}" role="group" aria-label="${esc(sec.title)}" data-k="${sec.key}" data-si="${si}">${list.map((c2) => swatch(c2, cur === c2)).join("")}${custom ? swatch(cur, true) : ""}<label class="hpa-sw custom" title="Any color">${I.plus}<input type="color" value="${okHex(cur) ? cur : "#888888"}" aria-label="Pick any ${esc(sec.title.toLowerCase())}"></label></div>${sec.auto ? `<div class="hpa-chips" style="margin-top:8px"><button type="button" class="hpa-chip" data-auto="${sec.key}" aria-pressed="${!okHex(cur)}">${esc(sec.auto)}</button></div>` : ""}</div>`;
+      }
+      if (sec.t === "amount") { const v = +(st.c[sec.key] || 0); return `<div class="hpa-sec"><div class="hpa-sl"><label for="hpaA-${sec.key}">${esc(sec.title)}</label><input class="hpa-range" id="hpaA-${sec.key}" type="range" min="0" max="1" step="0.01" value="${v}" data-amt="${sec.key}" style="--p:${pct(v, 0, 1)}"><output>${Math.round(v * 100)}</output></div></div>`; }
+      if (sec.t === "sliders") return `<div class="hpa-sec"><h3>${esc(sec.title)}<button type="button" class="r" data-reset="${sec.items.map((x) => x[0]).join(",")}">${I.reset}Reset</button></h3>${sec.items.map(([k, lab]) => { const v = get(k); return `<div class="hpa-sl"><label for="hpaT-${k}">${esc(lab)}</label><input class="hpa-range" id="hpaT-${k}" type="range" min="-1" max="1" step="0.02" value="${v}" data-tune="${k}" style="--p:${pct(v, -1, 1)}"><output>${Math.round((v + 1) * 50)}</output></div>`; }).join("")}</div>`;
+      if (sec.t === "chips") return `<div class="hpa-sec"><h3>${esc(sec.title)}</h3><div class="hpa-chips" role="group" aria-label="${esc(sec.title)}">${OPT[sec.key].map((v) => `<button type="button" class="hpa-chip" data-k="${sec.key}" data-v="${v}" aria-pressed="${st.c[sec.key] === v}">${sec.key === "metal" ? `<i style="background:linear-gradient(135deg,${METAL[v][0]},${METAL[v][1]})"></i>` : ""}${esc(label(sec.key, v))}</button>`).join("")}</div></div>`;
+      if (sec.t === "name") return `<div class="hpa-sec"><label class="hpa-field"><span>Callsign (what the team sees)</span><input id="hpaHandle" maxlength="20" autocomplete="off" placeholder="e.g. Maverick" value="${esc(st.handle)}"></label><label class="hpa-field"><span>Motto (optional)</span><input id="hpaMotto" maxlength="60" autocomplete="off" placeholder="Every no gets me closer to a yes" value="${esc(st.motto)}"></label><div class="hpa-err" id="hpaErr" role="alert"></div><p class="hpa-note">Your character, callsign and motto are visible to everyone on the team.</p></div>`;
+      return "";
+    };
+    const tileLook = (key, v, mono) => {
+      const look = { ...st.c, [key]: v };
+      if (mono) Object.assign(look, MONO, { tune: st.c.tune });
+      if (key === "hair" || key === "face" || key === "beard") look.hat = "none";
+      if (key === "hair" || key === "face" || key === "beard" || key === "earrings" || key === "eyes" || key === "brows") look.glasses = key === "glasses" ? v : "none";
+      if (key === "top") look.outer = "none";
+      if (key === "liner" && v !== "none" && look.lashes === "none") look.lashes = "natural";
+      return look;
+    };
+    function paint(focusSel) {
+      const n = node(), L = LEAF[st.at];
+      $("#hpaCrumb").innerHTML = crumbsOf(st.at).map((x) => `<b>/</b>${esc(x)}`).join(" ");
+      $("#hpaTitle").textContent = titleOf(st.at) + (st.editing ? " · Edit" : "");
+      const b = $("#hpaBody");
+      if (MENU[st.at]) {
+        const lastId = st.last[st.at];
+        b.innerHTML = `<div class="hpa-list" role="menu" aria-label="${esc(n.title)}">${n.items.map(([id, t]) => {
+          const leaf = LEAF[id], val = leaf?.grid ? label(leaf.grid.key, st.c[leaf.grid.key]) : "";
+          return `<button type="button" class="hpa-row${id === lastId ? " act" : ""}" role="menuitem" data-go="${id}">${esc(t)}${val ? `<span class="v">${esc(val)}</span>` : ""}${I.chev}</button>`;
+        }).join("")}</div>`;
+        b.querySelectorAll("[data-go]").forEach((r) => r.addEventListener("click", () => go(r.dataset.go)));
+        const f = b.querySelector(`[data-go="${lastId}"]`) || b.querySelector("[data-go]");
+        if (focusSel !== false) f?.focus({ preventScroll: true });
+      } else if (L.grid && !st.editing) {
+        const { key, crop, mono, tall } = L.grid, opts = OPT[key];
+        b.innerHTML = `<div class="hpa-gridwrap"><div class="hpa-gtop"><span class="hpa-sel" id="hpaSel">${esc(label(key, st.c[key]))}</span>${L.edit ? `<button type="button" class="hpa-edit" data-a="edit">${I.edit}Edit</button>` : ""}</div>
+<button type="button" class="hpa-arrow" data-scroll="-1" aria-label="Scroll up">${I.up}</button>
+<div class="hpa-grid${tall ? " tall" : ""}" id="hpaGrid" role="listbox" aria-label="${esc(titleOf(st.at))}">${opts.map((v) => `<button type="button" class="hpa-tile${mono ? " mono" : ""}${st.c[key] === v ? " cur" : ""}" role="option" aria-selected="${st.c[key] === v}" aria-label="${esc(label(key, v))}" data-v="${v}" tabindex="${st.c[key] === v ? 0 : -1}">${render(tileLook(key, v, mono), 132, { crop, slice: !tall, noBg: !!mono || key === "top" || key === "outer" || key === "neck", label: label(key, v) })}<i></i></button>`).join("")}</div>
+<button type="button" class="hpa-arrow" data-scroll="1" aria-label="Scroll down">${I.down}</button></div>`;
+        const grid = $("#hpaGrid"), tiles = [...grid.children];
+        const arrows = () => { $('[data-scroll="-1"]').disabled = grid.scrollTop < 4; $('[data-scroll="1"]').disabled = grid.scrollTop + grid.clientHeight >= grid.scrollHeight - 4; };
+        grid.addEventListener("scroll", arrows, { passive: true }); setTimeout(arrows, 50);
+        $$("[data-scroll]").forEach((a) => a.addEventListener("click", () => grid.scrollBy({ top: +a.dataset.scroll * grid.clientHeight * 0.8 })));
+        const pick = (t) => { const v = t.dataset.v; if (st.c[key] === v) return; setVal(key, v); tiles.forEach((x) => { const on = x === t; x.classList.toggle("cur", on); x.setAttribute("aria-selected", on); x.tabIndex = on ? 0 : -1; }); $("#hpaSel").textContent = label(key, v); paintAv(); };
+        tiles.forEach((t, i) => {
+          t.addEventListener("click", () => { pick(t); t.focus({ preventScroll: true }); });
+          t.addEventListener("focus", () => $("#hpaSel").textContent = label(key, t.dataset.v));
+          t.addEventListener("keydown", (e) => {
+            const cols = tall ? 3 : 4, mv = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
+            if (mv != null) { e.preventDefault(); const j = Math.max(0, Math.min(tiles.length - 1, i + mv)); tiles[j].focus(); tiles[j].scrollIntoView({ block: "nearest" }); pick(tiles[j]); }
+          });
+        });
+        $('[data-a="edit"]')?.addEventListener("click", () => { st.editing = true; paint(); });
+        const cur = grid.querySelector(".cur") || tiles[0];
+        cur?.scrollIntoView({ block: "center" });
+        if (focusSel !== false) cur?.focus({ preventScroll: true });
+      } else {
+        const secs = st.editing ? L.edit : L.direct;
+        b.innerHTML = `<div class="hpa-panel">${secs.map(secHTML).join("")}</div>`;
+        wirePanel(secs);
+        if (focusSel !== false) (b.querySelector("#hpaHandle") || b.querySelector('[aria-pressed="true"]') || b.querySelector("button,input"))?.focus({ preventScroll: true });
+      }
+      camera();
     }
-    function refreshAfterChange(pop = true) { paintAv(pop); paintPanel(); }
-    function wirePanel() {
-      const p = $("#hpaPanel");
-      p.querySelectorAll(".hpa-tile, .hpa-chip[data-k]").forEach((b) => b.addEventListener("click", () => {
-        const k = b.dataset.k, v = b.dataset.v; if (st.c[k] === v) return;
-        const also = [];
-        if (k === "liner" && v !== "none" && st.c.lashes === "none") also.push(["lashes", "natural"]);
-        setVal(k, v, { also }); const y = p.scrollTop; refreshAfterChange(); p.scrollTop = y;
-        p.querySelector(`[data-k="${k}"][data-v="${v}"]`)?.focus({ preventScroll: true });
-      }));
+    function wirePanel(secs) {
+      const p = $(".hpa-panel"), keep = (fn) => { const y = p.scrollTop; fn(); const q = $(".hpa-panel"); if (q) q.scrollTop = y; };
+      p.querySelectorAll(".hpa-chip[data-k]").forEach((b) => b.addEventListener("click", () => { const k = b.dataset.k, v = b.dataset.v; if (st.c[k] === v) return; setVal(k, v, { also: k === "liner" && v !== "none" && st.c.lashes === "none" ? [["lashes", "natural"]] : [] }); paintAv(); keep(() => paint(false)); $(`.hpa-chip[data-k="${k}"][data-v="${v}"]`)?.focus({ preventScroll: true }); }));
+      p.querySelectorAll("[data-auto]").forEach((b) => b.addEventListener("click", () => { setVal(b.dataset.auto, null); paintAv(); keep(() => paint(false)); }));
       p.querySelectorAll(".hpa-sws[data-k]").forEach((g) => {
-        const k = g.dataset.k, s = cat().sec[+g.dataset.si];
-        const apply = (col) => {
-          const also = [];
-          if (s.bump && !(st.c[s.bump[0]] > 0)) also.push([s.bump[0], s.bump[1]]);
-          if (s.set) also.push([s.set[0], s.set[1]]);
-          setVal(k, col, { also }); const y = p.scrollTop; refreshAfterChange(); p.scrollTop = y;
-        };
-        g.querySelectorAll(".hpa-sw[data-col]").forEach((b) => b.addEventListener("click", () => { apply(b.dataset.col); p.querySelector(`.hpa-sws[data-k="${k}"] [data-col="${b.dataset.col}"]`)?.focus({ preventScroll: true }); }));
-        g.querySelector("[data-auto]")?.addEventListener("click", () => apply(null));
+        const k = g.dataset.k, sec = secs[+g.dataset.si];
+        const also = () => { const a = []; if (sec.bump && !(st.c[sec.bump[0]] > 0)) a.push([sec.bump[0], sec.bump[1]]); if (sec.set) a.push(sec.set); return a; };
+        g.querySelectorAll("[data-col]").forEach((b) => b.addEventListener("click", () => { setVal(k, b.dataset.col, { also: also() }); paintAv(); keep(() => paint(false)); $(`.hpa-sws[data-k="${k}"] [data-col="${b.dataset.col}"]`)?.focus({ preventScroll: true }); }));
         const inp = g.querySelector('input[type="color"]');
-        if (inp) {
-          let started = false;
-          inp.addEventListener("input", () => { if (!started) { push(); started = true; } setVal(k, inp.value, { noHistory: true, also: s.set ? [[s.set[0], s.set[1]]] : [] }); paintAv(false); });
-          inp.addEventListener("change", () => { started = false; const y = p.scrollTop; paintPanel(); p.scrollTop = y; });
-        }
+        if (inp) { let started = false; inp.addEventListener("input", () => { if (!started) { push(); started = true; } setVal(k, inp.value, { noHistory: true, also: also() }); paintAv(); }); inp.addEventListener("change", () => { started = false; keep(() => paint(false)); }); }
       });
       p.querySelectorAll(".hpa-range").forEach((r) => {
-        let started = false;
-        const k = r.dataset.tune || r.dataset.amt, isTune = !!r.dataset.tune;
-        r.addEventListener("input", () => {
-          if (!started) { push(); started = true; }
-          const v = +r.value; setVal(k, v, { noHistory: true });
-          r.style.setProperty("--p", pct(v, isTune ? -1 : 0, 1));
-          r.nextElementSibling.textContent = isTune ? `${v > 0 ? "+" : ""}${Math.round(v * 100)}` : `${Math.round(v * 100)}%`;
-          paintAv(false);
-        });
+        let started = false; const k = r.dataset.tune || r.dataset.amt, tune = !!r.dataset.tune;
+        r.addEventListener("input", () => { if (!started) { push(); started = true; } const v = +r.value; setVal(k, v, { noHistory: true }); r.style.setProperty("--p", pct(v, tune ? -1 : 0, 1)); r.nextElementSibling.textContent = tune ? Math.round((v + 1) * 50) : Math.round(v * 100); paintAv(); });
         r.addEventListener("change", () => { started = false; });
-        r.addEventListener("dblclick", () => { push(); setVal(k, 0, { noHistory: true }); const y = p.scrollTop; refreshAfterChange(false); p.scrollTop = y; });
+        r.addEventListener("dblclick", () => { push(); setVal(k, 0, { noHistory: true }); paintAv(); keep(() => paint(false)); });
       });
-      p.querySelectorAll("[data-reset]").forEach((b) => b.addEventListener("click", () => {
-        push(); const tune = { ...st.c.tune }; for (const k of b.dataset.reset.split(",")) delete tune[k]; st.c = { ...st.c, tune };
-        const y = p.scrollTop; refreshAfterChange(); p.scrollTop = y;
-      }));
+      p.querySelectorAll("[data-reset]").forEach((b) => b.addEventListener("click", () => { push(); const tune = { ...st.c.tune }; for (const k of b.dataset.reset.split(",")) delete tune[k]; st.c = { ...st.c, tune }; paintAv(); keep(() => paint(false)); }));
       const h = $("#hpaHandle"), m = $("#hpaMotto");
-      if (h) { h.addEventListener("input", () => { st.handle = h.value; st.dirty = true; $("#hpaErr").textContent = ""; }); setTimeout(() => h.focus(), 30); }
-      if (m) m.addEventListener("input", () => { st.motto = m.value; st.dirty = true; });
+      h?.addEventListener("input", () => { st.handle = h.value; st.dirty = true; $("#hpaErr").textContent = ""; });
+      m?.addEventListener("input", () => { st.motto = m.value; st.dirty = true; });
     }
-    const go = (id) => { st.cat = id; st.zoom = null; paintPanel(); paintAv(false); $("#hpaPanel").scrollTop = 0; };
-    $$(".hpa-cat").forEach((b) => b.addEventListener("click", () => go(b.dataset.cat)));
-    $(".hpa-cats").addEventListener("keydown", (e) => {
-      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-      e.preventDefault(); const i = CATS.findIndex((k) => k.id === st.cat);
-      const n = e.key === "Home" ? 0 : e.key === "End" ? CATS.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + CATS.length) % CATS.length;
-      go(CATS[n].id); root.querySelector(`[data-cat="${CATS[n].id}"]`).focus();
-    });
-    $$(".hpa-seg [data-v]").forEach((b) => b.addEventListener("click", () => { st.zoom = b.dataset.v; paintAv(true); }));
-    const undo = () => { if (!st.undo.length) return; st.redo.push(snapshot()); st.c = JSON.parse(st.undo.pop()); refreshAfterChange(); };
-    const redo = () => { if (!st.redo.length) return; st.undo.push(snapshot()); st.c = JSON.parse(st.redo.pop()); refreshAfterChange(); };
-    $('[data-a="undo"]').onclick = undo; $('[data-a="redo"]').onclick = redo;
-    $('[data-a="rand"]').onclick = () => { push(); const keepBg = st.c.bg; st.c = random(); if (o.char) st.c.bg = keepBg; refreshAfterChange(); };
+    const go = (id) => { st.last[st.at] = id; st.at = id; st.editing = false; paint(); };
+    const back = () => {
+      if (root.querySelector(".hpa-discard")) { root.querySelector(".hpa-discard").remove(); return; }
+      if (st.editing) { st.editing = false; paint(); return; }
+      const p = node().parent; if (p) { st.at = p; paint(); } else close();
+    };
+    // drag to turn
+    const stage = $("#hpaStage"), turn = $("#hpaTurn");
+    let drag = null;
+    const setRot = (r, ease) => { st.rot = Math.max(-40, Math.min(40, r)); turn.classList.toggle("ease", !!ease); turn.style.transform = `rotateY(${st.rot}deg)`; };
+    stage.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, r: st.rot }; stage.setPointerCapture(e.pointerId); });
+    stage.addEventListener("pointermove", (e) => { if (drag) setRot(drag.r + (e.clientX - drag.x) * 0.25); });
+    const endDrag = () => { drag = null; };
+    stage.addEventListener("pointerup", endDrag); stage.addEventListener("pointercancel", endDrag);
+    stage.addEventListener("dblclick", () => setRot(0, true));
+    const undo = () => { if (!st.undo.length) return; st.redo.push(snap()); st.c = JSON.parse(st.undo.pop()); paintAv(); paint(false); };
+    const redo = () => { if (!st.redo.length) return; st.undo.push(snap()); st.c = JSON.parse(st.redo.pop()); paintAv(); paint(false); };
+    const rand = () => { push(); const bg = st.c.bg; st.c = random(); if (o.char) st.c.bg = bg; paintAv(); paint(false); };
+    $('[data-a="undo"]').onclick = undo; $('[data-a="redo"]').onclick = redo; $('[data-a="rand"]').onclick = rand;
     function close(force) {
       if (st.dirty && !force) {
         if (root.querySelector(".hpa-discard")) return;
-        const bar = document.createElement("div"); bar.className = "hpa-discard"; bar.setAttribute("role", "alertdialog"); bar.setAttribute("aria-label", "Discard changes?");
-        bar.innerHTML = `<span>Leave without saving?</span><button class="hpa-btn" data-k="1">Keep editing</button><button class="hpa-btn pri" data-d="1">Discard</button>`;
-        root.querySelector(".hpa-stage").append(bar);
-        bar.querySelector("[data-k]").onclick = () => bar.remove(); bar.querySelector("[data-d]").onclick = () => close(true); bar.querySelector("[data-k]").focus();
+        const d = document.createElement("div"); d.className = "hpa-discard"; d.setAttribute("role", "alertdialog"); d.setAttribute("aria-label", "Leave without saving?");
+        d.innerHTML = `<span>Leave without saving?</span><div><button class="hpa-btn" data-k="1">Keep editing</button><button class="hpa-btn pri" data-d="1">Discard</button></div>`;
+        root.append(d); d.querySelector("[data-k]").onclick = () => d.remove(); d.querySelector("[data-d]").onclick = () => close(true); d.querySelector("[data-k]").focus();
         return;
       }
       document.removeEventListener("keydown", onKey, true);
-      root.classList.remove("in"); setTimeout(() => root.remove(), 220);
+      root.classList.remove("in"); setTimeout(() => root.remove(), 250);
       try { prevFocus?.focus?.({ preventScroll: true }); } catch {}
       o.onClose?.();
     }
     $('[data-a="close"]').onclick = () => close();
-    root.addEventListener("mousedown", (e) => { if (e.target === root) close(); });
     const save = async () => {
       const h = (st.handle || "").trim().replace(/\s+/g, " "), m = (st.motto || "").trim();
-      const fail = (msg) => { if (st.cat !== "name") go("name"); setTimeout(() => { const er = $("#hpaErr"); if (er) er.textContent = msg; $("#hpaHandle")?.focus(); }, 40); };
+      const fail = (msg) => { st.at = "name"; st.editing = false; paint(); setTimeout(() => { const er = $("#hpaErr"); if (er) er.textContent = msg; $("#hpaHandle")?.focus(); }, 30); };
       if (o.requireHandle !== false) {
         if (h.length < 2) return fail("Add a callsign (at least 2 characters) to finish.");
         if (!/^[\p{L}\p{N} ._'-]+$/u.test(h)) return fail("Callsigns can use letters, numbers, spaces and . _ ' -");
@@ -1055,19 +1061,27 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
     $('[data-a="save"]').onclick = save;
     function onKey(e) {
       if (!document.body.contains(root)) return;
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); const bar = root.querySelector(".hpa-discard"); if (bar) bar.remove(); else close(); return; }
       const inField = e.target.closest?.("input:not([type=range]):not([type=color])");
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !inField) { e.preventDefault(); e.shiftKey ? redo() : undo(); }
-      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(); }
+      if (e.key === "Escape" || (e.key === "Backspace" && !inField)) { e.preventDefault(); e.stopPropagation(); back(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !inField) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(); return; }
+      if (inField || e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "e" && LEAF[st.at]?.edit && !st.editing) { e.preventDefault(); st.editing = true; paint(); }
+      else if (k === "r") { e.preventDefault(); rand(); }
+      else if (e.target.classList?.contains("hpa-row") && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault(); const rows = $$(".hpa-row"), i = rows.indexOf(e.target), j = Math.max(0, Math.min(rows.length - 1, i + (e.key === "ArrowDown" ? 1 : -1))); rows[j].focus();
+      } else if (e.key === "ArrowRight" && e.target.classList?.contains("hpa-row")) { e.preventDefault(); e.target.click(); }
+      else if (e.key === "ArrowLeft" && e.target.classList?.contains("hpa-row")) { e.preventDefault(); back(); }
       else if (e.key === "Tab") {
-        const f = [...root.querySelectorAll('button:not([disabled]),input,[tabindex="0"]')].filter((x) => x.offsetParent !== null);
-        if (!f.length) return; const first = f[0], last = f[f.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        const f = [...root.querySelectorAll('button:not([disabled]),input,[tabindex="0"]')].filter((x) => x.offsetParent !== null && x.tabIndex >= 0);
+        if (!f.length) return; const a = f[0], z = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); } else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); }
       }
     }
     document.addEventListener("keydown", onKey, true);
-    paintPanel(); paintAv(false);
-    requestAnimationFrame(() => { root.classList.add("in"); root.querySelector(`[data-cat="${st.cat}"]`)?.focus({ preventScroll: true }); });
+    paintAv(); paint();
+    requestAnimationFrame(() => root.classList.add("in"));
     return { close };
   }
 
