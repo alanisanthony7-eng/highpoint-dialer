@@ -8,3 +8,5 @@
   Cache-Control: no-cache
 /boot.js
   Cache-Control: no-cache
+/hp-select.js
+  Cache-Control: no-cache
