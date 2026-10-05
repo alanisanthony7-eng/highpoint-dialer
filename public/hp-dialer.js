@@ -1188,22 +1188,46 @@
   }
   const WARM = ["contacted", "appointment", "application"];
   const dialable = (l) => d10(l.phone).length === 10 && !CLOSED.includes(l.stage) && !l.dnc;
-  S.camps = lsGet("hpd.camps", []); S.listKey = lsGet("hpd.list", "ready");
-  const LISTS = [["ready", "Ready now", "#3BD38B"], ["followups", "Follow-ups due", "#FFB547"], ["new", "New", "#8FB8FF"], ["warm", "Warm", "#FF7A59"], ["everyone", "Everyone", "#9AA1AE"]];
-  function listLeads(key) {
-    const all = [...(window.hpDesk?.leads.values() || [])];
-    if (key.startsWith("c:")) { const c = S.camps.find((x) => x.id === key.slice(2)); const set = new Set(c?.ids || []); return all.filter((l) => set.has(l.id)); }
-    if (key.startsWith("s:")) return all.filter((l) => (l.source || "No campaign") === key.slice(2));
-    const d = all.filter(dialable);
-    return { ready: d.filter((l) => (S.demo || leadClock(l).ok) && !(l.callbackAt > Date.now())), followups: d.filter((l) => l.callbackAt && l.callbackAt <= Date.now()), new: d.filter((l) => (l.stage || "new") === "new"), warm: d.filter((l) => WARM.includes(l.stage)), everyone: all }[key] || [];
+  S.camps = lsGet("hpd.camps", []);
+  // Two simple choices: which LIST to call from, and WHO in that list.
+  {
+    const old = lsGet("hpd.list", null);
+    S.src = lsGet("hpd.src", old && /^(c|s):/.test(old) ? old : "all");
+    S.filter = lsGet("hpd.filter", old && !/^(c|s):/.test(old) ? ({ followups: "callbacks", new: "never", warm: "retry" }[old] || old) : "ready");
   }
-  const listName = (key = S.listKey) => key.startsWith("c:") ? (S.camps.find((c) => c.id === key.slice(2))?.name || "Campaign") : key.startsWith("s:") ? key.slice(2) : (LISTS.find((x) => x[0] === key)?.[1] || "Ready now");
-  // override the earlier campaign queue so every dialing path uses the chosen list
+  const FILTERS = [
+    ["ready", "Ready to call now", "#3BD38B", "Inside calling hours, nothing scheduled for later"],
+    ["callbacks", "Callbacks due", "#FFB547", "People you promised to call back"],
+    ["never", "Never called", "#8FB8FF", "Fresh leads nobody has dialed yet"],
+    ["retry", "Called, not reached yet", "#FF7A59", "Dialed before, no conversation yet"],
+    ["everyone", "Everyone with a number", "#9AA1AE", "All callable leads in the list"],
+  ];
+  function sourceLeads(src = S.src) {
+    const all = [...(window.hpDesk?.leads.values() || [])];
+    if (src.startsWith("c:")) { const c = S.camps.find((x) => x.id === src.slice(2)); const set = new Set(c?.ids || []); return all.filter((l) => set.has(l.id)); }
+    if (src.startsWith("s:")) return all.filter((l) => (l.source || "No campaign") === src.slice(2));
+    return all;
+  }
+  function applyFilter(arr, f = S.filter) {
+    const d = arr.filter(dialable), later = (l) => l.callbackAt > Date.now();
+    if (f === "ready") return d.filter((l) => (S.demo || leadClock(l).ok) && !later(l));
+    if (f === "callbacks") return d.filter((l) => l.callbackAt && l.callbackAt <= Date.now());
+    if (f === "never") return d.filter((l) => !l.callCount && !l.lastCallAt && !later(l));
+    if (f === "retry") return d.filter((l) => (l.callCount || l.lastCallAt) && ["new", "contacted"].includes(l.stage || "new") && !later(l));
+    return d;
+  }
+  const srcName = (src = S.src) => src === "all" ? "All my leads" : src.startsWith("c:") ? (S.camps.find((c) => c.id === src.slice(2))?.name || "Campaign") : src.slice(2);
+  const filterName = (f = S.filter) => (FILTERS.find((x) => x[0] === f) || FILTERS[0])[1];
+  const listName = () => `${srcName()} · ${filterName()}`;
+  const listLeads = (k) => applyFilter(sourceLeads(), k); // kept for older callers
+  function setSrc(v) { S.src = v; lsSet("hpd.src", v); }
+  function setFilter(v) { S.filter = v; lsSet("hpd.filter", v); }
+  // every dialing path (power dial, profile arrows, up next) uses this queue
   campaignQueue = function () {
-    const sorted = listLeads(S.listKey).filter(dialable).filter((l) => S.demo || leadClock(l).ok)
+    const c = S.src.startsWith("c:") && S.camps.find((x) => x.id === S.src.slice(2));
+    if (c?.paused) return [];
+    return applyFilter(sourceLeads(), S.filter).filter((l) => S.demo || leadClock(l).ok)
       .sort((a, b) => ((a.callbackAt && a.callbackAt <= Date.now() ? 0 : 1) - (b.callbackAt && b.callbackAt <= Date.now() ? 0 : 1)) || (a.lastCallAt || 0) - (b.lastCallAt || 0) || (a.createdAt || 0) - (b.createdAt || 0));
-    const c = S.listKey.startsWith("c:") && S.camps.find((x) => x.id === S.listKey.slice(2));
-    return c?.paused ? [] : sorted;
   };
   function saveCamps() { lsSet("hpd.camps", S.camps); savePrefs({ camps: S.camps.map((c) => ({ ...c, ids: c.ids.slice(0, 5000) })) }); }
   function campStats(c) {
@@ -1233,6 +1257,9 @@
     $("#hpdHome").insertAdjacentHTML("beforebegin", `<div class="hpd hph-music" id="hphMusic"></div>`);
     renderMusic(); window.addEventListener("hp:musicstate", renderMusic);
     host.classList.add("hpd-manualpane");
+    // the old stage/product filters only drive the one-by-one queue, so they live with it
+    const oldFilters = $("#v-dialer .head .row");
+    if (oldFilters) { const bar = document.createElement("div"); bar.id = "hpdManualBar"; bar.className = "hpd hph-manualbar"; bar.innerHTML = `<span class="hpd-sm">One-by-one queue:</span>`; [...oldFilters.children].forEach((c) => bar.append(c)); host.before(bar); oldFilters.remove(); $("#dqStage")?.setAttribute("aria-label", "Queue stage"); }
     // desk tabs: Dial shows the home; history/our tabs hide it
     $$("#dTabs [data-dt]").forEach((b) => b.addEventListener("click", () => { $("#hpdHome").hidden = $("#hphMusic").hidden = b.dataset.dt !== "dial"; if (b.dataset.dt === "dial") renderHome(); }));
     const t = $('#dTabs [data-dt="dial"]'); if (t) t.textContent = "Dial";
@@ -1261,7 +1288,8 @@
     const estMin = (x) => Math.round(((x.talkSec || 0) + (x.dials || 0) * 25) / 60); // talk + ~25s ringing per dial, both legs billed per minute
     const cost = (min) => "$" + (min * 0.018).toFixed(2);
     const soldToday = [...D.leads.values()].filter((l) => l.stage === "sold" && (l.updatedAt || 0) >= new Date().setHours(0, 0, 0, 0)).length;
-    const outside = listLeads(S.listKey).filter(dialable).filter((l) => !leadClock(l).ok).length;
+    const outside = applyFilter(sourceLeads(), S.filter === "ready" ? "everyone" : S.filter).filter((l) => !leadClock(l).ok).length;
+    const base = sourceLeads(); const fCount = Object.fromEntries(FILTERS.map(([k]) => [k, applyFilter(base, k).length]));
     const sources = campaigns().filter((c) => c.name !== "No campaign");
     el.innerHTML = `
       <div class="hph-head">
@@ -1285,7 +1313,8 @@
       <div class="hph-ready">
         <div><h3>${S.power ? (S.power.paused ? "Paused" : "Dialing") : "Ready to dial"}</h3><p class="hpd-sm">${q.length.toLocaleString()} lead${q.length === 1 ? "" : "s"} · ${lines} line${lines > 1 ? "s" : ""} · no time limit · calls as long as needed${outside ? ` · ${outside} outside calling hours${S.demo ? " (preview dials them anyway)" : ""}` : ""}</p></div>
         <div class="hph-ctl">
-          <select id="hphList" aria-label="Who to call">${LISTS.map(([k, n]) => `<option value="${k}" ${S.listKey === k ? "selected" : ""}>${n}</option>`).join("")}${S.camps.length ? `<optgroup label="Campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.listKey === "c:" + c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</optgroup>` : ""}${sources.length ? `<optgroup label="Imports">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.listKey === "s:" + c.name ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</optgroup>` : ""}</select>
+          <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
+          <label class="hph-sel"><span>Who to call</span><select id="hphFilter" ${S.power ? "disabled" : ""}>${FILTERS.map(([k, n]) => `<option value="${k}" ${S.filter === k ? "selected" : ""}>${n} (${fCount[k]})</option>`).join("")}</select></label>
           <div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>
           ${S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
         </div>
@@ -1300,7 +1329,7 @@
           <div style="--c:#FF4FA3"><b class="num">${pct(t.answered || 0, t.dials || 0)}%</b><span>Answered</span></div>
         </div></div>
       <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Campaigns</h3><button type="button" class="hpf-link" id="hphAll">New campaign</button></div>
-        ${S.camps.length ? S.camps.map((c) => { const s = campStats(c); return `<div class="hph-camp ${S.listKey === "c:" + c.id ? "on" : ""}"><button type="button" class="hph-campname" data-usec="${esc(c.id)}"><b>${esc(c.name)} · ${c.ids.length.toLocaleString()} leads</b><span class="${c.paused ? "p" : "a"}">${c.paused ? "Paused" : "Active"}</span></button><div class="hpd-meter"><i style="width:${pct(s.dialed, c.ids.length)}%"></i></div><span class="hph-cs"><em style="color:#8FB8FF">${s.dialed} of ${c.ids.length} dialed</em><em style="color:#3BD38B">${s.convo} conversations</em><em style="color:#B58CFF">${dur(s.talk)} talk</em></span><button type="button" class="hph-ic" data-cpause="${esc(c.id)}" aria-label="${c.paused ? "Resume" : "Pause"} campaign" title="${c.paused ? "Resume" : "Pause"}">${c.paused ? I.play : I.pause}</button><button type="button" class="hph-ic" data-cdel="${esc(c.id)}" aria-label="Delete campaign" title="Delete campaign (leads stay)">✕</button></div>`; }).join("") : `<p class="hpd-sm" style="margin:0">No campaigns yet. Press <b>Campaigns</b> to pick who to call and save them as a campaign.</p>`}
+        ${S.camps.length ? S.camps.map((c) => { const s = campStats(c); return `<div class="hph-camp ${S.src === "c:" + c.id ? "on" : ""}"><button type="button" class="hph-campname" data-usec="${esc(c.id)}"><b>${esc(c.name)} · ${c.ids.length.toLocaleString()} leads</b><span class="${c.paused ? "p" : "a"}">${c.paused ? "Paused" : "Active"}</span></button><div class="hpd-meter"><i style="width:${pct(s.dialed, c.ids.length)}%"></i></div><span class="hph-cs"><em style="color:#8FB8FF">${s.dialed} of ${c.ids.length} dialed</em><em style="color:#3BD38B">${s.convo} conversations</em><em style="color:#B58CFF">${dur(s.talk)} talk</em></span><button type="button" class="hph-ic" data-cpause="${esc(c.id)}" aria-label="${c.paused ? "Resume" : "Pause"} campaign" title="${c.paused ? "Resume" : "Pause"}">${c.paused ? I.play : I.pause}</button><button type="button" class="hph-ic" data-cdel="${esc(c.id)}" aria-label="Delete campaign" title="Delete campaign (leads stay)">✕</button></div>`; }).join("") : `<p class="hpd-sm" style="margin:0">No campaigns yet. Press <b>Campaigns</b> to pick who to call and save them as a campaign.</p>`}
       </div>
       <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Up next</h3><span class="hpd-sm">local time where they are</span></div>
         <div class="hph-next">${q.slice(0, 12).map((l) => { const k = leadClock(l); return `<button type="button" data-open="${esc(l.id)}"><b>${esc(D.fullName(l))}</b><span class="num">${esc(fmt(l.phone))}</span><span class="num ${k.ok ? "" : "late"}">${esc(k.st)} ${esc(k.txt)}</span><span class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</span></button>`; }).join("") || `<p class="hpd-sm" style="margin:0">Nobody to call in ${esc(listName())} right now${outside ? ` (${outside} are outside calling hours)` : ""}.</p>`}</div>
@@ -1312,16 +1341,18 @@
     $("#hphTest").onclick = () => ding(true);
     $("#hphDing").oninput = (e) => { S.sound.ding = +e.target.value; lsSet("hpd.sound", S.sound); e.target.nextElementSibling.textContent = Math.round(S.sound.ding * 100) + "%"; };
     fillDevices();
-    $("#hphList").onchange = (e) => { S.listKey = e.target.value; lsSet("hpd.list", S.listKey); renderHome(); renderPhone(); };
+    $("#hphSrc").onchange = (e) => { setSrc(e.target.value); renderHome(); renderPhone(); };
+    $("#hphFilter").onchange = (e) => { setFilter(e.target.value); renderHome(); renderPhone(); };
     $$("[data-hl]", el).forEach((b) => (b.onclick = () => { S.lines = +b.dataset.hl; lsSet("hpd.lines", S.lines); savePrefs({ lines: S.lines }); renderHome(); }));
     $("#hphGo")?.addEventListener("click", () => { S.mode = "power"; lsSet("hpd.mode", "power"); renderPhone(); startPower(); });
     $("#hphPause")?.addEventListener("click", togglePause);
     $("#hphStop")?.addEventListener("click", stopPower);
     $$("[data-open]", el).forEach((b) => (b.onclick = () => openProfile(b.dataset.open)));
-    $$("[data-usec]", el).forEach((b) => (b.onclick = () => { S.listKey = "c:" + b.dataset.usec; lsSet("hpd.list", S.listKey); renderHome(); }));
+    $$("[data-usec]", el).forEach((b) => (b.onclick = () => { setSrc("c:" + b.dataset.usec); renderHome(); }));
     $$("[data-cpause]", el).forEach((b) => (b.onclick = () => { const c = S.camps.find((x) => x.id === b.dataset.cpause); c.paused = !c.paused; saveCamps(); renderHome(); }));
-    $$("[data-cdel]", el).forEach((b) => (b.onclick = () => { if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Delete?"; b.classList.add("armed"); return; } S.camps = S.camps.filter((x) => x.id !== b.dataset.cdel); if (S.listKey === "c:" + b.dataset.cdel) S.listKey = "ready"; saveCamps(); renderHome(); toast("Campaign deleted. The leads are still in your CRM."); }));
+    $$("[data-cdel]", el).forEach((b) => (b.onclick = () => { if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Delete?"; b.classList.add("armed"); return; } S.camps = S.camps.filter((x) => x.id !== b.dataset.cdel); if (S.src === "c:" + b.dataset.cdel) setSrc("all"); saveCamps(); renderHome(); toast("Campaign deleted. The leads are still in your CRM."); }));
     $("#hphManual").onclick = () => { $("#dPane").classList.toggle("hpd-showmanual"); renderHome(); };
+    const mb = $("#hpdManualBar"); if (mb) mb.hidden = !$("#dPane").classList.contains("hpd-showmanual") || el.hidden;
   }
   async function fillDevices() {
     const spk = $("#hphSpk"), mic = $("#hphMic"); if (!spk || !navigator.mediaDevices?.enumerateDevices) return;
@@ -1341,24 +1372,25 @@
 
   /* "Who are we calling?" picker → campaigns */
   function openPicker() {
-    const D = window.hpDesk; let key = S.listKey.startsWith("c:") || S.listKey.startsWith("s:") ? S.listKey : "ready", q = "", onlyPicked = false;
+    const D = window.hpDesk; let key = S.src, f = "everyone", q = "", onlyPicked = false;
     const picked = new Set(); let lastIdx = -1;
     const m = document.createElement("div"); m.className = "hpd hph-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-label", "Who are we calling?");
     document.body.append(m);
-    const rows = () => { let r = listLeads(key).filter((l) => !q || [D.fullName(l), l.phone, l.state, l.source, ...(l.tags || [])].join(" ").toLowerCase().includes(q) || (d10(q).length >= 3 && d10(l.phone).includes(d10(q)))); if (onlyPicked) r = r.filter((l) => picked.has(l.id)); return r; };
+    const rows = () => { let r = applyFilter(sourceLeads(key), f).filter((l) => !q || [D.fullName(l), l.phone, l.state, l.source, ...(l.tags || [])].join(" ").toLowerCase().includes(q) || (d10(q).length >= 3 && d10(l.phone).includes(d10(q)))); if (onlyPicked) r = r.filter((l) => picked.has(l.id)); return r; };
     const first = (n) => { picked.clear(); rows().filter(dialable).slice(0, n).forEach((l) => picked.add(l.id)); draw(); };
     const draw = () => {
-      const r = rows(), counts = Object.fromEntries(LISTS.map(([k]) => [k, listLeads(k).length]));
+      const r = rows(), base = sourceLeads(key), counts = Object.fromEntries(FILTERS.map(([k]) => [k, applyFilter(base, k).length]));
       const pickedLeads = [...picked].map((id) => D.leads.get(id)).filter(Boolean); const out = pickedLeads.filter((l) => !leadClock(l).ok).length;
       m.innerHTML = `<div class="hph-mbox">
         <div class="hph-mtop"><h2>Who are we calling?</h2><input type="search" id="hpmQ" placeholder="Search name, phone, state, tag" value="${esc(q)}"><button type="button" class="hpf-x" id="hpmX" aria-label="Close">✕</button></div>
         <div class="hph-mbody">
-          <aside><span class="hph-ml">Lists</span>${LISTS.map(([k, n, c]) => `<button type="button" data-k="${k}" aria-pressed="${key === k}"><i style="background:${c}"></i>${n}<b class="num">${counts[k].toLocaleString()}</b></button>`).join("")}
-            <span class="hph-ml">Imports</span>${campaigns().filter((c) => c.name !== "No campaign").slice(0, 12).map((c) => `<button type="button" data-k="s:${esc(c.name)}" aria-pressed="${key === "s:" + c.name}"><i style="background:#FF9E3D"></i>${esc(c.name)}<b class="num">${c.total}</b></button>`).join("")}<button type="button" id="hpmImport" class="hph-mlink">+ Import leads…</button>
-            ${S.camps.length ? `<span class="hph-ml">Campaigns</span>${S.camps.map((c) => `<button type="button" data-k="c:${esc(c.id)}" aria-pressed="${key === "c:" + c.id}"><i style="background:#3BD38B"></i>${esc(c.name)}<b class="num">${c.ids.length}</b></button>`).join("")}` : ""}
+          <aside><span class="hph-ml">Call from</span><button type="button" data-k="all" aria-pressed="${key === "all"}"><i style="background:#FF4FA3"></i>All my leads<b class="num">${[...D.leads.values()].length.toLocaleString()}</b></button>
+            <span class="hph-ml">Imported lists</span>${campaigns().filter((c) => c.name !== "No campaign").slice(0, 12).map((c) => `<button type="button" data-k="s:${esc(c.name)}" aria-pressed="${key === "s:" + c.name}"><i style="background:#FF9E3D"></i>${esc(c.name)}<b class="num">${c.total}</b></button>`).join("")}<button type="button" id="hpmImport" class="hph-mlink">+ Import leads…</button>
+            ${S.camps.length ? `<span class="hph-ml">My campaigns</span>${S.camps.map((c) => `<button type="button" data-k="c:${esc(c.id)}" aria-pressed="${key === "c:" + c.id}"><i style="background:#3BD38B"></i>${esc(c.name)}<b class="num">${c.ids.length}</b></button>`).join("")}` : ""}
             <div class="hph-keys"><span><kbd>Ctrl A</kbd> tick everyone shown</span><span><kbd>⇧ click</kbd> tick a range</span><span><kbd>Ctrl ↵</kbd> create the campaign</span><span><kbd>/</kbd> search</span></div>
           </aside>
           <section>
+            <div class="hph-fchips" role="group" aria-label="Who to show">${FILTERS.map(([k, n, c, hint]) => `<button type="button" data-f="${k}" aria-pressed="${f === k}" title="${esc(hint)}"><i style="background:${c}"></i>${n}<b class="num">${counts[k].toLocaleString()}</b></button>`).join("")}</div>
             <div class="hph-mbar"><label class="hpd-flex hpd-sm"><input type="checkbox" id="hpmAll" ${r.length && r.every((l) => picked.has(l.id)) ? "checked" : ""}> ${r.length.toLocaleString()} shown</label><span class="hpd-sm" style="margin-left:auto">Pick first</span>${[25, 50, 100, 250].map((n) => `<button type="button" class="hph-pf" data-first="${n}">${n}</button>`).join("")}</div>
             <div class="hph-mtable"><table class="hpd-tbl"><thead><tr><th></th><th>Name</th><th>Phone</th><th>State · their time</th><th class="hide-sm">Last call</th><th>Stage</th></tr></thead><tbody>
             ${r.slice(0, 400).map((l, i) => { const k = leadClock(l); return `<tr data-i="${i}" data-id="${esc(l.id)}" class="${picked.has(l.id) ? "on" : ""}"><td><input type="checkbox" aria-label="Pick ${esc(D.fullName(l))}" ${picked.has(l.id) ? "checked" : ""}></td><td><b>${esc(D.fullName(l))}</b></td><td class="num">${esc(fmt(l.phone))}</td><td class="num ${k.ok ? "ok" : "late"}">${esc(k.st)} · ${esc(k.txt)}</td><td class="hide-sm hpd-sm">${l.lastCallAt ? ago(l.lastCallAt) : "Never"}</td><td><span class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</span></td></tr>`; }).join("") || `<tr><td colspan="6" class="hpd-sm" style="padding:20px">No leads here.</td></tr>`}
@@ -1377,12 +1409,13 @@
     const create = () => {
       if (!picked.size) return;
       const c = { id: Date.now().toString(36), name: ($("#hpmName").value.trim() || "Campaign").slice(0, 60), ids: [...picked], created: Date.now(), paused: false };
-      S.camps.unshift(c); S.listKey = "c:" + c.id; lsSet("hpd.list", S.listKey); saveCamps(); close(); renderHome(); renderPhone(); toast(`Campaign "${c.name}" ready. Press Start calling.`);
+      S.camps.unshift(c); setSrc("c:" + c.id); setFilter("everyone"); saveCamps(); close(); renderHome(); renderPhone(); toast(`Campaign "${c.name}" ready. Press Start calling.`);
     };
     const wire = (r) => {
       $("#hpmX").onclick = close; m.onclick = (e) => { if (e.target === m) close(); };
       const qi = $("#hpmQ"); qi.oninput = () => { q = qi.value.trim().toLowerCase(); const pos = qi.selectionStart; draw(); const n = $("#hpmQ"); n.focus(); n.setSelectionRange(pos, pos); };
       $$("[data-k]", m).forEach((b) => (b.onclick = () => { key = b.dataset.k; lastIdx = -1; draw(); }));
+      $$("[data-f]", m).forEach((b) => (b.onclick = () => { f = b.dataset.f; lastIdx = -1; draw(); }));
       $$("[data-first]", m).forEach((b) => (b.onclick = () => first(+b.dataset.first)));
       $("#hpmAll").onchange = (e) => { rows().forEach((l) => (e.target.checked ? picked.add(l.id) : picked.delete(l.id))); draw(); };
       $$("tr[data-id]", m).forEach((tr) => (tr.onclick = (e) => {
@@ -1439,7 +1472,7 @@
     $("#hpdDncDel2")?.addEventListener("click", async () => { const n = nums(); if (!n.length) return; await api("/calls/dnc", { method: "DELETE", body: { numbers: n } }); toast(`${n.length} removed`); renderDnc(); });
   }
 
-  window.hpDialer = { get ready() { return !!S.device && (S.ready || S.demo); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power); } };
+  window.hpDialer = { openProfile: (id) => openProfile(id), get ready() { return !!S.device && (S.ready || S.demo); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power); } };
   window.addEventListener("hp:leadchange", () => { if (!S.call && !S.power) renderActions(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();

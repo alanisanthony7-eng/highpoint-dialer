@@ -355,3 +355,16 @@ body:has(#v-dialer:not([hidden])) .hpd-phonest{display:none}
 .hph-spplay:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .hph-spauto{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:6px;font-size:12.5px;color:#C9CDD5;cursor:pointer;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.12)}
 .hph-spauto input{width:15px!important;height:15px;accent-color:#1DB954;margin:0}
+
+.hph-sel{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#9AA1AE}
+.hph-sel select{min-width:220px;text-transform:none;letter-spacing:0;font-weight:600;font-size:14px!important}
+.hph-ctl{align-items:flex-end}
+.hph-manualbar{display:flex;align-items:center;gap:10px;margin:0 0 12px;flex-wrap:wrap}
+.hph-manualbar select{width:auto}
+.hph-fchips{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px 0}
+.hph-fchips button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;font-size:12.5px;font-weight:700;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#C9CDD5}
+.hph-fchips button i{width:7px;height:7px;border-radius:50%}
+.hph-fchips button b{font-size:11.5px;color:#9AA1AE}
+.hph-fchips button[aria-pressed="true"]{background:linear-gradient(90deg,rgba(255,46,136,.28),rgba(255,158,61,.16));border-color:rgba(255,79,163,.5);color:#fff}
+.hph-fchips button:focus-visible{outline:2px solid #FF4FA3}
+@media (max-width:760px){.hph-sel{flex:1;min-width:0}.hph-sel select{min-width:0;width:100%}}
