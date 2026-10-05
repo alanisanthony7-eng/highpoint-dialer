@@ -88,6 +88,11 @@ export const telnyxRoute = wrap(async (req, action) => {
   if (action === "token") return json({ ...(await txToken(user)), expires: Date.now() + 23 * 36e5 });
   if (!user.admin) return bad("Admins only", 403);
   if (action === "setup" && req.method === "POST") return json({ ok: true, ...(await txSetup()) });
+  if (action === "get") { // admin read-only look at the Telnyx account (diagnostics)
+    const path = new URL(req.url).searchParams.get("p") || "";
+    if (!/^\/v2\/[a-z_\/0-9-]+(\?[^#]*)?$/i.test(path) || /token|secret|key/i.test(path)) return bad("Not allowed", 400);
+    return json(await tx(path));
+  }
   if (action === "status") {
     if (!TX_KEY()) return json({ connected: false });
     const out = { connected: true, cfg: (await loadConfig()).tx || null };
