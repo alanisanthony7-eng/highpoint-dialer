@@ -98,6 +98,7 @@
     if (!c) return { ...DEF, tune: {} };
     if (c.v === 4) {
       const o = { ...DEF, ...c, tune: { ...(c.tune || {}) } };
+      for (const k of Object.keys(o.tune)) if (typeof o.tune[k] !== "number" || !isFinite(o.tune[k])) delete o.tune[k];
       for (const k of Object.keys(OPT)) if (k in o && !OPT[k].includes(o[k])) o[k] = DEF[k];
       return o;
     }
@@ -922,7 +923,7 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
     const push = () => { st.undo.push(snapshot()); if (st.undo.length > 80) st.undo.shift(); st.redo = []; st.dirty = true; };
     const setVal = (k, v, opts2 = {}) => {
       if (!opts2.noHistory) push();
-      if (tuneKey(k)) st.c = { ...st.c, tune: { ...st.c.tune, [k]: v } }; else st.c = { ...st.c, [k]: v };
+      if (tuneKey(k) && !opts2.direct) st.c = { ...st.c, tune: { ...st.c.tune, [k]: v } }; else st.c = { ...st.c, [k]: v };
       if (opts2.also) for (const [kk, vv] of opts2.also) st.c[kk] = vv;
     };
     const cat = () => CATS.find((k) => k.id === st.cat) || CATS[0];
@@ -986,7 +987,7 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
         const k = b.dataset.k, v = b.dataset.v; if (st.c[k] === v) return;
         const also = [];
         if (k === "liner" && v !== "none" && st.c.lashes === "none") also.push(["lashes", "natural"]);
-        setVal(k, v, { also }); const y = p.scrollTop; refreshAfterChange(); p.scrollTop = y;
+        setVal(k, v, { also, direct: true }); const y = p.scrollTop; refreshAfterChange(); p.scrollTop = y;
         p.querySelector(`[data-k="${k}"][data-v="${v}"]`)?.focus({ preventScroll: true });
       }));
       p.querySelectorAll(".hpa-sws[data-k]").forEach((g) => {
