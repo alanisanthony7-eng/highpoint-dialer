@@ -203,7 +203,7 @@
     const W = size, Hh = opts.slice ? size : Math.round((size * vh) / vw);
 
     // colors
-    const sk = okHex(c.skin) ? c.skin : DEF.skin, skL = sh(sk, 0.18), skD = sh(sk, -0.13), skDD = sh(sk, -0.3), skLine = sh(sk, -0.42);
+    const sk = okHex(c.skin) ? c.skin : DEF.skin, skL = mix(sk, "#FFF4EC", 0.32), skD = mix(sk, "#7A3B2C", 0.2), skDD = mix(sk, "#4E2219", 0.42), skLine = mix(sk, "#3A1A12", 0.55);
     const hc = okHex(c.hairColor) ? c.hairColor : DEF.hairColor, hcL = sh(hc, lum(hc) > 0.6 ? 0.25 : 0.32), hcD = sh(hc, -0.32), hcLine = sh(hc, -0.5);
     const bc = okHex(c.beardColor) ? c.beardColor : hc;
     const brc = okHex(c.browColor) ? c.browColor : lum(hc) > 0.72 ? sh(hc, -0.35) : sh(hc, -0.12);
@@ -448,7 +448,7 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
     const neckD = `M${CX - nw} 250 L${CX - nw} 330 C${CX - nw + 10} 352 ${CX + nw - 10} 352 ${CX + nw} 330 L${CX + nw} 250Z`;
     const neck = `<path d="${neckD}" fill="url(#${u}nk)"/><g clip-path="url(#${u}nkc)"><ellipse cx="${CX}" cy="${chinY - 14}" rx="${jw + 10}" ry="40" fill="${skDD}" opacity=".55" filter="url(#${u}b8)"/><rect x="${CX + nw - 14}" y="240" width="20" height="120" fill="${skDD}" opacity=".35" filter="url(#${u}b4)"/></g>`;
     const faceShade = `<g clip-path="url(#${u}fc)"><rect x="0" y="0" width="400" height="400" fill="url(#${u}side)" opacity=".6"/>
-<path d="${FP}" fill="none" stroke="${skDD}" stroke-width="36" opacity=".5" filter="url(#${u}b14)"/>
+<path d="${FP}" fill="none" stroke="${skDD}" stroke-width="40" opacity=".62" filter="url(#${u}b14)"/>
 <ellipse cx="${CX - 26}" cy="150" rx="62" ry="76" fill="${skL}" opacity=".55" filter="url(#${u}b14)"/>
 <ellipse cx="${CX - 14}" cy="116" rx="36" ry="14" fill="#fff" opacity=".17" filter="url(#${u}b8)"/>
 <ellipse cx="${CX - gap}" cy="${eyeY - 9}" rx="30" ry="18" fill="${skDD}" opacity=".26" filter="url(#${u}b8)"/>
