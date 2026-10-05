@@ -2,17 +2,17 @@
 :root{--nn-pink:#FF2E88;--nn-pink-core:#FFE1F0;--nn-orange:#FF9E3D;--nn-orange-core:#FFEBD2;--nn-sky:#3DB8FF;--nn-sky-core:#E6F6FF}
 
 /* ---------- tube text ---------- */
-.nn-text{--nn-c:var(--nn-pink);--nn-core:#FFF4FA;
+:root .nn-text.nn-text.nn-text.nn-text{--nn-c:var(--nn-pink);--nn-core:#FFF4FA;
   -webkit-text-fill-color:var(--nn-core)!important;color:var(--nn-core)!important;background:none!important;-webkit-background-clip:border-box!important;background-clip:border-box!important;filter:none!important;
   text-shadow:0 0 1px #fff,0 0 3px var(--nn-core),0 0 7px var(--nn-c),0 0 14px var(--nn-c),0 0 26px var(--nn-c),0 0 48px color-mix(in srgb,var(--nn-c) 70%,transparent)!important}
-.nn-text.nn-o{--nn-c:var(--nn-orange);--nn-core:var(--nn-orange-core)}
-.nn-text.nn-s{--nn-c:var(--nn-sky);--nn-core:var(--nn-sky-core)}
-.nn-text.nn-soft{text-shadow:0 0 1px #fff,0 0 4px var(--nn-c),0 0 10px var(--nn-c),0 0 20px color-mix(in srgb,var(--nn-c) 60%,transparent)!important}
-.nn-text em,.nn-text .nn-hl{font-style:inherit;--nn-c:var(--nn-pink);--nn-core:#FFD3E8;-webkit-text-fill-color:var(--nn-core)!important;color:var(--nn-core)!important;
+:root .nn-text.nn-text.nn-text.nn-text.nn-o{--nn-c:var(--nn-orange);--nn-core:var(--nn-orange-core)}
+:root .nn-text.nn-text.nn-text.nn-text.nn-s{--nn-c:var(--nn-sky);--nn-core:var(--nn-sky-core)}
+:root .nn-text.nn-text.nn-text.nn-text.nn-soft{text-shadow:0 0 1px #fff,0 0 4px var(--nn-c),0 0 10px var(--nn-c),0 0 20px color-mix(in srgb,var(--nn-c) 60%,transparent)!important}
+:root .nn-text.nn-text.nn-text.nn-text em,:root .nn-text.nn-text.nn-text.nn-text .nn-hl{font-style:inherit;--nn-c:var(--nn-pink);--nn-core:#FFD3E8;-webkit-text-fill-color:var(--nn-core)!important;color:var(--nn-core)!important;
   text-shadow:0 0 1px #fff,0 0 4px #FF7DBA,0 0 10px var(--nn-c),0 0 20px var(--nn-c),0 0 38px var(--nn-c),0 0 70px var(--nn-c)!important}
 /* the one loose tube in each sign */
-.nn-text .nn-word{-webkit-text-fill-color:inherit!important;color:inherit!important;background:none!important}
-.nn-text .nn-bad{-webkit-text-fill-color:inherit!important;color:inherit!important;background:none!important}
+:root .nn-text.nn-text.nn-text.nn-text .nn-word{-webkit-text-fill-color:inherit!important;color:inherit!important;background:none!important}
+:root .nn-text.nn-text.nn-text.nn-text .nn-bad{-webkit-text-fill-color:inherit!important;color:inherit!important;background:none!important}
 .nn-bad{animation:nnBad 7.7s steps(1,end) infinite;animation-delay:var(--nn-d,0s)}
 @keyframes nnBad{0%,61%,63%,64.5%,66%,100%{opacity:1}62%{opacity:.42;text-shadow:none}64%{opacity:.6}65.2%{opacity:.4;text-shadow:none}}
 
