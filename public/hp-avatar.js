@@ -170,17 +170,38 @@
   }
 
   /* ---------------- geometry ---------------- */
-  const FACE = { oval: [92, 60, 302, 24], round: [98, 74, 296, 36], square: [95, 82, 298, 44], heart: [97, 54, 304, 15], long: [86, 62, 316, 28], diamond: [90, 56, 306, 18] };
-  function facePath(hw, jw, chinY, cw, top = 72) {
-    return `M${CX} ${top} C${CX + hw * 0.62} ${top} ${CX + hw} ${top + 38} ${CX + hw} ${top + 92} C${CX + hw} ${top + 136} ${CX + hw * 0.96} ${top + 158} ${CX + jw} ${top + 192} C${CX + jw * 0.62} ${chinY - 14} ${CX + cw} ${chinY} ${CX} ${chinY} C${CX - cw} ${chinY} ${CX - jw * 0.62} ${chinY - 14} ${CX - jw} ${top + 192} C${CX - hw * 0.96} ${top + 158} ${CX - hw} ${top + 136} ${CX - hw} ${top + 92} C${CX - hw} ${top + 38} ${CX - hw * 0.62} ${top} ${CX} ${top}Z`;
+  // face sculpts: [cranium/temple width, cheekbone width, under-cheek width, jaw width, jaw height, chin width, chin y]
+  const FACE = {
+    oval: [88, 92, 86, 60, 258, 22, 302], round: [94, 98, 95, 74, 256, 34, 296], square: [90, 95, 93, 82, 262, 42, 298],
+    heart: [96, 96, 84, 54, 254, 14, 304], long: [84, 87, 83, 62, 268, 26, 316], diamond: [82, 96, 84, 56, 258, 16, 306],
+  };
+  // smooth closed curve through points (Catmull-Rom -> cubic Bezier)
+  function smooth(pts, k = 1 / 6) {
+    const n = pts.length, f = (v) => +v.toFixed(1);
+    let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+      d += ` C${f(p1[0] + (p2[0] - p0[0]) * k)} ${f(p1[1] + (p2[1] - p0[1]) * k)} ${f(p2[0] - (p3[0] - p1[0]) * k)} ${f(p2[1] - (p3[1] - p1[1]) * k)} ${f(p2[0])} ${f(p2[1])}`;
+    }
+    return d + "Z";
+  }
+  function facePath(hw, jw, chinY, cw, top = 72, sc) {
+    const s = sc || { tw: hw * 0.96, cb: hw, uc: hw * 0.94, jy: top + 186 };
+    const R = [[CX + hw * 0.6, top + 5], [CX + s.tw, top + 50], [CX + s.cb, top + 112], [CX + s.uc, top + 150], [CX + jw, s.jy], [CX + cw + 8, chinY - 9]];
+    const L = R.slice().reverse().map(([x, y]) => [2 * CX - x, y]);
+    return smooth([[CX, top], ...R, [CX, chinY], ...L]);
+  }
+  function geomFace(c, T) {
+    const [tw, cb, uc, jwB, jy, cwB, chinB] = FACE[c.face] || FACE.oval, w = 1 + 0.07 * T("headW"), jwk = 1 + 0.12 * T("jaw");
+    const hw = cb * w, jw = jwB * jwk * w, chinY = chinB + 12 * T("chin"), cw = cwB * (1 + 0.25 * T("jaw"));
+    return { hw, jw, chinY, cw, sc: { tw: tw * w, cb: hw, uc: uc * w * (1 + 0.04 * T("jaw")), jy: jy + 6 * T("chin") } };
   }
   function geom(c) {
     const t = c.tune || {}, T = (k) => Math.max(-1, Math.min(1, +t[k] || 0));
-    const [bhw, bjw, bchin, bcw] = FACE[c.face] || FACE.oval;
-    const hw = bhw * (1 + 0.07 * T("headW")), jw = bjw * (1 + 0.12 * T("jaw")) * (1 + 0.07 * T("headW")), chinY = bchin + 12 * T("chin"), cw = bcw * (1 + 0.25 * T("jaw"));
+    const { hw, jw, chinY, cw, sc } = geomFace(c, T);
     const eyeY = 200 + 7 * T("eyeY"), gap = 40 + 6 * T("eyeGap"), es = 1.08 + 0.17 * T("eyeSize");
     return {
-      T, hw, jw, chinY, cw, eyeY, gap, es, tilt: 7 * T("eyeTilt"),
+      T, hw, jw, chinY, cw, sc, eyeY, gap, es, tilt: 7 * T("eyeTilt"),
       browY: eyeY - 31 - 6 * T("browY"), browW: 1 + 0.5 * T("browW"),
       noseY: 247 + 6 * T("noseY") + (chinY - 302) * 0.25, ns: 1 + 0.22 * T("noseSize"),
       mouthY: 276 + 6 * T("mouthY") + (chinY - 302) * 0.45, mw: 1 + 0.2 * T("mouthW"), lips: 1 + 0.35 * T("lips"),
@@ -222,7 +243,7 @@
     const lipD = sh(lip, -0.35);
 
     const { hw, jw, chinY, cw, eyeY, gap, es, nw, SW, sx } = G;
-    const FP = facePath(hw, jw, chinY, cw);
+    const FP = facePath(hw, jw, chinY, cw, 72, G.sc);
     const hasHat = c.hat !== "none" && c.hat !== "headphones" && c.hat !== "headband";
     const hatClip = { cap: 114, backcap: 104, beanie: 118, bucket: 122, fedora: 112, cowboy: 108, visor: 0, beret: 96 }[c.hat] || 0;
 
@@ -444,18 +465,59 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
     };
     const BB = { fwd: [CX - 112, 20, CX + 112, 200], up: [CX - 110, 0, CX + 110, 200], back: [CX - 112, 20, CX + 112, 200], quiff: [CX - 110, -6, CX + 110, 200], bun: [CX - 112, 0, CX + 112, 200], pony: [CX - 112, 20, CX + 150, 350], side: [CX - 116, 20, CX + 116, 210], pixie: [CX - 116, 20, CX + 116, 200], long: [CX - 140, 34, CX + 140, 440], wavy: [CX - 150, 34, CX + 150, 440], curl: { afro: [CX - 152, 4, CX + 152, 240], curlylong: [CX - 150, 20, CX + 150, 430], curlytop: [CX - 102, 24, CX + 102, 130], puff: [CX - 60, -22, CX + 60, 90] }[c.hair] };
     const nS = big ? 1 : 0.45;
-    const frontStrands = fam === "none" ? "" : fam === "curl" ? curls(Math.round((c.hair === "afro" || c.hair === "curlylong" ? 900 : 420) * nS), BB.curl, false) : strands(Math.round((["long", "wavy"].includes(fam) ? 560 : 460) * nS), BB[fam], false);
-    const backStrands = fam === "none" || !hairDef.back ? "" : fam === "curl" ? curls(Math.round(500 * nS), BB.curl, true) : strands(Math.round(300 * nS), BB[fam] || BB.long, true);
+    // locks: tapered clumps that follow the flow, overlap, and cast soft shadows on each other
+    const locks = (n, bb, dark) => {
+      const longFam = fam === "long" || fam === "wavy" || (fam === "pony" && dark);
+      const src = { fwd: [CX, 26], up: [CX, 140], back: [CX, 220], quiff: [CX, 200], bun: [CX, 220], pony: [CX - 60, 200], side: [CX - 54, 54], pixie: [CX + 52, 48], long: [CX, 44], wavy: [CX, 44] }[fam] || [CX, 40];
+      const L = [];
+      for (let i = 0; i < n; i++) {
+        let x = bb[0] + R() * (bb[2] - bb[0]), y = bb[1] + R() * (bb[3] - bb[1]);
+        const len = longFam ? 90 + R() * 160 : fam === "up" ? 18 + R() * 22 : 26 + R() * 30, W = (longFam ? 11 : fam === "up" ? 8 : 9) + R() * (longFam ? 9 : 7), step = longFam ? 7 : 4;
+        const k = Math.max(4, Math.round(len / step)), pts = [[x, y]], jx = (R() - 0.5) * 0.18;
+        for (let t = 0; t < k; t++) { const f = field(x, y); x += (f[0] + jx) * step; y += f[1] * step; pts.push([x, y]); }
+        L.push({ pts, W, d: Math.hypot(pts[0][0] - src[0], pts[0][1] - src[1]), tone: R(), hl: R() });
+      }
+      L.sort((a, b) => a.d - b.d);
+      const f1 = (v) => v.toFixed(1);
+      let shadows = "", bodies = "", lights = "", lines = "";
+      for (const lk of L) {
+        const P = lk.pts, m = P.length - 1, left = [], right = [], mid = [];
+        for (let i = 0; i <= m; i++) {
+          const a = P[Math.max(0, i - 1)], b = P[Math.min(m, i + 1)], tx = b[0] - a[0], ty = b[1] - a[1], tl = Math.hypot(tx, ty) || 1, nx = -ty / tl, ny = tx / tl;
+          const t = i / m, w = lk.W * (t < 0.12 ? 0.55 + t * 3.7 : Math.pow(1 - (t - 0.12) / 0.88, 0.85)) / 2;
+          left.push([P[i][0] + nx * w, P[i][1] + ny * w]); right.push([P[i][0] - nx * w, P[i][1] - ny * w]);
+          const off = (nx * -0.7 + ny * -0.7) > 0 ? 1 : -1; mid.push([P[i][0] + nx * w * 0.35 * off, P[i][1] + ny * w * 0.35 * off]);
+        }
+        const poly = "M" + [...left, ...right.reverse()].map((q) => `${f1(q[0])} ${f1(q[1])}`).join("L") + "Z";
+        shadows += poly.replace(/(-?\d+\.\d) (-?\d+\.\d)/g, (s0, a, b) => `${f1(+a + 1.5)} ${f1(+b + 3)}`);
+        const tone = dark ? mix(hcD, sh(hc, -0.45), lk.tone * 0.6) : mix(sh(hc, -0.22), sh(hc, 0.06), lk.tone);
+        bodies += `<path d="${poly}" fill="${tone}"/>`;
+        const y0 = P[0][1], near = Math.exp(-((y0 - sparkY) ** 2) / (longFam ? 2600 : 900)) * (P[0][0] < CX + 30 ? 1 : 0.5);
+        if (!dark && lk.hl < 0.3 + near * 0.7) { const a0 = Math.round(m * 0.18), a1 = Math.round(m * (0.55 + lk.hl * 0.3)); lights += `M${mid.slice(a0, a1 + 1).map((q) => `${f1(q[0])} ${f1(q[1])}`).join("L")}`; }
+        if (lk.tone < 0.45) lines += `M${P.slice(Math.round(m * 0.1), Math.round(m * 0.85)).map((q) => `${f1(q[0] + 0.8)} ${f1(q[1])}`).join("L")}`;
+      }
+      return `<path d="${shadows}" fill="${hcLine}" opacity="${dark ? 0.6 : 0.5}" filter="url(#${u}b1)"/>${bodies}${lines ? `<path d="${lines}" fill="none" stroke="${hcLine}" stroke-width="1.1" opacity=".45" stroke-linecap="round"/>` : ""}${lights ? `<path d="${lights}" fill="none" stroke="${mix(hcL, "#fff", 0.2 + lum(hc) * 0.2)}" stroke-width="${big ? 3 : 2.4}" opacity="${0.42 + lum(hc) * 0.25}" stroke-linecap="round" filter="url(#${u}b05)"/>` : ""}`;
+    };
+    // curly hair: rounded bundles with their own light and shadow, then fine coils on top
+    const bundles = (n, bb, dark) => {
+      const B = [];
+      for (let i = 0; i < n; i++) B.push([bb[0] + R() * (bb[2] - bb[0]), bb[1] + R() * (bb[3] - bb[1]), 9 + R() * 9]);
+      B.sort((a, b) => a[1] - b[1]);
+      return `<g filter="url(#${u}b1)" opacity="${dark ? 0.7 : 0.55}" fill="${hcLine}">${B.map(([x, y, r]) => `<circle cx="${(x + 1.5).toFixed(1)}" cy="${(y + 3).toFixed(1)}" r="${r.toFixed(1)}"/>`).join("")}</g>` + B.map(([x, y, r]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="url(#${u}cb${dark ? "d" : ""})"/>`).join("");
+    };
+    const frontStrands = fam === "none" ? "" : fam === "curl" ? bundles(Math.round((c.hair === "afro" || c.hair === "curlylong" ? 170 : 80) * (big ? 1 : 0.6)), BB.curl, false) + curls(Math.round((c.hair === "afro" || c.hair === "curlylong" ? 520 : 240) * nS), BB.curl, false) : locks(Math.round((["long", "wavy"].includes(fam) ? 170 : 150) * (big ? 1 : 0.55)), BB[fam], false);
+    const backStrands = fam === "none" || !hairDef.back ? "" : fam === "curl" ? bundles(Math.round(110 * (big ? 1 : 0.6)), BB.curl, true) : locks(Math.round(110 * (big ? 1 : 0.55)), BB[fam] || BB.long, true);
     const W_ = `<style>.${u}w *{fill:#fff!important;stroke:#fff!important}.${u}w [fill="none"]{fill:none!important}</style>`;
-    const hairBackVol = backStrands ? `<mask id="${u}hbm" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w">${hairBackArt}</g></mask><g mask="url(#${u}hbm)"><g transform="${HT}">${backStrands}</g></g>` : "";
-    const hairVol = c.hair !== "bald" ? `<mask id="${u}hm" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w">${hairFrontArt}</g></mask><g mask="url(#${u}hm)"><g transform="${HT}">${frontStrands}</g><rect x="-50" y="-60" width="500" height="560" fill="url(#${u}hv)"/>${fam === "curl" ? "" : `<ellipse cx="${CX - 26}" cy="${sparkY}" rx="64" ry="12" fill="#fff" opacity="${lum(hc) > 0.6 ? 0.16 : 0.22}" filter="url(#${u}b4)" transform="rotate(-9 ${CX - 26} 66)"/>`}</g>` : "";
+    const dil = `<filter id="${u}dil" x="-20%" y="-20%" width="140%" height="140%"><feMorphology operator="dilate" radius="${big ? 5 : 3}"/></filter><radialGradient id="${u}cb" cx=".38" cy=".32" r=".7"><stop offset="0" stop-color="${mix(hcL, "#fff", 0.15)}"/><stop offset=".55" stop-color="${hc}"/><stop offset="1" stop-color="${hcD}"/></radialGradient><radialGradient id="${u}cbd" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="${hc}"/><stop offset="1" stop-color="${sh(hc, -0.45)}"/></radialGradient>`;
+    const hairBackVol = backStrands ? `<defs>${dil}</defs><mask id="${u}hbm" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w" filter="url(#${u}dil)">${hairBackArt}</g></mask><g mask="url(#${u}hbm)"><g transform="${HT}">${backStrands}</g></g>` : "";
+    const hairVol = c.hair !== "bald" ? `${backStrands ? "" : `<defs>${dil}</defs>`}<mask id="${u}hm" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w" filter="url(#${u}dil)">${hairFrontArt}</g></mask><mask id="${u}hmx" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w">${hairFrontArt}</g></mask><g mask="url(#${u}hm)"><g transform="${HT}">${frontStrands}</g></g><g mask="url(#${u}hmx)"><rect x="-50" y="-60" width="500" height="560" fill="url(#${u}hv)" opacity=".8"/>${fam === "curl" ? "" : `<ellipse cx="${CX - 26}" cy="${sparkY}" rx="64" ry="12" fill="#fff" opacity="${lum(hc) > 0.6 ? 0.1 : 0.14}" filter="url(#${u}b4)" transform="rotate(-9 ${CX - 26} 66)"/>`}</g>` : "";
 
     /* ---- body ---- */
     const torso = `M${CX - nw - 6} 326 C${CX - nw - 22} 350 ${CX - SW + 44} 360 ${CX - SW + 16} 376 C${CX - SW - 6} 390 ${CX - SW - 14} 440 ${CX - SW - 16} 620 L${CX + SW + 16} 620 C${CX + SW + 14} 440 ${CX + SW + 6} 390 ${CX + SW - 16} 376 C${CX + SW - 44} 360 ${CX + nw + 22} 350 ${CX + nw + 6} 326Z`;
     const armL = `M${CX - SW + 40} 404 C${CX - SW + 44} 450 ${CX - SW + 42} 500 ${CX - SW + 40} 560`, armR = mir(armL.replace(/SW/g, ""));
     const tcD = sh(tc, -0.22), tcDD = sh(tc, -0.36), ocD = sh(oc, -0.25);
     const folds = `<path d="M${CX - SW + 40} 404 C${CX - SW + 44} 450 ${CX - SW + 42} 500 ${CX - SW + 40} 560 M${CX + SW - 40} 404 C${CX + SW - 44} 450 ${CX + SW - 42} 500 ${CX + SW - 40} 560" stroke="#000" stroke-opacity=".3" stroke-width="7" fill="none" filter="url(#${u}b4)"/><path d="M${CX - SW + 46} 404 C${CX - SW + 50} 450 ${CX - SW + 48} 500 ${CX - SW + 46} 560" stroke="#fff" stroke-opacity=".12" stroke-width="5" fill="none" filter="url(#${u}b2)"/>`;
-    const crew = `<path d="M${CX - nw - 8} 330 C${CX - nw} 360 ${CX + nw} 360 ${CX + nw + 8} 330" stroke="${tcD}" stroke-width="8" fill="none" stroke-linecap="round"/>`;
+    const crew = `<path d="M${CX - nw - 8} 330 C${CX - nw} 360 ${CX + nw} 360 ${CX + nw + 8} 330" stroke="${tcD}" stroke-width="8" fill="none" stroke-linecap="round"/><path d="M${CX - nw - 10} 327 C${CX - nw - 2} 356 ${CX + nw + 2} 356 ${CX + nw + 10} 327" stroke="#fff" stroke-width="1.6" fill="none" opacity=".28"/>`;
     const neckSkinV = (depth) => `<path d="M${CX - nw - 6} 326 L${CX} ${depth} L${CX + nw + 6} 326Z" fill="url(#${u}nk)"/>`;
     const baseTop = (f = `url(#${u}tp)`) => `<path d="${torso}" fill="${f}"/>`;
     const TOP = {
@@ -527,7 +589,10 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
 <ellipse cx="${CX + gap + 8}" cy="${eyeY + 34}" rx="22" ry="12" fill="#fff" opacity=".08" filter="url(#${u}b8)"/>
 <ellipse cx="${CX}" cy="${(G.mouthY + 21).toFixed(1)}" rx="16" ry="6" fill="${skDD}" opacity=".32" filter="url(#${u}b4)"/>
 <ellipse cx="${CX - 4}" cy="${chinY - 14}" rx="17" ry="9" fill="#fff" opacity=".15" filter="url(#${u}b4)"/>
-<ellipse cx="${CX + hw - 4}" cy="200" rx="5" ry="64" fill="#fff" opacity=".13" filter="url(#${u}b4)"/></g>`;
+<ellipse cx="${CX + hw - 4}" cy="200" rx="5" ry="64" fill="#fff" opacity=".13" filter="url(#${u}b4)"/>
+<ellipse cx="${CX - G.sc.tw + 8}" cy="128" rx="16" ry="32" fill="${skDD}" opacity=".2" filter="url(#${u}b8)"/><ellipse cx="${CX + G.sc.tw - 8}" cy="128" rx="16" ry="32" fill="${skDD}" opacity=".26" filter="url(#${u}b8)"/>
+<ellipse cx="${CX - G.sc.uc + 20}" cy="236" rx="13" ry="26" fill="${skDD}" opacity=".16" filter="url(#${u}b8)"/><ellipse cx="${CX + G.sc.uc - 20}" cy="236" rx="13" ry="26" fill="${skDD}" opacity=".22" filter="url(#${u}b8)"/>
+<ellipse cx="${CX - hw + 26}" cy="${eyeY + 22}" rx="16" ry="9" fill="#fff" opacity=".1" filter="url(#${u}b4)"/></g>`;
     const blushArt = c.blush > 0 ? `<ellipse cx="${CX - gap - 14}" cy="${eyeY + 40}" rx="22" ry="13" fill="url(#${u}bl)" opacity="${(0.15 + c.blush * 0.6).toFixed(2)}"/><ellipse cx="${CX + gap + 14}" cy="${eyeY + 40}" rx="22" ry="13" fill="url(#${u}bl)" opacity="${(0.15 + c.blush * 0.6).toFixed(2)}"/>` : "";
     const freckleArt = c.freckles > 0 ? `<g fill="${skLine}" opacity="${(0.25 + c.freckles * 0.45).toFixed(2)}">${[[-58, 234], [-48, 228], [-40, 238], [-30, 230], [-52, 242], [-22, 238], [58, 234], [48, 228], [40, 238], [30, 230], [52, 242], [22, 238], [-8, 230], [8, 232], [0, 226]].map(([dx, y]) => `<circle cx="${CX + dx}" cy="${y + (eyeY - 200)}" r="${1.6 + (Math.abs(dx) % 3) * 0.3}"/>`).join("")}</g>` : "";
     const moleArt = { cheek: `<circle cx="${CX + 52}" cy="${eyeY + 50}" r="3" fill="${sh(sk, -0.55)}"/>`, lip: `<circle cx="${CX - 24}" cy="${G.mouthY - 14}" r="2.8" fill="${sh(sk, -0.55)}"/>`, eye: `<circle cx="${CX + gap + 18}" cy="${eyeY + 18}" r="2.6" fill="${sh(sk, -0.55)}"/>` }[c.mole] || "";
@@ -608,14 +673,14 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
 
     // facial hair
     const bcD = sh(bc, -0.25);
-    const FPX = facePath(hw + 5, jw + 7, chinY + 14, cw + 7);
+    const FPX = facePath(hw + 5, jw + 7, chinY + 14, cw + 7, 72, { tw: G.sc.tw + 5, cb: G.sc.cb + 5, uc: G.sc.uc + 6, jy: G.sc.jy + 6 });
     defs = defs.replace("</defs>", `<clipPath id="${u}fx"><path d="${FPX}"/></clipPath></defs>`);
     const my = G.mouthY;
     const cheekCut = (y0) => `M0 0 H400 V${y0} C${CX + hw} ${y0 + 2} ${CX + 70} ${my - 30} ${CX + 34} ${my - 22} C${CX + 16} ${my - 18} ${CX - 16} ${my - 18} ${CX - 34} ${my - 22} C${CX - 70} ${my - 30} ${CX - hw} ${y0 + 2} 0 ${y0}Z`;
     const beardBlock = (y0, fill = bc, extra = "") => `<g clip-path="url(#${u}fx)"><path d="M0 ${y0 - 60} H400 V420 H0Z" fill="${fill}" mask="url(#${u}bm)"/></g>${extra}`;
     const mustacheD = `M-27 5 C-21 -6 -9 -8 0 -4 C9 -8 21 -6 27 5 C17 1 9 1 0 3 C-9 1 -17 1 -27 5Z`;
     const mustache = (d = mustacheD) => `<g transform="translate(${CX} ${(my - 13).toFixed(1)}) scale(${G.mw.toFixed(3)} 1)"><path d="${d}" fill="${bc}"/><path d="M-20 -1 C-12 -5 -4 -4 0 -2" stroke="${sh(bc, 0.25)}" stroke-width="1.6" fill="none" opacity=".4"/></g>`;
-    const beardMask = (y0) => `<mask id="${u}bm"><rect x="0" y="0" width="400" height="500" fill="#fff"/><path d="${cheekCut(y0)}" fill="#000"/><ellipse cx="${CX}" cy="${my + 4}" rx="${24 * G.mw}" ry="${11 * G.lips}" fill="#000"/></mask>`;
+    const beardMask = (y0) => `<mask id="${u}bm"><rect x="0" y="0" width="400" height="500" fill="#fff"/><path d="${cheekCut(y0)}" fill="#000" filter="url(#${u}b2)"/><ellipse cx="${CX}" cy="${my + 4}" rx="${24 * G.mw}" ry="${11 * G.lips}" fill="#000"/></mask>`;
     let beardArt = "", beardTop = "";
     if (c.beard !== "none") {
       if (["full", "short", "long", "stubble"].includes(c.beard)) {
@@ -713,7 +778,12 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
     const topTex = `<g clip-path="url(#${u}tc)"><rect x="0" y="270" width="400" height="360" filter="url(#${u}${knitTop ? "knit" : "fab"})" opacity="${knitTop ? 0.5 : 0.24}" style="mix-blend-mode:soft-light"/></g>`;
     const outerTex = c.outer === "none" ? "" : `<g clip-path="url(#${u}oc)">${c.outer === "denim" ? `<rect x="0" y="280" width="400" height="300" fill="url(#${u}den)"/>` : ""}${c.outer === "leather" ? `<g filter="url(#${u}b4)" opacity=".5"><path d="M${CX - SW + 20} 400 C${CX - 110} 380 ${CX - 80} 376 ${CX - 60} 380" stroke="#fff" stroke-width="8" fill="none" opacity=".35"/><path d="M${CX + SW - 30} 420 C${CX + 110} 404 ${CX + 90} 400 ${CX + 70} 404" stroke="#fff" stroke-width="6" fill="none" opacity=".25"/></g>` : `<rect x="0" y="280" width="400" height="300" filter="url(#${u}${c.outer === "cardigan" ? "knit" : "fab"})" opacity="${c.outer === "cardigan" ? 0.5 : 0.35}" style="mix-blend-mode:soft-light"/>`}</g>`;
     const shoulders = `<g clip-path="url(#${u}tor)"><ellipse cx="${CX - SW + 46}" cy="388" rx="54" ry="26" fill="#fff" opacity=".13" filter="url(#${u}b8)"/><ellipse cx="${CX + SW - 46}" cy="388" rx="54" ry="26" fill="#fff" opacity=".07" filter="url(#${u}b8)"/><path d="M${CX - SW + 42} 410 C${CX - SW + 50} 440 ${CX - SW + 50} 470 ${CX - SW + 46} 520" stroke="#000" stroke-width="14" opacity=".18" fill="none" filter="url(#${u}b8)"/><path d="M${CX + SW - 42} 410 C${CX + SW - 50} 440 ${CX + SW - 50} 470 ${CX + SW - 46} 520" stroke="#000" stroke-width="14" opacity=".24" fill="none" filter="url(#${u}b8)"/></g>`;
-    const body = `<g transform="translate(0 -12)">${hoodBack}${neck}<g filter="url(#${u}ds)">${topArt}</g>${topTex}${neckUnder ? `<g filter="url(#${u}ds)">${neckArt}</g>` : ""}${outerArt ? `<g filter="url(#${u}ds)">${outerArt}</g>` : ""}${outerTex}${!neckUnder ? `<g filter="url(#${u}ds)">${neckArt}</g>` : ""}${shoulders}<g clip-path="url(#${u}tor)"><path d="${torso}" fill="url(#${u}cv)"/><path d="${torso}" fill="url(#${u}cy)"/><ellipse cx="${CX}" cy="342" rx="${nw + 46}" ry="18" fill="#000" opacity=".28" filter="url(#${u}b8)"/></g></g>`;
+    // fabric folds: drop folds off the shoulders, half-lock folds at the armpits, soft diaper folds under the collar
+    const fd = (d, w, o) => `<path d="${d}" stroke="#000" stroke-width="${w}" opacity="${o}" fill="none" stroke-linecap="round"/>`, fl = (d, w, o) => `<path d="${d}" stroke="#fff" stroke-width="${w}" opacity="${o}" fill="none" stroke-linecap="round"/>`;
+    const sideFolds = (s) => { const X = (v) => CX + s * v; return fd(`M${X(SW - 32)} 396 Q${X(SW - 50)} 410 ${X(SW - 46)} 438`, 5, 0.3) + fl(`M${X(SW - 38)} 392 Q${X(SW - 56)} 406 ${X(SW - 53)} 432`, 2.5, 0.16) + fd(`M${X(nw + 26)} 342 Q${X(nw + 60)} 372 ${X(SW - 64)} 424`, 8, 0.12) + fl(`M${X(nw + 20)} 348 Q${X(nw + 52)} 380 ${X(SW - 72)} 432`, 3, 0.1) + fd(`M${X(SW - 56)} 452 Q${X(SW - 70)} 476 ${X(SW - 62)} 506`, 6, 0.14); };
+    const diaper = c.outer === "none" && !["tank", "tropical", "stripes"].includes(c.top) ? fd(`M${CX - 40} 372 Q${CX} 394 ${CX + 40} 372`, 7, 0.1) + fl(`M${CX - 44} 380 Q${CX} 402 ${CX + 44} 380`, 3, 0.1) + fd(`M${CX - 60} 398 Q${CX} 428 ${CX + 60} 398`, 8, 0.08) + fl(`M${CX - 62} 407 Q${CX} 436 ${CX + 62} 407`, 3, 0.08) : "";
+    const foldArt = c.top === "tank" && c.outer === "none" ? "" : `<g clip-path="url(#${u}tor)" filter="url(#${u}b2)">${sideFolds(-1)}${sideFolds(1)}${diaper}</g>`;
+    const body = `<g transform="translate(0 -12)">${hoodBack}${neck}<g filter="url(#${u}ds)">${topArt}</g>${topTex}${c.outer === "none" ? foldArt : ""}${neckUnder ? `<g filter="url(#${u}ds)">${neckArt}</g>` : ""}${outerArt ? `<g filter="url(#${u}ds)">${outerArt}</g>` : ""}${outerTex}${c.outer !== "none" ? foldArt : ""}${!neckUnder ? `<g filter="url(#${u}ds)">${neckArt}</g>` : ""}${shoulders}<g clip-path="url(#${u}tor)"><path d="${torso}" fill="url(#${u}cv)"/><path d="${torso}" fill="url(#${u}cy)"/><ellipse cx="${CX}" cy="342" rx="${nw + 46}" ry="18" fill="#000" opacity=".28" filter="url(#${u}b8)"/></g></g>`;
     const Fl = (id, sd) => `<filter id="${u}${id}" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="${sd}"/></filter>`;
     defs = defs.replace("</defs>", `${Fl("b05", 0.5)}${Fl("b1", 0.9)}${Fl("b2", 2)}${Fl("b4", 4)}${Fl("b8", 8)}${Fl("b14", 14)}
 <radialGradient id="${u}hv" gradientUnits="userSpaceOnUse" cx="${CX - 34}" cy="58" r="200"><stop offset="0" stop-color="#fff" stop-opacity=".3"/><stop offset=".3" stop-color="#fff" stop-opacity="0"/><stop offset=".62" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".5"/></radialGradient>
