@@ -1,6 +1,7 @@
 // GET  /api/dialer/setup     -> connection status for the signed-in agent
 // POST /api/dialer/setup     -> (admin) one-click: create API key + TwiML app, point numbers at this site
 // PUT  /api/dialer/setup     -> (admin) save dialer settings
+import { isTelnyx, txSetup } from "../telnyx/tx.mjs";
 import { wrap, json, bad, requireUser, config as loadConfig, setJ, getJ, tw, siteUrl, SID, TOKEN, DEFAULT_SETTINGS, updateJ, numberHooks } from "../lib/hp.mjs";
 
 export default wrap(async (req) => {
@@ -10,9 +11,11 @@ export default wrap(async (req) => {
   if (req.method === "GET") {
     const nums = Object.values((await getJ("numbers", "all")) || {}).filter((n) => !n.released);
     const prefs = (await getJ("prefs", user.identity)) || {};
+    const tel = isTelnyx();
     return json({
-      twilio: !!(SID() && TOKEN()),
-      ready: !!(SID() && TOKEN() && cfg.appSid && cfg.keySid),
+      provider: tel ? "telnyx" : "twilio",
+      twilio: tel || !!(SID() && TOKEN()),
+      ready: tel ? !!cfg.tx?.connId : !!(SID() && TOKEN() && cfg.appSid && cfg.keySid),
       site: siteUrl(),
       me: { identity: user.identity, email: user.email, name: user.name, admin: user.admin },
       settings: cfg.settings,
@@ -44,6 +47,7 @@ export default wrap(async (req) => {
     return json({ ok: true, settings: s });
   }
 
+  if (req.method === "POST" && isTelnyx()) { const t = await txSetup(); return json({ ok: true, provider: "telnyx", account: { name: "Telnyx", type: "Full" }, tx: t }); }
   if (req.method === "POST") {
     if (!SID() || !TOKEN()) return bad("Add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in Cloudflare Pages → Settings → Variables and secrets, then redeploy.", 400);
     if (!/^https:\/\//.test(siteUrl())) return bad("Site URL is missing. Set HP_PUBLIC_URL to your https site address.");

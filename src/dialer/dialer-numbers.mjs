@@ -5,6 +5,7 @@
 //  POST /api/dialer/numbers/update   {e164, owner?, shared?, label?, paused?, spamReport?}
 //  POST /api/dialer/numbers/release  {e164}
 //  POST /api/dialer/numbers/import   (admin) adopt numbers already in the Twilio account
+import { isTelnyx, txSearch, txBuy } from "../telnyx/tx.mjs";
 import { wrap, json, bad, requireUser, config as loadConfig, getJ, updateJ, tw, siteUrl, numberHooks, numberCap, today, AREA, to10, listKeys } from "../lib/hp.mjs";
 
 function health(n, settings) {
@@ -46,6 +47,7 @@ export default wrap(async (req) => {
   if (action === "search") {
     const ac = (q.get("areaCode") || "").replace(/\D/g, "").slice(0, 3);
     const st = (q.get("state") || (ac && AREA[ac]) || "").toUpperCase().slice(0, 2);
+    if (isTelnyx()) return json(await txSearch(ac, st, (q.get("contains") || "").replace(/[^0-9]/g, "").slice(0, 7)));
     const query = { VoiceEnabled: "true", SmsEnabled: "true", ExcludeAllAddressRequired: "true", PageSize: 30 };
     if (ac) query.AreaCode = ac; else if (st) query.InRegion = st;
     if (q.get("contains")) query.Contains = q.get("contains").replace(/[^0-9*]/g, "").slice(0, 7);
@@ -67,6 +69,12 @@ export default wrap(async (req) => {
     }
     if (!/^\+1\d{10}$/.test(b.phoneNumber || "")) return bad("Pick a number from the search results.");
     const owner = user.admin ? (b.owner ?? user.identity) : user.identity;
+    if (isTelnyx()) {
+      const t = await txBuy(b.phoneNumber);
+      const rec = { e164: b.phoneNumber, sid: t.sid, provider: "telnyx", areaCode: to10(b.phoneNumber).slice(0, 3), state: AREA[to10(b.phoneNumber).slice(0, 3)] || "", owner: owner || "", shared: !!b.shared, boughtAt: Date.now(), boughtBy: user.identity };
+      await updateJ("numbers", "all", (a) => { a[rec.e164] = rec; return a; }, {});
+      return json({ ok: true, number: rec });
+    }
     const n = await tw("/Accounts/{SID}/IncomingPhoneNumbers.json", { method: "POST", form: { PhoneNumber: b.phoneNumber, FriendlyName: `Highpoint · ${user.name}`.slice(0, 64), ...numberHooks(siteUrl()) } });
     const rec = { e164: n.phone_number, sid: n.sid, areaCode: to10(n.phone_number).slice(0, 3), state: AREA[to10(n.phone_number).slice(0, 3)] || "", owner: owner || "", shared: !!b.shared, boughtAt: Date.now(), boughtBy: user.identity, label: "", days: {} };
     await updateJ("numbers", "all", (a) => { a[rec.e164] = rec; return a; }, {});

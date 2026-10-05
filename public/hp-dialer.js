@@ -61,7 +61,7 @@
     buildUI(); buildBar();
     try {
       const st = await api("/setup");
-      Object.assign(S, { ready: st.ready, twilio: st.twilio, me: st.me, settings: st.settings, trust: st.trust || {}, prefs: { ...S.prefs, ...(st.prefs || {}) } });
+      Object.assign(S, { provider: st.provider || "twilio", ready: st.ready, twilio: st.twilio, me: st.me, settings: st.settings, trust: st.trust || {}, prefs: { ...S.prefs, ...(st.prefs || {}) } });
     } catch (e) {
       if (e.status === 401) { setChip("err", "Sign in"); note("Sign in to use the dialer."); return; }
       // no backend (preview / not deployed yet) → demo mode
@@ -197,7 +197,61 @@
     if (window.Twilio?.Device) return;
     await new Promise((res, rej) => { const s = document.createElement("script"); s.src = SDK; s.onload = res; s.onerror = () => rej(new Error("Couldn't load the phone library")); document.head.append(s); });
   }
+  /* Telnyx browser phone, wrapped so the rest of the dialer can treat it like the Twilio one */
+  const TX_SDK = "https://cdn.jsdelivr.net/npm/@telnyx/webrtc@2.27.10/lib/bundle.js";
+  async function txToken() { const r = await fetch("/api/telnyx/token", { headers: authHeader(), credentials: "include" }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Couldn't start the phone"); return j; }
+  function txCall(c, inbound) {
+    const h = {}; let ended = false, live = false;
+    const fire = (e, ...a) => (h[e] || []).forEach((f) => { try { f(...a); } catch (er) { console.warn(er); } });
+    const w = {
+      raw: c, sid: c.id, parameters: { CallSid: c.id, From: inbound ? (c.options?.remoteCallerNumber || "") : "" }, customParameters: new Map([["from", inbound ? (c.options?.remoteCallerNumber || "") : ""]]),
+      on(e, f) { (h[e] = h[e] || []).push(f); return w; },
+      disconnect() { try { c.hangup(); } catch {} }, reject() { try { c.hangup(); } catch {} }, accept() { try { c.answer(); } catch {} },
+      mute(m) { try { m ? c.muteAudio() : c.unmuteAudio(); } catch {} }, sendDigits(k) { try { c.dtmf(String(k)); } catch {} },
+      _state(st) {
+        if (ended) return;
+        if (["ringing", "trying", "early", "requesting", "recovering"].includes(st) && !live) fire("ringing");
+        if (st === "active" && !live) { live = true; fire("accept", w); }
+        if (st === "hangup" || st === "destroy" || st === "purge") { ended = true; fire(live ? "disconnect" : "cancel", w); fire("disconnect", w); }
+      },
+    };
+    return w;
+  }
+  async function startTelnyx() {
+    await new Promise((res, rej) => { if (window.TelnyxWebRTC?.TelnyxRTC) return res(); const s = document.createElement("script"); s.src = TX_SDK; s.onload = res; s.onerror = () => rej(new Error("Couldn't load the phone library")); document.head.append(s); });
+    let audio = document.getElementById("hpdRemote"); if (!audio) { audio = document.createElement("audio"); audio.id = "hpdRemote"; audio.autoplay = true; document.body.append(audio); }
+    const t = await txToken(); if (t.fresh) await new Promise((r) => setTimeout(r, 5000)); // new credentials take a few seconds to go live
+    const client = new TelnyxWebRTC.TelnyxRTC({ login_token: t.token });
+    client.remoteElement = "hpdRemote";
+    const calls = new Map();
+    client.on("telnyx.ready", () => { S.deviceReady = true; renderHome(); if (!S.call && !S.power) setChip("ready", "Ready"); });
+    client.on("telnyx.error", (e) => { console.warn(e); note(esc(e?.error?.message || e?.message || "Phone error"), "warn"); });
+    client.on("telnyx.socket.close", () => { S.deviceReady = false; setTimeout(() => { try { client.connect(); } catch {} }, 3000); });
+    client.on("telnyx.notification", (n) => {
+      if (n.type !== "callUpdate" || !n.call) return;
+      const c = n.call; let w = calls.get(c.id);
+      if (!w && c.direction === "inbound" && c.state === "ringing") { w = txCall(c, true); calls.set(c.id, w); incoming(w); }
+      if (!w) return;
+      w._state(c.state);
+      if (["hangup", "destroy", "purge"].includes(c.state)) calls.delete(c.id);
+    });
+    // refresh the login token before it expires (they last 24h)
+    setInterval(async () => { try { const t2 = await txToken(); client.login_token = t2.token; } catch {} }, 20 * 36e5);
+    S.device = {
+      async connect({ params }) {
+        const to = "+1" + d10(params.To);
+        const mine = S.numbers.filter((n) => !n.paused);
+        const pick = mine.find((n) => n.e164 === params.CallerId) || mine.find((n) => n.areaCode === d10(params.To).slice(0, 3)) || mine.find((n) => n.mine) || mine[0];
+        if (!pick) throw new Error("Get a phone number first (Number groups tab)");
+        const c = client.newCall({ destinationNumber: to, callerNumber: pick.e164, callerName: S.settings.company || "Highpoint Financial", remoteElement: "hpdRemote" });
+        const w = txCall(c, false); calls.set(c.id, w); return w;
+      },
+      on() {}, updateToken() {}, audio: null,
+    };
+    client.connect();
+  }
   async function startDevice() {
+    if (S.provider === "telnyx" && !S.demo) { try { await startTelnyx(); } catch (e) { setChip("err", "Offline"); note(esc(e.message), "warn"); } return; }
     if (S.demo) { S.device = new Demo.Device(); S.deviceReady = true; renderPhone(); return; }
     try {
       await loadSdk();
@@ -228,6 +282,7 @@
   }
   function phoneCall(lead) {
     if (!lead?.phone) { toast("This lead has no phone number"); return; }
+    if (S.via !== "phone") { S.phoneLead = lead.id; dialLead(lead, true); phoneCard(); return; }
     window.hpDesk.callStop();
     S.phoneLead = lead.id; S.callLead = lead.id;
     window.hpDesk.callStart(lead.id);
@@ -241,9 +296,9 @@
     if (!l) { box?.remove(); return; }
     if (!box) { box = document.createElement("div"); box.id = "hpdPhoneCard"; box.className = "hpd hpd-phonecard"; box.setAttribute("role", "status"); document.body.append(box); }
     const P = S.ps;
-    box.innerHTML = `<div class="hpd-sm">${P ? `Phone session · lead ${P.i + 1} of ${P.ids.length}` : "Calling on your phone"}</div>
+    box.innerHTML = `<div class="hpd-sm">${P ? `${S.via === "phone" ? "Phone" : "Calling"} session · lead ${P.i + 1} of ${P.ids.length}` : "Calling on your phone"}</div>
       <b style="font-size:17px">${esc(D.fullName(l))}</b><a class="num" href="${telHref(l.phone)}" style="color:inherit">${esc(fmt(l.phone))}</a>
-      <span class="hpd-sm">Your phone should be ringing them now. When you hang up, pick a result under Log the call${P ? " and the next lead opens" : ""}.</span>
+      <span class="hpd-sm">${S.via === "phone" ? "Your phone should be ringing them now." : "Calling from your headset."} When you hang up, pick a result under Log the call${P ? " and the next lead opens" : ""}.</span>
       <div class="row" style="gap:6px;flex-wrap:wrap"><a class="btn primary" href="${telHref(l.phone)}">Call again</a>${P ? `<button type="button" class="btn" id="hpdPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hpdPsEnd">End session</button>` : `<button type="button" class="btn" id="hpdPsDone">Done</button>`}</div>`;
     $("#hpdPsSkip", box)?.addEventListener("click", () => phoneNext());
     $("#hpdPsEnd", box)?.addEventListener("click", () => phoneEnd());
@@ -269,10 +324,11 @@
   }
 
   /* ================= click-to-call ================= */
-  async function dialLead(lead) {
+  async function dialLead(lead, fromSession) {
     if (S.via === "phone") { if (!S.ps) phoneCall(lead); return; }
+    if (S.ps && !fromSession) return;
     if (S.call || S.power) return;
-    if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Your Twilio account is a free trial without a number. Upgrade it at console.twilio.com, then get a number here, or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
+    if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Get a number in the <b>Number groups</b> tab (about $1 a month), or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast(S.ready ? "Phone is still connecting…" : "The dialer isn't set up yet"); return; }
     if (!(await micCheck())) return;
     note("");
@@ -365,7 +421,7 @@
 
   /* ================= power dialing ================= */
   async function startPower() {
-    if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Your Twilio account is a free trial without a number. Upgrade it at console.twilio.com, then get a number here, or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
+    if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Get a number in the <b>Number groups</b> tab (about $1 a month), or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast("Phone is still connecting…"); return; }
     if (!(await micCheck())) return;
     note("");
@@ -469,7 +525,7 @@
       setTimeout(nextBatch, 600);
     }
     if (S.call && S.callLead === leadId) S.call.disconnect();
-    if (S.via === "phone" && S.phoneLead === leadId) {
+    if ((S.via === "phone" || S.ps) && S.phoneLead === leadId) {
       window.hpDesk.callStop();
       if (S.ps) setTimeout(phoneNext, 700); else { S.phoneLead = null; S.callLead = null; phoneCard(); }
     }
@@ -1339,7 +1395,7 @@
   }
   function renderHome() {
     const el = $("#hpdHome"); if (!el || !window.hpDesk) return;
-    const D = window.hpDesk, q = campaignQueue(), lines = S.via === "phone" ? 1 : Math.min(S.lines, S.settings.maxLines || 3);
+    const D = window.hpDesk, q = campaignQueue(), oneLine = S.via === "phone" || S.provider === "telnyx", lines = oneLine ? 1 : Math.min(S.lines, S.settings.maxLines || 3);
     const headset = S.via === "phone" ? (S.phoneLead ? "live" : "on") : S.call || S.power?.connected ? "live" : S.power ? "dial" : (S.deviceReady || S.demo) ? "on" : "off";
     const t = usage?.today || {}, m = usage?.month || {};
     const estMin = (x) => Math.round(((x.talkSec || 0) + (x.dials || 0) * 25) / 60); // talk + ~25s ringing per dial, both legs billed per minute
@@ -1355,8 +1411,8 @@
       </div>
       <div class="hph-via" role="group" aria-label="Call with"><span class="hpd-sm">Call with</span><button type="button" data-via="line" aria-pressed="${S.via !== "phone"}">Browser phone line</button><button type="button" data-via="phone" aria-pressed="${S.via === "phone"}">My phone</button></div>
       ${S.via === "phone" ? `<div class="hph-setup"><div><b>Calling from your own phone</b><span>Each call opens on your phone: Phone Link on Windows, your iPhone on a Mac, or Google Voice. Leads see your cell number. One line at a time, and recording, voicemail drop and local caller ID need the browser phone line.</span></div></div>` : ""}
-      ${S.via !== "phone" && !S.demo && !S.ready ? `<div class="hph-setup"><div><b>${S.twilio ? "One step left: connect your phone line" : "Phone line not connected"}</b><span>${S.twilio ? (S.me?.admin ? "Your Twilio keys are in. Press Connect once and every agent's dialer turns on." : "Your admin needs to press Connect Twilio once.") : "Your admin needs to add the Twilio keys in Cloudflare first."}</span></div>${S.twilio && S.me?.admin ? `<button type="button" class="btn primary" id="hphSetup">Connect Twilio</button>` : ""}</div>` : ""}
-      ${S.via !== "phone" && !S.demo && S.ready && !S.numbers.length ? `<div class="hph-setup"><div><b>Get your first phone number</b><span>You need a number to call from. Pick one in your area code; Twilio charges about $1.15 a month.</span></div><button type="button" class="btn primary" id="hphBuy">Get a number</button></div>` : ""}
+      ${S.via !== "phone" && !S.demo && !S.ready ? `<div class="hph-setup"><div><b>${S.twilio ? "One step left: connect your phone line" : "Phone line not connected"}</b><span>${S.twilio ? (S.me?.admin ? `Your ${S.provider === "telnyx" ? "Telnyx" : "Twilio"} key is in. Press Connect once and every agent's dialer turns on.` : "Your admin needs to press Connect once.") : "Your admin needs to add the phone keys in Cloudflare first."}</span></div>${S.twilio && S.me?.admin ? `<button type="button" class="btn primary" id="hphSetup">Connect phone line</button>` : ""}</div>` : ""}
+      ${S.via !== "phone" && !S.demo && S.ready && !S.numbers.length ? `<div class="hph-setup"><div><b>Get your first phone number</b><span>You need a number to call from. Pick one in your area code; ${S.provider === "telnyx" ? "Telnyx charges about $1 a month" : "Twilio charges about $1.15 a month"}.</span></div><button type="button" class="btn primary" id="hphBuy">Get a number</button></div>` : ""}
       <div class="hph-bar" data-h="${headset}"><span class="hph-dot"></span><b>${S.via === "phone" ? (S.phoneLead ? "Calling on your phone" : "Your phone is ready") : headset === "live" ? "On a call" : headset === "dial" ? "Headset on · dialing" : headset === "on" ? "Headset on" : "Headset off"}</b>
         <span class="hpd-sm">${headset === "live" ? "Talk away. The lead's profile is open." : headset === "dial" ? `Calling ${lines} at a time from ${esc(listName())}. Whoever says hello first comes straight to you.` : headset === "on" ? "Line is ready. Press Start calling." : S.ready ? "Connecting your line… allow the microphone if your browser asks." : "Press Start calling; your browser joins the line first (allow the microphone)."}</span>
         <button type="button" class="btn hph-soundbtn" id="hphSound" aria-expanded="${S.sound.open}">Sound</button></div>
@@ -1376,8 +1432,8 @@
         <div class="hph-ctl">
           <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
           <label class="hph-sel"><span>Who to call</span><select id="hphFilter" ${S.power ? "disabled" : ""}>${FILTERS.map(([k, n]) => `<option value="${k}" ${S.filter === k ? "selected" : ""}>${n} (${fCount[k]})</option>`).join("")}</select></label>
-          <div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.via === "phone" ? 1 : S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>
-          ${S.via === "phone" ? (S.ps ? `<button type="button" class="btn" id="hphPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hphPsEnd">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphPsGo" ${q.length ? "" : "disabled"}>${I.phone} Start calling</button>`) : S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
+          <div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (oneLine ? 1 : S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>
+          ${oneLine ? (S.ps ? `<button type="button" class="btn" id="hphPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hphPsEnd">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphPsGo" ${q.length ? "" : "disabled"}>${I.phone} Start calling</button>`) : S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
         </div>
       </div>
       <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Today</h3><span class="hpd-sm">Counted as you dial</span></div>
@@ -1401,7 +1457,7 @@
     $("#hphSetup")?.addEventListener("click", async (e) => {
       const b = e.currentTarget; b.disabled = true; b.textContent = "Connecting…";
       try { const r = await api("/setup", { method: "POST" }); S.ready = true; document.body.classList.add("hpd-on"); toast(r.trial ? "Connected. Twilio trial accounts can only call numbers you've verified in Twilio." : "Phone line connected"); startDevice(); refreshNumbers(); renderPhone(); }
-      catch (er) { toast(er.message); b.disabled = false; b.textContent = "Connect Twilio"; }
+      catch (er) { toast(er.message); b.disabled = false; b.textContent = "Connect phone line"; }
     });
     $("#hphBuy")?.addEventListener("click", () => openTab("numbers"));
     $("#hphSound").onclick = () => { S.sound.open = !S.sound.open; lsSet("hpd.sound", S.sound); renderHome(); };
@@ -1412,7 +1468,7 @@
     $("#hphFilter").onchange = (e) => { setFilter(e.target.value); renderHome(); renderPhone(); };
     $$("[data-hl]", el).forEach((b) => (b.onclick = () => { S.lines = +b.dataset.hl; lsSet("hpd.lines", S.lines); savePrefs({ lines: S.lines }); renderHome(); }));
     $$("[data-via]", el).forEach((b) => (b.onclick = () => { if (S.call || S.power || S.ps) { toast("Finish the current calls first"); return; } S.via = b.dataset.via; lsSet("hpd.via", S.via); renderHome(); renderPhone(); }));
-    $("#hphPsGo")?.addEventListener("click", startPhoneSession);
+    $("#hphPsGo")?.addEventListener("click", () => { if (S.via !== "phone" && !S.demo && !S.numbers.length) { dialLead({ phone: "0" }); return; } if (S.via !== "phone" && !S.deviceReady && !S.demo) { toast("Phone line is still connecting…"); return; } startPhoneSession(); });
     $("#hphPsSkip")?.addEventListener("click", () => phoneNext());
     $("#hphPsEnd")?.addEventListener("click", () => phoneEnd());
     $("#hphGo")?.addEventListener("click", () => { S.mode = "power"; lsSet("hpd.mode", "power"); renderPhone(); startPower(); });
