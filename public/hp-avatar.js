@@ -193,7 +193,14 @@
   let uid = 0;
   const CROPS = { bust: "24 0 352 440", head: "52 22 296 296", face: "118 146 164 164", eyes: "124 148 152 152", mouth: "138 222 124 124", beard: "104 172 192 192", body: "40 236 320 320", hat: "40 -10 320 320", close: "36 12 328 328", full: "0 0 400 500" };
 
+  const bitmojiUrl = (c) => (c && typeof c.bitmoji === "string" && /^https:\/\/[^\s"'<>]+$/.test(c.bitmoji) ? c.bitmoji : "");
   function render(c0, size = 200, opts = {}) {
+    const bm = bitmojiUrl(c0);
+    if (bm) {
+      const crop = opts.crop || (size <= 72 ? "head" : "bust"), vb = (CROPS[crop] || CROPS.bust).split(" ").map(Number);
+      const h = opts.slice ? size : Math.round((size * vb[3]) / vb[2]);
+      return `<img src="${esc(bm)}" width="${size}" height="${h}" alt="${esc(opts.label || "Bitmoji")}" loading="lazy" referrerpolicy="no-referrer" style="display:block;object-fit:${crop === "bust" ? "contain" : "cover"};object-position:50% 18%;background:radial-gradient(80% 80% at 50% 35%,#3a2a5a,#160d26)">`;
+    }
     const c = migrate(c0);
     const G = geom(c);
     const u = "hpa" + ++uid;
@@ -855,6 +862,14 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
 .hpa-field input:focus{outline:none;border-color:#FF4FA3;box-shadow:0 0 0 3px rgba(255,79,163,.22)}
 .hpa-note{font-size:12.5px;color:#9EA3B3;margin:0}
 .hpa-err{color:#FF8CA8;font-size:13px;font-weight:700;min-height:18px}
+.hpa-bm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:5;width:min(420px,calc(100% - 32px));padding:24px;border-radius:20px;background:rgba(20,12,32,.98);border:1px solid rgba(255,255,255,.16);box-shadow:0 30px 80px rgba(0,0,0,.6);text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+.hpa-bm h3{margin:0;font:800 19px var(--f-ui,system-ui)}
+.hpa-bm p{margin:0;color:#C9CBD6;font-size:14px;line-height:1.45}
+.hpa-snapbtn{min-height:48px;display:flex;justify-content:center}
+.hpa-bmmsg{min-height:18px;font-weight:700;color:#FFD1EC!important}
+.hpa-bmbar{position:absolute;left:16px;right:16px;bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border-radius:14px;background:rgba(20,12,32,.92);border:1px solid rgba(255,255,255,.14);font-size:13px;font-weight:600;color:#E4E6EE;z-index:2}
+.hpa-bmbar span{flex:1 1 180px}
+.hpa-bmbar .hpa-btn{height:34px;font-size:13px;padding:0 12px}
 .hpa-discard{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;border-radius:14px;background:rgba(20,12,32,.97);border:1px solid rgba(255,255,255,.14);box-shadow:0 16px 40px rgba(0,0,0,.5);font-weight:700;font-size:14px;z-index:3;white-space:nowrap}
 @media (max-width:820px){
   .hpa-sheet{width:100vw;height:100dvh;border-radius:0;border:0}
@@ -884,6 +899,7 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
     <h2>${esc(o.title || "Your character")}</h2>
     <button class="hpa-ib" data-a="undo" aria-label="Undo" title="Undo (Ctrl+Z)">${I.undo}</button>
     <button class="hpa-ib" data-a="redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)">${I.redo}</button>
+    <button class="hpa-btn txt-sm" data-a="bitmoji" title="Use your Snapchat Bitmoji">${I.face}<span>Use my Bitmoji</span></button>
     <button class="hpa-btn txt-sm" data-a="rand" title="Random look">${I.dice}<span>Surprise me</span></button>
     <button class="hpa-btn pri" data-a="save">Save</button>
   </header>
@@ -963,7 +979,7 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
       }).join("");
       wirePanel();
     }
-    function refreshAfterChange(pop = true) { paintAv(pop); paintPanel(); }
+    function refreshAfterChange(pop = true) { paintAv(pop); paintPanel(); if (typeof bmBanner === "function") bmBanner(); }
     function wirePanel() {
       const p = $("#hpaPanel");
       p.querySelectorAll(".hpa-tile, .hpa-chip[data-k]").forEach((b) => b.addEventListener("click", () => {
@@ -1039,6 +1055,50 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
       o.onClose?.();
     }
     $('[data-a="close"]').onclick = () => close();
+    // ---- Bitmoji through Snap Login Kit ----
+    const bmBanner = () => {
+      root.querySelector(".hpa-bmbar")?.remove();
+      if (!bitmojiUrl(st.c)) return;
+      const bar = document.createElement("div"); bar.className = "hpa-bmbar";
+      bar.innerHTML = `<span>Using your Bitmoji. Change your look in Snapchat, then refresh it here.</span><button class="hpa-btn" data-bm="refresh">Refresh</button><button class="hpa-btn" data-bm="off">Use drawn character</button>`;
+      root.querySelector(".hpa-stage").append(bar);
+      bar.querySelector('[data-bm="refresh"]').onclick = openBitmoji;
+      bar.querySelector('[data-bm="off"]').onclick = () => { push(); const n = { ...st.c }; delete n.bitmoji; st.c = n; bmBanner(); refreshAfterChange(); };
+    };
+    let snapCfg = null, snapLoading = null;
+    const loadSnap = () => snapLoading || (snapLoading = new Promise((res, rej) => {
+      if (window.snap?.loginkit) return res();
+      window.snapKitInit = () => res();
+      const sc = document.createElement("script"); sc.src = "https://sdk.snapkit.com/js/v1/login.js"; sc.async = true;
+      sc.onerror = () => { snapLoading = null; rej(new Error("Couldn't reach Snapchat. Check your connection and try again.")); };
+      document.head.append(sc);
+    }));
+    async function openBitmoji() {
+      root.querySelector(".hpa-bm")?.remove();
+      const m = document.createElement("div"); m.className = "hpa-bm"; m.setAttribute("role", "dialog"); m.setAttribute("aria-label", "Use my Bitmoji");
+      m.innerHTML = `<h3>Use your Bitmoji</h3><p>Sign in with Snapchat and allow your Bitmoji. It becomes your character everywhere on the desk. You change your look in Snapchat.</p><div id="hpaSnapBtn" class="hpa-snapbtn"></div><p class="hpa-bmmsg" role="status">Loading Snapchat sign-in…</p><button class="hpa-btn" data-x="1">Cancel</button>`;
+      root.append(m); m.querySelector("[data-x]").onclick = () => m.remove();
+      const msg = (t) => { const e = m.querySelector(".hpa-bmmsg"); if (e) e.textContent = t; };
+      try {
+        snapCfg = snapCfg || (await fetch("/api/config").then((r) => r.json()).catch(() => ({})));
+        if (!snapCfg.snapClientId) { msg("Bitmoji isn't switched on yet. Your admin adds the Snap Client ID in the site settings."); return; }
+        await loadSnap();
+        window.snap.loginkit.mountButton("hpaSnapBtn", {
+          clientId: snapCfg.snapClientId, redirectURI: location.origin + "/", scopeList: ["user.display_name", "user.bitmoji.avatar"],
+          handleResponseCallback: () => {
+            msg("Getting your Bitmoji…");
+            window.snap.loginkit.fetchUserInfo().then((r) => {
+              const url = r?.data?.me?.bitmoji?.avatar;
+              if (!url || !/^https:\/\//.test(url)) { msg("Snapchat didn't share a Bitmoji. Make sure you have one in Snapchat and allow Bitmoji access."); return; }
+              push(); st.c = { ...st.c, bitmoji: url }; m.remove(); bmBanner(); refreshAfterChange();
+              if (!st.handle && r?.data?.me?.displayName) st.handle = String(r.data.me.displayName).slice(0, 20);
+            }, () => msg("Couldn't get your Bitmoji from Snapchat. Try again."));
+          },
+        });
+        msg("");
+      } catch (e) { msg(e.message || "Couldn't load Snapchat sign-in."); }
+    }
+    $('[data-a="bitmoji"]').onclick = openBitmoji;
     root.addEventListener("mousedown", (e) => { if (e.target === root) close(); });
     const save = async () => {
       const h = (st.handle || "").trim().replace(/\s+/g, " "), m = (st.motto || "").trim();
@@ -1066,7 +1126,7 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
       }
     }
     document.addEventListener("keydown", onKey, true);
-    paintPanel(); paintAv(false);
+    paintPanel(); paintAv(false); bmBanner();
     requestAnimationFrame(() => { root.classList.add("in"); root.querySelector(`[data-cat="${st.cat}"]`)?.focus({ preventScroll: true }); });
     return { close };
   }

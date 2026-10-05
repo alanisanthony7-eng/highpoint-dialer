@@ -28,6 +28,7 @@ export async function onRequest(ctx) {
       case "room": return await roomRoute(req, parts[1]);
       case "ai": return await aiRoute(req);
       case "dialer": { const h = DIALER[parts[1]]; if (h) return await h(req, c); break; }
+      case "config": return json({ snapClientId: ctx.env.HP_SNAP_CLIENT_ID || "" }, 200);
       case "health": return json({ ok: true, db: !!ctx.env.DB, twilio: !!(ctx.env.TWILIO_ACCOUNT_SID && ctx.env.TWILIO_AUTH_TOKEN) }, 200);
     }
     return json({ error: "Not found" }, 404);
