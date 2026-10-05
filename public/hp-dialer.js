@@ -66,7 +66,8 @@
     }
     S.lines = Math.min(S.lines, S.settings.maxLines || 3);
     if (S.ready || S.demo) document.body.classList.add("hpd-on");
-    renderPhone();
+    if (Array.isArray(S.prefs.camps) && S.prefs.camps.length > S.camps.length) { S.camps = S.prefs.camps; lsSet("hpd.camps", S.camps); }
+    buildHome(); renderPhone();
     if (S.ready) startDevice();
     refreshNumbers(); loadGreetings(); inboxBadge();
     setInterval(inboxBadge, 60000);
@@ -83,13 +84,13 @@
     // tabs
     const tabs = $("#dTabs");
     if (tabs) {
-      tabs.style.maxWidth = "760px"; tabs.style.gridTemplateColumns = "repeat(5,1fr)";
-      tabs.insertAdjacentHTML("beforeend", `<button type="button" data-hpd="numbers" aria-pressed="false">Numbers</button><button type="button" data-hpd="stats" aria-pressed="false">Analytics</button><button type="button" data-hpd="inbox" aria-pressed="false">Inbox <span class="hpd-pill" id="hpdInboxN" hidden></span></button>`);
+      tabs.style.maxWidth = "none"; tabs.style.gridTemplateColumns = "repeat(7,auto)";
+      tabs.insertAdjacentHTML("beforeend", `<button type="button" data-hpd="recs" aria-pressed="false">Recordings</button><button type="button" data-hpd="numbers" aria-pressed="false">Number groups</button><button type="button" data-hpd="stats" aria-pressed="false">Analytics</button><button type="button" data-hpd="inbox" aria-pressed="false">Inbox &amp; settings <span class="hpd-pill" id="hpdInboxN" hidden></span></button><button type="button" data-hpd="dnc" aria-pressed="false">Do not call</button>`);
       $$("[data-dt]", tabs).forEach((b) => b.addEventListener("click", () => { S.tab = null; $$(".hpd-pane").forEach((x) => (x.hidden = true)); $$("[data-hpd]", tabs).forEach((x) => x.setAttribute("aria-pressed", "false")); }));
       $$("[data-hpd]", tabs).forEach((b) => (b.onclick = () => openTab(b.dataset.hpd)));
     }
     const host = $("#dPane").parentNode;
-    host.insertAdjacentHTML("beforeend", `<div class="hpd-pane" id="hpdNumbers" hidden></div><div class="hpd-pane" id="hpdStats" hidden></div><div class="hpd-pane" id="hpdInbox" hidden></div>`);
+    host.insertAdjacentHTML("beforeend", `<div class="hpd-pane" id="hpdRecs" hidden></div><div class="hpd-pane" id="hpdDnc" hidden></div><div class="hpd-pane" id="hpdNumbers" hidden></div><div class="hpd-pane" id="hpdStats" hidden></div><div class="hpd-pane" id="hpdInbox" hidden></div>`);
 
     // phone panel replaces the WAVV launcher (kept hidden for the CSV export)
     const wavv = $("#wavvUrl")?.closest(".panel");
@@ -104,7 +105,8 @@
     $$("#dTabs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.hpd === t)));
     $("#dPane").hidden = true; $("#hPane").hidden = true;
     $$(".hpd-pane").forEach((x) => (x.hidden = x.id !== "hpd" + t[0].toUpperCase() + t.slice(1)));
-    ({ numbers: renderNumbers, stats: renderStats, inbox: renderInbox })[t]?.();
+    if ($("#hpdHome")) $("#hpdHome").hidden = true;
+    ({ numbers: renderNumbers, stats: renderStats, inbox: renderInbox, recs: renderRecs, dnc: renderDnc })[t]?.();
   }
   const setChip = (s, t) => { const c = $("#hpdState"); if (c) { c.dataset.s = s; c.innerHTML = `<i></i>${esc(t)}`; } };
   const note = (html, cls = "") => { const n = $("#hpdNote"); if (n) { n.className = "hpd-banner " + cls; n.innerHTML = html; n.hidden = !html; } };
@@ -123,7 +125,6 @@
         <button type="button" data-mode="power" aria-pressed="${S.mode === "power"}" ${live ? "disabled" : ""}>Power dial</button>
       </div>
       ${S.mode === "power" ? `<div class="hpd-linesel">Lines ${[1, 2, 3].map((n) => `<button type="button" data-lines="${n}" aria-pressed="${S.lines === n}" ${n > maxL || live ? "disabled" : ""}>${n}</button>`).join("")}<span style="margin-left:auto" class="hpd-sm">${S.lines > 1 ? "First to say hello connects" : "One at a time"}</span></div>` : ""}
-      <label class="field"><span>Campaign</span><select id="hpdCamp" ${live ? "disabled" : ""}><option value="">Dialer queue (stage and product above)</option>${campaigns().map((c) => `<option value="${esc(c.name)}" ${S.campaign === c.name ? "selected" : ""}>${esc(c.name)} · ${c.ready} to call</option>`).join("")}</select></label>
       <label class="field"><span>Caller ID</span><select id="hpdCid" ${live ? "disabled" : ""}><option value="">Auto: local number for each lead</option>${myNums.map((n) => `<option value="${esc(n.e164)}" ${S.prefs.defaultCallerId === n.e164 ? "selected" : ""}>${esc(fmt(n.e164))}${n.label ? " · " + esc(n.label) : ""}${n.health?.status === "flagged" ? " (flagged)" : ""}</option>`).join("")}</select></label>
       <div class="hpd-actions" id="hpdActs"></div>
       <div id="hpdLive" class="stack" style="gap:10px" hidden>
@@ -142,7 +143,6 @@
     $$("[data-mode]", el).forEach((b) => (b.onclick = () => { S.mode = b.dataset.mode; lsSet("hpd.mode", S.mode); renderPhone(); }));
     $$("[data-lines]", el).forEach((b) => (b.onclick = () => { S.lines = +b.dataset.lines; lsSet("hpd.lines", S.lines); savePrefs({ lines: S.lines }); renderPhone(); }));
     $("#hpdCid").onchange = (e) => savePrefs({ defaultCallerId: e.target.value });
-    $("#hpdCamp").onchange = (e) => { S.campaign = e.target.value; lsSet("hpd.campaign", S.campaign); const q = campaignQueue(); if (q[0] && S.mode === "single") window.hpDesk.setCurrent(q[0].id); renderPhone(); };
     $("#hpdMute").onclick = toggleMute;
     $("#hpdPadBtn").onclick = () => { S.padOpen = !S.padOpen; $("#hpdPad").hidden = !S.padOpen; $("#hpdPadBtn").setAttribute("aria-pressed", S.padOpen); };
     $$("[data-dtmf]", el).forEach((b) => (b.onclick = () => dtmf(b.dataset.dtmf)));
@@ -151,6 +151,7 @@
     $("#hpdSetup")?.addEventListener("click", runSetup);
     renderActions(); renderLive();
     if (S.demo) setChip("demo", "Demo"); else if (S.call || S.power?.connected) setChip("live", "On call"); else if (S.power) setChip("ready", S.power.paused ? "Paused" : "Dialing"); else if (S.device?.state === "registered" || S.deviceReady) setChip("ready", "Ready"); else if (!S.ready) setChip("", "Not set up"); else setChip("", "Connecting");
+    renderHome();
     if (S.demo && !$("#hpdNote").innerHTML) note(`<b>Preview mode.</b> Calls here are simulated so you can try the flow. Real calling turns on once the dialer is deployed to your site and Twilio is connected.`, "warn");
   }
   function setupCard() {
@@ -184,7 +185,7 @@
   }
   const currentLead = () => {
     const D = window.hpDesk; if (!D) return null;
-    if (S.campaign) { const cur = D.leads.get(PF.id); if (cur && (cur.source || "No campaign") === S.campaign && !CLOSED.includes(cur.stage)) return cur; return campaignQueue()[0] || null; }
+    if (PF.id && D.leads.get(PF.id) && !CLOSED.includes(D.leads.get(PF.id).stage)) return D.leads.get(PF.id);
     return D.leads.get(D.currentId());
   };
 
@@ -199,7 +200,7 @@
       await loadSdk();
       const { token } = await api("/token");
       const dev = new Twilio.Device(token, { codecPreferences: ["opus", "pcmu"], closeProtection: "You're on a call. Leave anyway?", logLevel: 1, enableImprovedSignalingErrorPrecision: true });
-      dev.on("registered", () => { S.deviceReady = true; if (!S.call && !S.power) setChip("ready", "Ready"); });
+      dev.on("registered", () => { S.deviceReady = true; applyDevices(); renderHome(); if (!S.call && !S.power) setChip("ready", "Ready"); });
       dev.on("unregistered", () => { S.deviceReady = false; });
       dev.on("error", (e) => { console.warn(e); if (/31205|20104|AccessToken/i.test(e.code + e.message)) refreshToken(); else note(esc(e.message || "Phone error"), "warn"); });
       dev.on("tokenWillExpire", refreshToken);
@@ -864,7 +865,7 @@
     }
     const P = S.power;
     f.innerHTML = `
-      <div class="hpd-fhead" id="hpdFDrag"><b>HP</b><span>${S.call ? "On call" : P?.connected ? "Connected" : P?.paused ? "Paused" : "Calling"}</span><span class="hpd-sm" style="margin-left:auto">${P ? (S.campaign ? esc(S.campaign) : "Queue") : ""}</span></div>
+      <div class="hpd-fhead" id="hpdFDrag"><b>HP</b><span>${S.call ? "On call" : P?.connected ? "Connected" : P?.paused ? "Paused" : "Calling"}</span><span class="hpd-sm" style="margin-left:auto">${P ? esc(listName()) : ""}</span></div>
       <div class="hpd-fbtns">
         <button type="button" class="hpd-fb hang" id="hpdFHang" ${S.call || P?.connected ? "" : "disabled"}>${I.phone} Hangup</button>
         ${P ? `<button type="button" class="hpd-fb ${P.paused ? "go" : ""}" id="hpdFPause">${P.paused ? I.play + " Resume" : I.pause + " Pause"}</button>` : `<button type="button" class="hpd-fb" id="hpdFMute">${S.muted ? I.micoff : I.mic} ${S.muted ? "Unmute" : "Mute"}</button>`}
@@ -924,7 +925,7 @@
         <button type="button" class="hpf-x" id="hpfClose" aria-label="Close profile">✕</button>
         <div class="hpf-who"><span class="hpf-av">${esc(((l.first || "?")[0] + (l.last || "")[0] || "").toUpperCase())}</span><div><b>${esc(D.fullName(l))}</b><span class="hpd-sm">${esc(fmt(l.phone))}${l.state ? " · " + esc(l.state) : ""}${l.age ? " · " + esc(l.age) + " yrs" : ""}</span></div>
           ${live ? `<span class="hpd-chip" data-s="live"><i></i>On call <span id="hpfClock" class="num" style="margin-left:4px"></span></span>` : ""}</div>
-        <div class="hpf-nav"><span class="hpd-sm">${S.campaign ? esc(S.campaign) + " · " : ""}${idx + 1}/${n}</span><button type="button" id="hpfPrev" aria-label="Previous lead" ${idx <= 0 ? "disabled" : ""}>‹</button><button type="button" id="hpfNext" aria-label="Next lead" ${idx >= n - 1 ? "disabled" : ""}>›</button></div>
+        <div class="hpf-nav"><span class="hpd-sm">${esc(listName())} · ${idx + 1}/${n}</span><button type="button" id="hpfPrev" aria-label="Previous lead" ${idx <= 0 ? "disabled" : ""}>‹</button><button type="button" id="hpfNext" aria-label="Next lead" ${idx >= n - 1 ? "disabled" : ""}>›</button></div>
         <div class="hpf-acts">${live ? `<button type="button" class="btn hpd-hang" id="hpfHang">${I.phone} Hang up</button>` : `<button type="button" class="btn primary" id="hpfCall" ${onAnother || S.power ? "disabled" : ""}>${I.phone} Call</button>`}</div>
       </div>
       <div class="hpf-cols">
@@ -1170,6 +1171,255 @@
     const age = late < 0 ? `in ${Math.max(1, Math.round(-late * 1440))} min` : late < 1 / 24 ? "due now" : late < 1 ? `${Math.round(late * 24)}h overdue` : `${Math.round(late * 2) / 2} days old`;
     b.hidden = false; b.innerHTML = `<span>Callback</span><b>${esc(window.hpDesk.fullName(l))}</b><em>${age}</em>${due.length > 1 ? `<i>+${due.length - 1}</i>` : ""}`;
     b.onclick = () => openProfile(l.id);
+  }
+
+  /* ================= dialer home (Noctra-style layout, Highpoint look) ================= */
+  const AREA_ST = (() => { const m = {}; const src = { AL: "205 251 256 334 659 938", AK: "907", AZ: "480 520 602 623 928", AR: "327 479 501 870", CA: "209 213 279 310 323 341 350 369 408 415 424 442 510 530 559 562 619 626 628 650 657 661 669 707 714 747 760 805 818 820 831 840 858 909 916 925 949 951", CO: "303 719 720 970 983", CT: "203 475 860 959", DE: "302", DC: "202 771", FL: "239 305 321 324 352 386 407 448 561 645 656 689 727 728 754 772 786 813 850 863 904 941 954", GA: "229 404 470 478 678 706 762 770 912 943", HI: "808", ID: "208 986", IL: "217 224 309 312 331 447 464 618 630 708 730 773 779 815 847 861 872", IN: "219 260 317 463 574 765 812 930", IA: "319 515 563 641 712", KS: "316 620 785 913", KY: "270 364 502 606 859", LA: "225 318 337 504 985", ME: "207", MD: "227 240 301 410 443 667", MA: "339 351 413 508 617 774 781 857 978", MI: "231 248 269 313 517 586 616 679 734 810 906 947 989", MN: "218 320 507 612 651 763 952", MS: "228 601 662 769", MO: "314 417 557 573 636 660 816 975", MT: "406", NE: "308 402 531", NV: "702 725 775", NH: "603", NJ: "201 551 609 640 732 848 856 862 908 973", NM: "505 575", NY: "212 315 329 332 347 363 516 518 585 607 624 631 646 680 716 718 838 845 914 917 929 934", NC: "252 336 472 704 743 828 910 919 980 984", ND: "701", OH: "216 220 234 283 326 330 380 419 436 440 513 567 614 740 937", OK: "405 539 572 580 918", OR: "458 503 541 971", PA: "215 223 267 272 412 445 484 570 582 610 717 724 814 835 878", RI: "401", SC: "803 821 839 843 854 864", SD: "605", TN: "423 615 629 731 865 901 931", TX: "210 214 254 281 325 346 361 409 430 432 469 512 682 713 726 737 806 817 830 832 903 915 936 940 945 956 972 979", UT: "385 435 801", VT: "802", VA: "276 434 540 571 686 703 757 804 826 948", WA: "206 253 360 425 509 564", WV: "304 681", WI: "262 274 353 414 534 608 715 920", WY: "307", PR: "787 939" }; for (const [st, c] of Object.entries(src)) c.split(" ").forEach((x) => (m[x] = st)); return m; })();
+  const ET = "America/New_York", CT = "America/Chicago", MT = "America/Denver", PT = "America/Los_Angeles";
+  const ST_TZ = { AL: CT, AK: "America/Anchorage", AZ: "America/Phoenix", AR: CT, CA: PT, CO: MT, CT: ET, DE: ET, DC: ET, FL: ET, GA: ET, HI: "Pacific/Honolulu", ID: MT, IL: CT, IN: ET, IA: CT, KS: CT, KY: ET, LA: CT, ME: ET, MD: ET, MA: ET, MI: ET, MN: CT, MS: CT, MO: CT, MT: MT, NE: CT, NV: PT, NH: ET, NJ: ET, NM: MT, NY: ET, NC: ET, ND: CT, OH: ET, OK: CT, OR: PT, PA: ET, RI: ET, SC: ET, SD: CT, TN: CT, TX: CT, UT: MT, VT: ET, VA: ET, WA: PT, WV: ET, WI: CT, WY: MT, PR: "America/Puerto_Rico" };
+  const leadState = (l) => AREA_ST[d10(l.phone).slice(0, 3)] || String(l.state || "").toUpperCase().slice(0, 2);
+  function leadClock(l) {
+    const st = leadState(l), tz = ST_TZ[st]; if (!tz) return { st: st || "—", txt: "", ok: true, h: 12 };
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+    const h = +p.hour + +p.minute / 60; const rule = S.settings.stateRules?.[st] || {}; const start = rule.start ?? 8, end = rule.end ?? 21;
+    const h12 = ((+p.hour + 11) % 12) + 1;
+    return { st, h, ok: h >= start && h < end, txt: `${h12}:${p.minute} ${+p.hour < 12 ? "AM" : "PM"}`, start };
+  }
+  const WARM = ["contacted", "appointment", "application"];
+  const dialable = (l) => d10(l.phone).length === 10 && !CLOSED.includes(l.stage) && !l.dnc;
+  S.camps = lsGet("hpd.camps", []); S.listKey = lsGet("hpd.list", "ready");
+  const LISTS = [["ready", "Ready now", "#3BD38B"], ["followups", "Follow-ups due", "#FFB547"], ["new", "New", "#8FB8FF"], ["warm", "Warm", "#FF7A59"], ["everyone", "Everyone", "#9AA1AE"]];
+  function listLeads(key) {
+    const all = [...(window.hpDesk?.leads.values() || [])];
+    if (key.startsWith("c:")) { const c = S.camps.find((x) => x.id === key.slice(2)); const set = new Set(c?.ids || []); return all.filter((l) => set.has(l.id)); }
+    if (key.startsWith("s:")) return all.filter((l) => (l.source || "No campaign") === key.slice(2));
+    const d = all.filter(dialable);
+    return { ready: d.filter((l) => (S.demo || leadClock(l).ok) && !(l.callbackAt > Date.now())), followups: d.filter((l) => l.callbackAt && l.callbackAt <= Date.now()), new: d.filter((l) => (l.stage || "new") === "new"), warm: d.filter((l) => WARM.includes(l.stage)), everyone: all }[key] || [];
+  }
+  const listName = (key = S.listKey) => key.startsWith("c:") ? (S.camps.find((c) => c.id === key.slice(2))?.name || "Campaign") : key.startsWith("s:") ? key.slice(2) : (LISTS.find((x) => x[0] === key)?.[1] || "Ready now");
+  // override the earlier campaign queue so every dialing path uses the chosen list
+  campaignQueue = function () {
+    const sorted = listLeads(S.listKey).filter(dialable).filter((l) => S.demo || leadClock(l).ok)
+      .sort((a, b) => ((a.callbackAt && a.callbackAt <= Date.now() ? 0 : 1) - (b.callbackAt && b.callbackAt <= Date.now() ? 0 : 1)) || (a.lastCallAt || 0) - (b.lastCallAt || 0) || (a.createdAt || 0) - (b.createdAt || 0));
+    const c = S.listKey.startsWith("c:") && S.camps.find((x) => x.id === S.listKey.slice(2));
+    return c?.paused ? [] : sorted;
+  };
+  function saveCamps() { lsSet("hpd.camps", S.camps); savePrefs({ camps: S.camps.map((c) => ({ ...c, ids: c.ids.slice(0, 5000) })) }); }
+  function campStats(c) {
+    const ids = new Set(c.ids); let dialed = 0, convo = 0, talk = 0;
+    for (const id of ids) { const l = window.hpDesk.leads.get(id); if (l?.lastCallAt >= c.created) dialed++; }
+    for (const call of window.hpDesk.calls.values()) if (ids.has(call.leadId) && call.at >= c.created) { if (!/No answer|voicemail|Bad number|Busy|Not dialed|Machine/i.test(call.outcome)) convo++; talk += (call.dur || 0) / 1000; }
+    return { dialed, convo, talk };
+  }
+
+  S.sound = lsGet("hpd.sound", { ding: 0.75, open: false, spk: "", mic: "" });
+  function ding(force) { if (!force && !S.sound.ding) return; try { const a = new AudioContext(), g = a.createGain(); g.gain.value = 0.12 * S.sound.ding; g.connect(a.destination); [880, 1320].forEach((f, i) => { const o = a.createOscillator(); o.frequency.value = f; o.connect(g); o.start(a.currentTime + i * 0.12); o.stop(a.currentTime + i * 0.12 + 0.14); }); } catch {} }
+  beep = () => ding();
+
+  let usage = null;
+  async function loadUsage() {
+    try {
+      const dom = new Date().getDate();
+      const [d1, dm] = await Promise.all([api(`/calls/analytics?days=1`), api(`/calls/analytics?days=${dom}`)]);
+      usage = { today: d1.total, month: dm.total };
+    } catch { usage = null; }
+    if (!$("#hpdHome")?.hidden) renderHome();
+  }
+
+  function buildHome() {
+    if ($("#hpdHome")) return;
+    const host = $("#dPane"); host.insertAdjacentHTML("beforebegin", `<div class="hpd hpd-home" id="hpdHome"></div>`);
+    host.classList.add("hpd-manualpane");
+    // desk tabs: Dial shows the home; history/our tabs hide it
+    $$("#dTabs [data-dt]").forEach((b) => b.addEventListener("click", () => { $("#hpdHome").hidden = b.dataset.dt !== "dial"; if (b.dataset.dt === "dial") renderHome(); }));
+    const t = $('#dTabs [data-dt="dial"]'); if (t) t.textContent = "Dial";
+    renderHome(); loadUsage(); setInterval(() => { if (!$("#hpdHome")?.hidden && !document.activeElement?.closest?.("#hpdHome")) renderHome(); }, 15000); setInterval(loadUsage, 120000);
+  }
+
+  function renderHome() {
+    const el = $("#hpdHome"); if (!el || !window.hpDesk) return;
+    const D = window.hpDesk, q = campaignQueue(), lines = Math.min(S.lines, S.settings.maxLines || 3);
+    const headset = S.call || S.power?.connected ? "live" : S.power ? "dial" : (S.deviceReady || S.demo) ? "on" : "off";
+    const t = usage?.today || {}, m = usage?.month || {};
+    const estMin = (x) => Math.round(((x.talkSec || 0) + (x.dials || 0) * 25) / 60); // talk + ~25s ringing per dial, both legs billed per minute
+    const cost = (min) => "$" + (min * 0.018).toFixed(2);
+    const soldToday = [...D.leads.values()].filter((l) => l.stage === "sold" && (l.updatedAt || 0) >= new Date().setHours(0, 0, 0, 0)).length;
+    const outside = listLeads(S.listKey).filter(dialable).filter((l) => !leadClock(l).ok).length;
+    const sources = campaigns().filter((c) => c.name !== "No campaign");
+    el.innerHTML = `
+      <div class="hph-head">
+        <p class="hpd-sm" style="margin:0">Your lines, your leads, Highpoint's own phone.</p>
+        <button type="button" class="btn" id="hphPick">Campaigns</button>
+      </div>
+      <div class="hph-bar" data-h="${headset}"><span class="hph-dot"></span><b>${headset === "live" ? "On a call" : headset === "dial" ? "Headset on · dialing" : headset === "on" ? "Headset on" : "Headset off"}</b>
+        <span class="hpd-sm">${headset === "live" ? "Talk away. The lead's profile is open." : headset === "dial" ? `Calling ${lines} at a time from ${esc(listName())}. Whoever says hello first comes straight to you.` : headset === "on" ? "Line is ready. Press Start calling." : S.ready ? "Connecting your line… allow the microphone if your browser asks." : "Press Start calling; your browser joins the line first (allow the microphone)."}</span>
+        <button type="button" class="btn hph-soundbtn" id="hphSound" aria-expanded="${S.sound.open}">Sound</button></div>
+      <div class="hph-sound" id="hphSoundP" ${S.sound.open ? "" : "hidden"}>
+        <label><span>Speaker</span><select id="hphSpk"><option value="">System default</option></select></label>
+        <label><span>Microphone</span><select id="hphMic"><option value="">System default</option></select></label>
+        <label><span>Pick-up ding</span><input type="range" id="hphDing" min="0" max="1" step="0.05" value="${S.sound.ding}"><b class="num">${Math.round(S.sound.ding * 100)}%</b></label>
+        <button type="button" class="btn" id="hphTest">Test ding</button>
+      </div>
+      <div class="hph-usage">
+        <div><b class="num">${usage ? estMin(t) : "—"}</b> min today<span>${usage ? cost(estMin(t)) + " est." : ""}</span></div>
+        <div><b class="num">${usage ? estMin(m) : "—"}</b> min this month<span>${usage ? cost(estMin(m)) + " est." : ""}</span></div>
+        <div><b class="num">${usage ? Math.round((t.talkSec || 0) / 60) : "—"}</b> talk min<span>${usage ? `${t.dials || 0} dials · ${t.answered || 0} answered` : ""}</span></div>
+      </div>
+      <div class="hph-ready">
+        <div><h3>${S.power ? (S.power.paused ? "Paused" : "Dialing") : "Ready to dial"}</h3><p class="hpd-sm">${q.length.toLocaleString()} lead${q.length === 1 ? "" : "s"} · ${lines} line${lines > 1 ? "s" : ""} · no time limit · calls as long as needed${outside ? ` · ${outside} outside calling hours${S.demo ? " (preview dials them anyway)" : ""}` : ""}</p></div>
+        <div class="hph-ctl">
+          <select id="hphList" aria-label="Who to call">${LISTS.map(([k, n]) => `<option value="${k}" ${S.listKey === k ? "selected" : ""}>${n}</option>`).join("")}${S.camps.length ? `<optgroup label="Campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.listKey === "c:" + c.id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</optgroup>` : ""}${sources.length ? `<optgroup label="Imports">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.listKey === "s:" + c.name ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</optgroup>` : ""}</select>
+          <div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>
+          ${S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
+        </div>
+      </div>
+      <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Today</h3><span class="hpd-sm">Counted as you dial</span></div>
+        <div class="hph-tiles">
+          <div style="--c:#8FB8FF"><b class="num">${t.dials || 0}</b><span>Total calls</span></div>
+          <div style="--c:#3BD38B"><b class="num">${t.connects || 0}</b><span>Conversations</span></div>
+          <div style="--c:#B58CFF"><b class="num">${dur(t.talkSec || 0)}</b><span>Talk time</span></div>
+          <div style="--c:#FFB547"><b class="num">${t.appts || 0}</b><span>Appointments</span></div>
+          <div style="--c:#FF9E3D"><b class="num">${soldToday}</b><span>Sold</span></div>
+          <div style="--c:#FF4FA3"><b class="num">${pct(t.answered || 0, t.dials || 0)}%</b><span>Answered</span></div>
+        </div></div>
+      <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Campaigns</h3><button type="button" class="hpf-link" id="hphAll">New campaign</button></div>
+        ${S.camps.length ? S.camps.map((c) => { const s = campStats(c); return `<div class="hph-camp ${S.listKey === "c:" + c.id ? "on" : ""}"><button type="button" class="hph-campname" data-usec="${esc(c.id)}"><b>${esc(c.name)} · ${c.ids.length.toLocaleString()} leads</b><span class="${c.paused ? "p" : "a"}">${c.paused ? "Paused" : "Active"}</span></button><div class="hpd-meter"><i style="width:${pct(s.dialed, c.ids.length)}%"></i></div><span class="hph-cs"><em style="color:#8FB8FF">${s.dialed} of ${c.ids.length} dialed</em><em style="color:#3BD38B">${s.convo} conversations</em><em style="color:#B58CFF">${dur(s.talk)} talk</em></span><button type="button" class="hph-ic" data-cpause="${esc(c.id)}" aria-label="${c.paused ? "Resume" : "Pause"} campaign" title="${c.paused ? "Resume" : "Pause"}">${c.paused ? I.play : I.pause}</button><button type="button" class="hph-ic" data-cdel="${esc(c.id)}" aria-label="Delete campaign" title="Delete campaign (leads stay)">✕</button></div>`; }).join("") : `<p class="hpd-sm" style="margin:0">No campaigns yet. Press <b>Campaigns</b> to pick who to call and save them as a campaign.</p>`}
+      </div>
+      <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Up next</h3><span class="hpd-sm">local time where they are</span></div>
+        <div class="hph-next">${q.slice(0, 12).map((l) => { const k = leadClock(l); return `<button type="button" data-open="${esc(l.id)}"><b>${esc(D.fullName(l))}</b><span class="num">${esc(fmt(l.phone))}</span><span class="num ${k.ok ? "" : "late"}">${esc(k.st)} ${esc(k.txt)}</span><span class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</span></button>`; }).join("") || `<p class="hpd-sm" style="margin:0">Nobody to call in ${esc(listName())} right now${outside ? ` (${outside} are outside calling hours)` : ""}.</p>`}</div>
+      </div>
+      <button type="button" class="hpf-link hpd-sm" id="hphManual">${$("#dPane").classList.contains("hpd-showmanual") ? "Hide" : "Show"} the one-by-one call queue</button>`;
+    // wiring
+    $("#hphPick").onclick = openPicker; $("#hphAll").onclick = openPicker;
+    $("#hphSound").onclick = () => { S.sound.open = !S.sound.open; lsSet("hpd.sound", S.sound); renderHome(); };
+    $("#hphTest").onclick = () => ding(true);
+    $("#hphDing").oninput = (e) => { S.sound.ding = +e.target.value; lsSet("hpd.sound", S.sound); e.target.nextElementSibling.textContent = Math.round(S.sound.ding * 100) + "%"; };
+    fillDevices();
+    $("#hphList").onchange = (e) => { S.listKey = e.target.value; lsSet("hpd.list", S.listKey); renderHome(); renderPhone(); };
+    $$("[data-hl]", el).forEach((b) => (b.onclick = () => { S.lines = +b.dataset.hl; lsSet("hpd.lines", S.lines); savePrefs({ lines: S.lines }); renderHome(); }));
+    $("#hphGo")?.addEventListener("click", () => { S.mode = "power"; lsSet("hpd.mode", "power"); renderPhone(); startPower(); });
+    $("#hphPause")?.addEventListener("click", togglePause);
+    $("#hphStop")?.addEventListener("click", stopPower);
+    $$("[data-open]", el).forEach((b) => (b.onclick = () => openProfile(b.dataset.open)));
+    $$("[data-usec]", el).forEach((b) => (b.onclick = () => { S.listKey = "c:" + b.dataset.usec; lsSet("hpd.list", S.listKey); renderHome(); }));
+    $$("[data-cpause]", el).forEach((b) => (b.onclick = () => { const c = S.camps.find((x) => x.id === b.dataset.cpause); c.paused = !c.paused; saveCamps(); renderHome(); }));
+    $$("[data-cdel]", el).forEach((b) => (b.onclick = () => { if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Delete?"; b.classList.add("armed"); return; } S.camps = S.camps.filter((x) => x.id !== b.dataset.cdel); if (S.listKey === "c:" + b.dataset.cdel) S.listKey = "ready"; saveCamps(); renderHome(); toast("Campaign deleted. The leads are still in your CRM."); }));
+    $("#hphManual").onclick = () => { $("#dPane").classList.toggle("hpd-showmanual"); renderHome(); };
+  }
+  async function fillDevices() {
+    const spk = $("#hphSpk"), mic = $("#hphMic"); if (!spk || !navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      const add = (sel, kind, cur) => devs.filter((d) => d.kind === kind && d.deviceId && d.deviceId !== "default").forEach((d, i) => sel.insertAdjacentHTML("beforeend", `<option value="${esc(d.deviceId)}" ${cur === d.deviceId ? "selected" : ""}>${esc(d.label || (kind === "audiooutput" ? "Speaker " : "Microphone ") + (i + 1))}</option>`));
+      add(spk, "audiooutput", S.sound.spk); add(mic, "audioinput", S.sound.mic);
+      spk.onchange = () => { S.sound.spk = spk.value; lsSet("hpd.sound", S.sound); applyDevices(); };
+      mic.onchange = () => { S.sound.mic = mic.value; lsSet("hpd.sound", S.sound); applyDevices(); };
+    } catch {}
+  }
+  function applyDevices() {
+    const a = S.device?.audio; if (!a) return;
+    try { if (S.sound.spk && a.isOutputSelectionSupported) { a.speakerDevices.set(S.sound.spk); a.ringtoneDevices.set(S.sound.spk); } } catch {}
+    try { if (S.sound.mic) a.setInputDevice?.(S.sound.mic); } catch {}
+  }
+
+  /* "Who are we calling?" picker → campaigns */
+  function openPicker() {
+    const D = window.hpDesk; let key = S.listKey.startsWith("c:") || S.listKey.startsWith("s:") ? S.listKey : "ready", q = "", onlyPicked = false;
+    const picked = new Set(); let lastIdx = -1;
+    const m = document.createElement("div"); m.className = "hpd hph-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-label", "Who are we calling?");
+    document.body.append(m);
+    const rows = () => { let r = listLeads(key).filter((l) => !q || [D.fullName(l), l.phone, l.state, l.source, ...(l.tags || [])].join(" ").toLowerCase().includes(q) || (d10(q).length >= 3 && d10(l.phone).includes(d10(q)))); if (onlyPicked) r = r.filter((l) => picked.has(l.id)); return r; };
+    const first = (n) => { picked.clear(); rows().filter(dialable).slice(0, n).forEach((l) => picked.add(l.id)); draw(); };
+    const draw = () => {
+      const r = rows(), counts = Object.fromEntries(LISTS.map(([k]) => [k, listLeads(k).length]));
+      const pickedLeads = [...picked].map((id) => D.leads.get(id)).filter(Boolean); const out = pickedLeads.filter((l) => !leadClock(l).ok).length;
+      m.innerHTML = `<div class="hph-mbox">
+        <div class="hph-mtop"><h2>Who are we calling?</h2><input type="search" id="hpmQ" placeholder="Search name, phone, state, tag" value="${esc(q)}"><button type="button" class="hpf-x" id="hpmX" aria-label="Close">✕</button></div>
+        <div class="hph-mbody">
+          <aside><span class="hph-ml">Lists</span>${LISTS.map(([k, n, c]) => `<button type="button" data-k="${k}" aria-pressed="${key === k}"><i style="background:${c}"></i>${n}<b class="num">${counts[k].toLocaleString()}</b></button>`).join("")}
+            <span class="hph-ml">Imports</span>${campaigns().filter((c) => c.name !== "No campaign").slice(0, 12).map((c) => `<button type="button" data-k="s:${esc(c.name)}" aria-pressed="${key === "s:" + c.name}"><i style="background:#FF9E3D"></i>${esc(c.name)}<b class="num">${c.total}</b></button>`).join("")}<button type="button" id="hpmImport" class="hph-mlink">+ Import leads…</button>
+            ${S.camps.length ? `<span class="hph-ml">Campaigns</span>${S.camps.map((c) => `<button type="button" data-k="c:${esc(c.id)}" aria-pressed="${key === "c:" + c.id}"><i style="background:#3BD38B"></i>${esc(c.name)}<b class="num">${c.ids.length}</b></button>`).join("")}` : ""}
+            <div class="hph-keys"><span><kbd>Ctrl A</kbd> tick everyone shown</span><span><kbd>⇧ click</kbd> tick a range</span><span><kbd>Ctrl ↵</kbd> create the campaign</span><span><kbd>/</kbd> search</span></div>
+          </aside>
+          <section>
+            <div class="hph-mbar"><label class="hpd-flex hpd-sm"><input type="checkbox" id="hpmAll" ${r.length && r.every((l) => picked.has(l.id)) ? "checked" : ""}> ${r.length.toLocaleString()} shown</label><span class="hpd-sm" style="margin-left:auto">Pick first</span>${[25, 50, 100, 250].map((n) => `<button type="button" class="hph-pf" data-first="${n}">${n}</button>`).join("")}</div>
+            <div class="hph-mtable"><table class="hpd-tbl"><thead><tr><th></th><th>Name</th><th>Phone</th><th>State · their time</th><th class="hide-sm">Last call</th><th>Stage</th></tr></thead><tbody>
+            ${r.slice(0, 400).map((l, i) => { const k = leadClock(l); return `<tr data-i="${i}" data-id="${esc(l.id)}" class="${picked.has(l.id) ? "on" : ""}"><td><input type="checkbox" aria-label="Pick ${esc(D.fullName(l))}" ${picked.has(l.id) ? "checked" : ""}></td><td><b>${esc(D.fullName(l))}</b></td><td class="num">${esc(fmt(l.phone))}</td><td class="num ${k.ok ? "ok" : "late"}">${esc(k.st)} · ${esc(k.txt)}</td><td class="hide-sm hpd-sm">${l.lastCallAt ? ago(l.lastCallAt) : "Never"}</td><td><span class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</span></td></tr>`; }).join("") || `<tr><td colspan="6" class="hpd-sm" style="padding:20px">No leads here.</td></tr>`}
+            ${r.length > 400 ? `<tr><td colspan="6" class="hpd-sm">Showing the first 400. Use "Pick first" or the header checkbox to pick from all ${r.length.toLocaleString()}.</td></tr>` : ""}
+            </tbody></table></div>
+          </section>
+        </div>
+        <div class="hph-mfoot"><b>${picked.size.toLocaleString()} picked</b><button type="button" class="hpf-link" id="hpmClear">Clear</button><label class="hpd-flex hpd-sm"><input type="checkbox" id="hpmOnly" ${onlyPicked ? "checked" : ""}> Show picked only</label>
+          <input id="hpmName" placeholder="Campaign name" value="${esc(new Date().toLocaleDateString([], { month: "short", day: "numeric" }) + (key.startsWith("s:") ? " · " + key.slice(2) : ""))}">
+          <button type="button" class="btn" id="hpmCsv" ${picked.size ? "" : "disabled"}>Save ${picked.size} as a file</button><button type="button" class="btn primary" id="hpmGo" ${picked.size ? "" : "disabled"}>Create campaign with ${picked.size.toLocaleString()} leads</button>
+          ${out ? `<p class="hph-warn">${out} of them are outside calling hours right now. The dialer skips those until it's calling time where they live.</p>` : ""}</div>
+      </div>`;
+      wire(r);
+    };
+    const close = () => { m.remove(); document.removeEventListener("keydown", keys); };
+    const create = () => {
+      if (!picked.size) return;
+      const c = { id: Date.now().toString(36), name: ($("#hpmName").value.trim() || "Campaign").slice(0, 60), ids: [...picked], created: Date.now(), paused: false };
+      S.camps.unshift(c); S.listKey = "c:" + c.id; lsSet("hpd.list", S.listKey); saveCamps(); close(); renderHome(); renderPhone(); toast(`Campaign "${c.name}" ready. Press Start calling.`);
+    };
+    const wire = (r) => {
+      $("#hpmX").onclick = close; m.onclick = (e) => { if (e.target === m) close(); };
+      const qi = $("#hpmQ"); qi.oninput = () => { q = qi.value.trim().toLowerCase(); const pos = qi.selectionStart; draw(); const n = $("#hpmQ"); n.focus(); n.setSelectionRange(pos, pos); };
+      $$("[data-k]", m).forEach((b) => (b.onclick = () => { key = b.dataset.k; lastIdx = -1; draw(); }));
+      $$("[data-first]", m).forEach((b) => (b.onclick = () => first(+b.dataset.first)));
+      $("#hpmAll").onchange = (e) => { rows().forEach((l) => (e.target.checked ? picked.add(l.id) : picked.delete(l.id))); draw(); };
+      $$("tr[data-id]", m).forEach((tr) => (tr.onclick = (e) => {
+        const i = +tr.dataset.i, id = tr.dataset.id;
+        if (e.shiftKey && lastIdx >= 0) { const [a, b] = [Math.min(lastIdx, i), Math.max(lastIdx, i)]; r.slice(a, b + 1).forEach((l) => picked.add(l.id)); }
+        else picked.has(id) ? picked.delete(id) : picked.add(id);
+        lastIdx = i; draw();
+      }));
+      $("#hpmClear").onclick = () => { picked.clear(); draw(); };
+      $("#hpmOnly").onchange = (e) => { onlyPicked = e.target.checked; draw(); };
+      $("#hpmImport").onclick = () => { close(); D.go("import"); };
+      $("#hpmGo").onclick = create;
+      $("#hpmCsv").onclick = () => {
+        const L = [...picked].map((id) => D.leads.get(id)).filter(Boolean);
+        const csv = [["First Name", "Last Name", "Phone", "Email", "State", "Stage", "Source"], ...L.map((l) => [l.first, l.last, d10(l.phone), l.email, l.state, D.stageName(l.stage || "new"), l.source])].map((x) => x.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+        const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = `${($("#hpmName").value || "campaign").replace(/[^\w -]/g, "")}.csv`; a.click();
+      };
+    };
+    const keys = (e) => {
+      if (e.key === "Escape") return close();
+      const typing = e.target.closest?.("input:not([type=checkbox]),textarea");
+      if (e.key === "/" && !typing) { e.preventDefault(); $("#hpmQ")?.focus(); }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a" && !typing) { e.preventDefault(); rows().forEach((l) => picked.add(l.id)); draw(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); create(); }
+    };
+    document.addEventListener("keydown", keys);
+    draw(); setTimeout(() => $("#hpmQ")?.focus(), 50);
+  }
+  const ago = (t) => { const mm = (Date.now() - t) / 6e4; if (mm < 60) return Math.max(1, Math.round(mm)) + "m ago"; const h = mm / 60; if (h < 24) return Math.round(h) + "h ago"; const dd = h / 24; return dd < 2 ? "Yesterday" : Math.round(dd) + " days ago"; };
+
+  /* recordings + do-not-call tabs */
+  async function renderRecs() {
+    const el = $("#hpdRecs"); el.innerHTML = `<div class="panel">Loading…</div>`;
+    let calls; try { calls = (await api(`/calls?days=30&agent=${S.me?.admin ? lsGet("hpd.who", "me") : "me"}`)).calls.filter((c) => c.recordingSid); } catch (e) { el.innerHTML = `<div class="panel">${esc(e.message)}</div>`; return; }
+    el.innerHTML = `<div class="panel stack"><div class="row" style="justify-content:space-between"><h2>Recordings</h2><input type="search" id="hprQ" placeholder="Search name or number" style="max-width:260px"></div>
+      <div style="overflow-x:auto"><table class="hpd-tbl"><thead><tr><th>Lead</th><th>When</th><th>Result</th><th>Length</th><th></th></tr></thead><tbody id="hprRows"></tbody></table></div><div id="hpdTxView"></div></div>`;
+    const draw = () => { const q = $("#hprQ").value.trim().toLowerCase(); $("#hprRows").innerHTML = calls.filter((c) => !q || `${c.leadName} ${c.to}`.toLowerCase().includes(q)).slice(0, 200).map((c) => `<tr><td><b>${esc(c.leadName || fmt(c.to))}</b><br><span class="hpd-sm">${esc(fmt(c.to))}</span></td><td class="hpd-sm">${new Date(c.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</td><td><span class="hpd-pill">${esc(c.disposition || (c.human ? "Talked" : "—"))}</span></td><td class="num">${dur(c.recordingSec || c.talkSec)}</td><td><button class="btn" data-play="${esc(c.sid)}" type="button">Play</button> <button class="btn" data-tx="${esc(c.sid)}" type="button">Transcript</button>${c.leadId ? ` <button class="btn" data-open="${esc(c.leadId)}" type="button">Profile</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="5" class="hpd-sm">No recordings yet. Every connected call is recorded automatically.</td></tr>`;
+      $$("[data-play]", el).forEach((b) => (b.onclick = async () => { if (S.demo) return toast("Recordings play here once real calls are made"); const r = await fetch(API + "/calls/recording?sid=" + encodeURIComponent(b.dataset.play), { headers: authHeader(), credentials: "same-origin" }); if (!r.ok) return toast("Recording isn't ready yet"); const au = document.createElement("audio"); au.controls = true; au.autoplay = true; au.style.height = "32px"; au.src = URL.createObjectURL(await r.blob()); b.replaceWith(au); }));
+      $$("[data-tx]", el).forEach((b) => (b.onclick = async () => { const r = await api("/calls/transcript?sid=" + encodeURIComponent(b.dataset.tx)); const c = calls.find((x) => x.sid === b.dataset.tx); const pm = c?.mode === "power"; $("#hpdTxView").innerHTML = `<div class="hpd-tx" style="max-height:320px;margin-top:10px">${(r.lines || []).map((l) => { const w = (l.track === "inbound_track") === pm ? "Lead" : "Agent"; return `<p><span class="who ${w}">${w}</span>${esc(l.text)}</p>`; }).join("") || `<p class="hpd-sm">No transcript for this call.</p>`}</div>`; }));
+      $$("[data-open]", el).forEach((b) => (b.onclick = () => openProfile(b.dataset.open)));
+    };
+    $("#hprQ").oninput = draw; draw();
+  }
+  async function renderDnc() {
+    const el = $("#hpdDnc"); let info = { count: 0 }; try { info = await api("/calls/dnc"); } catch {}
+    el.innerHTML = `<div class="hpd-grid2"><div class="panel stack"><h2>Do not call</h2><p class="hpd-sm" style="margin:0">${(info.count || 0).toLocaleString()} numbers blocked for the whole team. Press-9 opt-outs, STOP replies and "Do not call" results are added automatically.</p>
+      <div class="hpd-flex"><input id="hpdDncChk" placeholder="Check a number" inputmode="tel" style="flex:1"><button class="btn" id="hpdDncChkB" type="button">Check</button></div><div id="hpdDncRes" class="hpd-sm"></div>
+      <textarea id="hpdDncN2" rows="4" placeholder="Paste numbers to block, one per line"></textarea>
+      <div class="hpd-flex"><button class="btn primary" id="hpdDncAdd2" type="button">Add to Do Not Call</button>${S.me?.admin ? `<button class="btn" id="hpdDncDel2" type="button">Remove (admin)</button>` : ""}</div></div>
+      ${info.numbers?.length ? `<div class="panel stack"><h2>Blocked numbers</h2><div class="hpd-sm" style="max-height:360px;overflow:auto;columns:2">${info.numbers.slice(0, 2000).map((n) => `<div class="num">${esc(fmt(n))}</div>`).join("")}</div></div>` : ""}</div>`;
+    const nums = () => $("#hpdDncN2").value.split(/[\n,;]+/).map(d10).filter((x) => x.length === 10);
+    $("#hpdDncChkB").onclick = async () => { const n = d10($("#hpdDncChk").value); if (n.length !== 10) return; const r = await api("/calls/dnc?n=" + n); $("#hpdDncRes").textContent = r.check ? `${fmt(n)} is on Do Not Call.` : `${fmt(n)} is not blocked.`; };
+    $("#hpdDncAdd2").onclick = async () => { const n = nums(); if (!n.length) return; await api("/calls/dnc", { method: "POST", body: { numbers: n } }); toast(`${n.length} added to Do Not Call`); renderDnc(); };
+    $("#hpdDncDel2")?.addEventListener("click", async () => { const n = nums(); if (!n.length) return; await api("/calls/dnc", { method: "DELETE", body: { numbers: n } }); toast(`${n.length} removed`); renderDnc(); });
   }
 
   window.hpDialer = { get ready() { return !!S.device && (S.ready || S.demo); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power); } };

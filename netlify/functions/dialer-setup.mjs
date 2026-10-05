@@ -24,7 +24,8 @@ export default wrap(async (req) => {
 
   if (req.method === "PATCH") { // agent's own preferences
     const body = await req.json();
-    const allowed = ["lines", "autoVm", "vmGreeting", "defaultCallerId", "ringMode", "localPresence"];
+    const allowed = ["lines", "autoVm", "vmGreeting", "defaultCallerId", "ringMode", "localPresence", "camps"];
+    if (body.camps && JSON.stringify(body.camps).length > 400_000) return bad("Too many campaigns saved. Delete a few old ones.");
     const next = await updateJ("prefs", user.identity, (p) => { for (const k of allowed) if (k in body) p[k] = body[k]; return p; }, {});
     return json({ prefs: next });
   }
