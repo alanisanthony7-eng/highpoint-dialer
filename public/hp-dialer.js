@@ -271,7 +271,7 @@
   async function micCheck() {
     if (S.demo) return true;
     try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach((t) => t.stop()); return true; }
-    catch { note("<b>Microphone blocked.</b> Allow microphone access for this site in your browser's address bar, then try again.", "warn"); return false; }
+    catch { note(/Claude\//.test(navigator.userAgent) ? "<b>The microphone is blocked in this window.</b> The browser inside the Claude app can't use your mic, so it can't place calls. Open <b>highpoint-dialer.pages.dev</b> in Chrome or Edge, sign in, and allow the microphone when asked." : "<b>Microphone blocked.</b> Allow microphone access for this site in your browser's address bar, then try again.", "warn"); return false; }
   }
 
   /* ================= call from my own phone (no phone line needed) ================= */
@@ -282,7 +282,7 @@
   }
   function phoneCall(lead) {
     if (!lead?.phone) { toast("This lead has no phone number"); return; }
-    if (S.via !== "phone") { S.phoneLead = lead.id; dialLead(lead, true); phoneCard(); return; }
+    if (S.via !== "phone") { S.phoneLead = lead.id; phoneCard(); dialLead(lead, true).then((ok) => { if (ok === false && S.ps) phoneEnd(); }); return; }
     window.hpDesk.callStop();
     S.phoneLead = lead.id; S.callLead = lead.id;
     window.hpDesk.callStart(lead.id);
@@ -330,7 +330,7 @@
     if (S.call || S.power) return;
     if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Get a number in the <b>Number groups</b> tab (about $1 a month), or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast(S.ready ? "Phone is still connecting…" : "The dialer isn't set up yet"); return; }
-    if (!(await micCheck())) return;
+    if (!(await micCheck())) return false;
     note("");
     const params = { To: d10(lead.phone), LeadId: lead.id, LeadName: window.hpDesk.fullName(lead), LeadState: lead.state || "", CallerId: S.prefs.defaultCallerId || "" };
     try {
