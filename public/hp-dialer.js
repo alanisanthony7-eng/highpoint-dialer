@@ -1296,6 +1296,8 @@
         <p class="hpd-sm" style="margin:0">Your lines, your leads, Highpoint's own phone.</p>
         <button type="button" class="btn" id="hphPick">Campaigns</button>
       </div>
+      ${!S.demo && !S.ready ? `<div class="hph-setup"><div><b>${S.twilio ? "One step left: connect your phone line" : "Phone line not connected"}</b><span>${S.twilio ? (S.me?.admin ? "Your Twilio keys are in. Press Connect once and every agent's dialer turns on." : "Your admin needs to press Connect Twilio once.") : "Your admin needs to add the Twilio keys in Cloudflare first."}</span></div>${S.twilio && S.me?.admin ? `<button type="button" class="btn primary" id="hphSetup">Connect Twilio</button>` : ""}</div>` : ""}
+      ${!S.demo && S.ready && !S.numbers.length ? `<div class="hph-setup"><div><b>Get your first phone number</b><span>You need a number to call from. Pick one in your area code; Twilio charges about $1.15 a month.</span></div><button type="button" class="btn primary" id="hphBuy">Get a number</button></div>` : ""}
       <div class="hph-bar" data-h="${headset}"><span class="hph-dot"></span><b>${headset === "live" ? "On a call" : headset === "dial" ? "Headset on · dialing" : headset === "on" ? "Headset on" : "Headset off"}</b>
         <span class="hpd-sm">${headset === "live" ? "Talk away. The lead's profile is open." : headset === "dial" ? `Calling ${lines} at a time from ${esc(listName())}. Whoever says hello first comes straight to you.` : headset === "on" ? "Line is ready. Press Start calling." : S.ready ? "Connecting your line… allow the microphone if your browser asks." : "Press Start calling; your browser joins the line first (allow the microphone)."}</span>
         <button type="button" class="btn hph-soundbtn" id="hphSound" aria-expanded="${S.sound.open}">Sound</button></div>
@@ -1337,6 +1339,12 @@
       <button type="button" class="hpf-link hpd-sm" id="hphManual">${$("#dPane").classList.contains("hpd-showmanual") ? "Hide" : "Show"} the one-by-one call queue</button>`;
     // wiring
     $("#hphPick").onclick = openPicker; $("#hphAll").onclick = openPicker;
+    $("#hphSetup")?.addEventListener("click", async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Connecting…";
+      try { const r = await api("/setup", { method: "POST" }); S.ready = true; document.body.classList.add("hpd-on"); toast(r.trial ? "Connected. Twilio trial accounts can only call numbers you've verified in Twilio." : "Phone line connected"); startDevice(); refreshNumbers(); renderPhone(); }
+      catch (er) { toast(er.message); b.disabled = false; b.textContent = "Connect Twilio"; }
+    });
+    $("#hphBuy")?.addEventListener("click", () => openTab("numbers"));
     $("#hphSound").onclick = () => { S.sound.open = !S.sound.open; lsSet("hpd.sound", S.sound); renderHome(); };
     $("#hphTest").onclick = () => ding(true);
     $("#hphDing").oninput = (e) => { S.sound.ding = +e.target.value; lsSet("hpd.sound", S.sound); e.target.nextElementSibling.textContent = Math.round(S.sound.ding * 100) + "%"; };

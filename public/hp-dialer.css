@@ -368,3 +368,6 @@ body:has(#v-dialer:not([hidden])) .hpd-phonest{display:none}
 .hph-fchips button[aria-pressed="true"]{background:linear-gradient(90deg,rgba(255,46,136,.28),rgba(255,158,61,.16));border-color:rgba(255,79,163,.5);color:#fff}
 .hph-fchips button:focus-visible{outline:2px solid #FF4FA3}
 @media (max-width:760px){.hph-sel{flex:1;min-width:0}.hph-sel select{min-width:0;width:100%}}
+.hph-setup{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 18px;border-radius:16px;background:linear-gradient(90deg,rgba(255,46,136,.16),rgba(255,158,61,.08));border:1px solid rgba(255,79,163,.45)}
+.hph-setup>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.hph-setup b{font-size:15px}.hph-setup span{font-size:13px;color:#D3D6DE}
