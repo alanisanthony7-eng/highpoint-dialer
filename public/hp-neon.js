@@ -21,7 +21,7 @@
   <text class="t" x="500" y="392" text-anchor="middle" font-family="Montserrat, Arial Black, sans-serif" font-weight="900" font-style="italic" font-size="78" letter-spacing="9" stroke-width="2.3">HIGHPOINT</text>
 </g>
 <g id="nnFin" style="--core:#FFEBD2;--glow:#FF9E3D">
-  <path class="t" d="M330 424 H410 M590 424 H670" stroke-width="2"/>
+  <path class="t" d="M290 424 H352 M648 424 H710" stroke-width="2"/>
   <text class="f" x="500" y="433" text-anchor="middle" font-family="Libre Caslon Text, Georgia, serif" font-size="25" letter-spacing="14">FINANCIAL</text>
 </g>
 <g id="nnTag" style="--core:#FFE1F0;--glow:#FF2E88">
