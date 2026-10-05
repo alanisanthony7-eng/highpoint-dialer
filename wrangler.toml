@@ -10,3 +10,9 @@ compatibility_flags = ["nodejs_compat"]
 binding = "DB"
 database_name = "highpoint"
 database_id = "5dceed87-da4e-4420-8940-78ec50647f4b"
+
+# Non-secret settings (secrets like TWILIO_AUTH_TOKEN and HP_INVITE_CODE go in
+# Pages → Settings → Variables and secrets, type "Secret")
+[vars]
+HP_ADMIN_EMAILS = "alanisanthony7@gmail.com"
+HP_PUBLIC_URL = "https://highpoint-dialer.pages.dev"
