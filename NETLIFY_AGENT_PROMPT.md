@@ -5,7 +5,7 @@ Paste this into Netlify's agent after the `highpoint-dialer` files are committed
 Integrate the Highpoint Dialer that's in the `highpoint-dialer/` folder of this repo into the site. Don't redesign anything.
 
 1. Copy `highpoint-dialer/netlify/functions/dialer-*.mjs` into `netlify/functions/`, and `highpoint-dialer/netlify/lib/*.mjs` into `netlify/lib/`. Keep the relative imports (`../lib/hp.mjs`, `../lib/calls.mjs`) working.
-2. Copy `highpoint-dialer/public/hp-dialer.js` and `hp-dialer.css` into the same static folder that serves `/desk-app.js`, so they're served at `/hp-dialer.js` and `/hp-dialer.css`.
+2. Copy `highpoint-dialer/public/hp-dialer.js`, `hp-dialer.css` and `spotify-dock.js` into the same static folder that serves `/desk-app.js`, so they're served at `/hp-dialer.js` and `/hp-dialer.css`.
 3. Add `"@netlify/blobs": ">=8.2.0"` to package.json dependencies.
 4. Apply the edits in `highpoint-dialer/patches/desk-app.patch` to the site's `desk-app.js`. If hunks don't apply cleanly because the file changed, make the same changes by hand:
    - expose `window.hpDesk` (leads, dialQueue, fullName, normPhone, fmtPhone, toast, patchLead, renderDialer, openDrawer, currentId, setCurrent, callStart, callStop, autoLog, calls, appts, putAppt, addNoteObj, stageName, STAGES, PROD, go, dispoDirect) right before the quoting-engines section

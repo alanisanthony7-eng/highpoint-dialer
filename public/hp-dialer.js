@@ -55,6 +55,7 @@
     for (let i = 0; i < 200 && !(window.hpDesk && $("#v-dialer")); i++) await sleep(100);
     if (!$("#v-dialer")) return;
     document.body.classList.add("hpd");
+    if (!window.hpSpotify && !document.querySelector('script[src*="spotify-dock"]')) { const sp = document.createElement("script"); sp.src = "/spotify-dock.js"; document.body.append(sp); }
     buildUI(); buildBar();
     try {
       const st = await api("/setup");
@@ -105,7 +106,7 @@
     $$("#dTabs button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.hpd === t)));
     $("#dPane").hidden = true; $("#hPane").hidden = true;
     $$(".hpd-pane").forEach((x) => (x.hidden = x.id !== "hpd" + t[0].toUpperCase() + t.slice(1)));
-    if ($("#hpdHome")) $("#hpdHome").hidden = true;
+    if ($("#hpdHome")) $("#hpdHome").hidden = $("#hphMusic").hidden = true;
     ({ numbers: renderNumbers, stats: renderStats, inbox: renderInbox, recs: renderRecs, dnc: renderDnc })[t]?.();
   }
   const setChip = (s, t) => { const c = $("#hpdState"); if (c) { c.dataset.s = s; c.innerHTML = `<i></i>${esc(t)}`; } };
@@ -1229,13 +1230,29 @@
   function buildHome() {
     if ($("#hpdHome")) return;
     const host = $("#dPane"); host.insertAdjacentHTML("beforebegin", `<div class="hpd hpd-home" id="hpdHome"></div>`);
+    $("#hpdHome").insertAdjacentHTML("beforebegin", `<div class="hpd hph-music" id="hphMusic"></div>`);
+    renderMusic(); window.addEventListener("hp:musicstate", renderMusic);
     host.classList.add("hpd-manualpane");
     // desk tabs: Dial shows the home; history/our tabs hide it
-    $$("#dTabs [data-dt]").forEach((b) => b.addEventListener("click", () => { $("#hpdHome").hidden = b.dataset.dt !== "dial"; if (b.dataset.dt === "dial") renderHome(); }));
+    $$("#dTabs [data-dt]").forEach((b) => b.addEventListener("click", () => { $("#hpdHome").hidden = $("#hphMusic").hidden = b.dataset.dt !== "dial"; if (b.dataset.dt === "dial") renderHome(); }));
     const t = $('#dTabs [data-dt="dial"]'); if (t) t.textContent = "Dial";
     renderHome(); loadUsage(); setInterval(() => { if (!$("#hpdHome")?.hidden && !document.activeElement?.closest?.("#hpdHome")) renderHome(); }, 15000); setInterval(loadUsage, 120000);
   }
 
+  const SP_LOGO = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm4.6 14.4a.6.6 0 0 1-.9.2c-2.4-1.5-5.4-1.8-9-1a.6.6 0 1 1-.3-1.2c3.9-.9 7.2-.5 9.9 1.1.3.2.4.6.3.9Zm1.2-2.7a.8.8 0 0 1-1 .3c-2.8-1.7-7-2.2-10.3-1.2a.8.8 0 1 1-.4-1.5c3.8-1.1 8.4-.6 11.5 1.4.3.2.4.7.2 1Zm.1-2.8C14.6 8.9 9.2 8.7 6.1 9.7a.9.9 0 1 1-.5-1.8c3.6-1.1 9.6-.9 13.3 1.3a.9.9 0 0 1-1 1.7Z"/></svg>';
+  function renderMusic() {
+    const el = $("#hphMusic"); if (!el) return;
+    const sp = window.hpSpotify;
+    if (!sp) { el.innerHTML = `<span class="hph-splogo">${SP_LOGO}</span><div class="hph-spt"><b>Music</b><span>Loading Spotify…</span></div>`; return; }
+    el.innerHTML = `<span class="hph-splogo">${SP_LOGO}</span>
+      <div class="hph-spt"><b>${sp.playing ? "Now playing on Spotify" : sp.ready ? "Spotify paused" : "Spotify"}</b><span>${sp.playing ? "Pauses on its own when a lead picks up" : sp.ready ? "Press play to bring it back" : "Open the player and pick a playlist"}</span></div>
+      <button type="button" class="hph-spplay" id="hphSpPlay" aria-label="${sp.playing ? "Pause music" : "Play music"}">${sp.playing ? I.pause : I.play}</button>
+      <button type="button" class="btn" id="hphSpOpen">${sp.isOpen ? "Hide player" : "Player"}</button>
+      <label class="hph-spauto"><input type="checkbox" id="hphSpAuto" ${sp.autoPause ? "checked" : ""}> Spotify pauses on calls</label>`;
+    $("#hphSpPlay").onclick = () => sp.togglePlay();
+    $("#hphSpOpen").onclick = () => sp.toggleOpen();
+    $("#hphSpAuto").onchange = (e) => { sp.autoPause = e.target.checked; };
+  }
   function renderHome() {
     const el = $("#hpdHome"); if (!el || !window.hpDesk) return;
     const D = window.hpDesk, q = campaignQueue(), lines = Math.min(S.lines, S.settings.maxLines || 3);
