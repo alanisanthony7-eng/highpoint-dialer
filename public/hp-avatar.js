@@ -327,7 +327,7 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
           + shine(`M${CX - 66} 70 L${CX - 64} 52 M${CX - 26} 50 L${CX - 24} 34 M${CX + 12} 44 L${CX + 12} 28 M${CX + 48} 50 L${CX + 50} 36`, 3, 0.5),
       },
       curlytop: {
-        front: hp(dome(58, 96, 190) + lineStd(96, 190, 112)) + `<g fill="${hairFill}">${[[-78, 96, 17], [-62, 72, 18], [-38, 54, 19], [-10, 44, 20], [20, 44, 20], [46, 54, 19], [68, 72, 18], [82, 96, 16], [-52, 104, 16], [-24, 92, 17], [6, 88, 18], [34, 92, 17], [60, 104, 15], [-36, 72, 15], [-6, 66, 16], [26, 66, 16], [52, 76, 14]].map(([dx, y, r]) => `<circle cx="${CX + dx}" cy="${y}" r="${r}"/>`).join("")}</g>`
+        front: hp(dome(58, 96, 190) + lineStd(96, 190, 112)) + `<g fill="${hc}">${[[-78, 96, 17], [-62, 72, 18], [-38, 54, 19], [-10, 44, 20], [20, 44, 20], [46, 54, 19], [68, 72, 18], [82, 96, 16], [-52, 104, 16], [-24, 92, 17], [6, 88, 18], [34, 92, 17], [60, 104, 15], [-36, 72, 15], [-6, 66, 16], [26, 66, 16], [52, 76, 14]].map(([dx, y, r]) => `<circle cx="${CX + dx}" cy="${y}" r="${r}"/>`).join("")}</g>`
           + `<g fill="none" stroke="${hcLine}" stroke-width="2" opacity=".35" stroke-linecap="round">${[[-62, 72], [-10, 44], [46, 54], [-24, 92], [34, 92], [6, 66]].map(([dx, y]) => `<path d="M${CX + dx - 7} ${y + 2} q7 -9 14 0"/>`).join("")}</g>` + `<g fill="${hcL}" opacity=".45">${[[-40, 48], [16, 38], [64, 64]].map(([dx, y]) => `<circle cx="${CX + dx}" cy="${y}" r="5"/>`).join("")}</g>`,
       },
       waves: {
@@ -391,8 +391,8 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
           + hp(dome(42, 100, 130) + ` L${CX + 90} 130 C${CX + 80} 106 ${CX + 44} 96 ${CX} 96 C${CX - 44} 96 ${CX - 80} 106 ${CX - 90} 130Z`) + strand(`M${CX - 6} 50 C${CX - 2} 70 ${CX - 4} 86 ${CX - 2} 96`, 2.2, 0.45) + shine(`M${CX - 20} 58 C${CX - 56} 66 ${CX - 86} 104 ${CX - 94} 160`) + shine(`M${CX - 100} 280 C${CX - 108} 300 ${CX - 104} 320 ${CX - 108} 340 M${CX + 100} 280 C${CX + 108} 300 ${CX + 104} 320 ${CX + 108} 340`, 3, 0.35),
       },
       curlylong: {
-        back: `<g fill="${hairBack}">${Array.from({ length: 30 }, (_, i) => { const a = (i / 30) * Math.PI * 1.25 - Math.PI * 1.12; const s = i % 2 ? 1 : -1; const y = 70 + (i % 15) * 22; const x = CX + s * (110 + Math.sin(i) * 16 + (y > 200 ? 8 : 0)); return `<circle cx="${x}" cy="${y}" r="${26 + (i % 3) * 4}"/>`; }).join("")}<ellipse cx="${CX}" cy="120" rx="130" ry="96"/></g>`,
-        front: hp(dome(40, 104, 190) + lineStd(104, 190, 108)) + `<g fill="${hairFill}">${[[-92, 120, 20], [-76, 86, 20], [-52, 62, 20], [-22, 50, 20], [10, 48, 20], [40, 54, 20], [66, 72, 20], [88, 100, 20], [96, 136, 18], [-100, 160, 18], [-104, 200, 18], [104, 176, 18], [106, 214, 17], [-106, 240, 18], [104, 254, 17]].map(([dx, y, r]) => `<circle cx="${CX + dx}" cy="${y}" r="${r}"/>`).join("")}</g>` + `<g fill="none" stroke="${hcLine}" stroke-width="2" opacity=".3">${[[-76, 86], [-22, 50], [40, 54], [88, 100], [-104, 200], [106, 214]].map(([dx, y]) => `<path d="M${CX + dx - 8} ${y + 3} q8 -10 16 0"/>`).join("")}</g>`,
+        back: `<g fill="${hcD}">${Array.from({ length: 30 }, (_, i) => { const a = (i / 30) * Math.PI * 1.25 - Math.PI * 1.12; const s = i % 2 ? 1 : -1; const y = 70 + (i % 15) * 22; const x = CX + s * (110 + Math.sin(i) * 16 + (y > 200 ? 8 : 0)); return `<circle cx="${x}" cy="${y}" r="${26 + (i % 3) * 4}"/>`; }).join("")}<ellipse cx="${CX}" cy="120" rx="130" ry="96"/></g>`,
+        front: hp(dome(40, 104, 190) + lineStd(104, 190, 108)) + `<g fill="${hc}">${[[-92, 120, 20], [-76, 86, 20], [-52, 62, 20], [-22, 50, 20], [10, 48, 20], [40, 54, 20], [66, 72, 20], [88, 100, 20], [96, 136, 18], [-100, 160, 18], [-104, 200, 18], [104, 176, 18], [106, 214, 17], [-106, 240, 18], [104, 254, 17]].map(([dx, y, r]) => `<circle cx="${CX + dx}" cy="${y}" r="${r}"/>`).join("")}</g>` + `<g fill="none" stroke="${hcLine}" stroke-width="2" opacity=".3">${[[-76, 86], [-22, 50], [40, 54], [88, 100], [-104, 200], [106, 214]].map(([dx, y]) => `<path d="M${CX + dx - 8} ${y + 3} q8 -10 16 0"/>`).join("")}</g>`,
       },
       mohawk: {
         front: hp(dome(64, 94, 182) + lineStd(94, 182, 112), hairFill, 'opacity=".3"') + hp(`M${CX - 22} 120 C${CX - 26} 70 ${CX - 20} 30 ${CX - 4} 6 L${CX + 4} 6 C${CX + 20} 30 ${CX + 26} 70 ${CX + 22} 120 C${CX + 10} 112 ${CX - 10} 112 ${CX - 22} 120Z`) + shine(`M${CX - 6} 20 C${CX - 10} 50 ${CX - 12} 80 ${CX - 10} 108`, 3, 0.5),
@@ -407,7 +407,7 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
     const hairShadow = c.hair !== "bald" && hairFrontArt ? `<g clip-path="url(#${u}fc)" opacity=".38" filter="url(#${u}b4)"><g transform="translate(0 6) ${HT}"${clipAttr}>${hairFrontArt.replace(/fill="url\(#[^)]+\)"/g, `fill="${skLine}"`)}</g></g>` : "";
     hairFrontArt = `<g transform="${HT}"${clipAttr}>${hairFrontArt}</g>`;
     /* ---- strand hair: hundreds of strands that follow how each style grows ---- */
-    const FAM = { buzz: "fwd", crop: "fwd", fade: "fwd", waves: "fwd", spiky: "up", mohawk: "up", sidepart: "side", slick: "back", quiff: "quiff", bun: "bun", manbun: "bun", ponytail: "pony", pixie: "pixie", bob: "long", layered: "long", long: "long", longwavy: "wavy", curlytop: "curl", afro: "curl", puff: "curl", curlylong: "curl", twists: "up", locs: "long", braids: "long" };
+    const FAM = { buzz: "none", crop: "fwd", fade: "fwd", waves: "none", spiky: "up", mohawk: "up", sidepart: "side", slick: "back", quiff: "quiff", bun: "bun", manbun: "bun", ponytail: "pony", pixie: "pixie", bob: "long", layered: "long", long: "long", longwavy: "wavy", curlytop: "curl", afro: "curl", puff: "curl", curlylong: "curl", twists: "none", locs: "none", braids: "none" };
     const fam = FAM[c.hair] || "none";
     let seed = 7; for (const ch of c.hair) seed = (Math.imul(seed, 31) + ch.charCodeAt(0)) | 0;
     const R = (() => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
@@ -501,16 +501,115 @@ ${hatClip ? `<clipPath id="${u}hc"><rect x="-50" y="${hatClip}" width="500" heig
     // curly hair: rounded bundles with their own light and shadow, then fine coils on top
     const bundles = (n, bb, dark) => {
       const B = [];
-      for (let i = 0; i < n; i++) B.push([bb[0] + R() * (bb[2] - bb[0]), bb[1] + R() * (bb[3] - bb[1]), 9 + R() * 9]);
+      const gx = 19, gy = 16;
+      for (let y = bb[1] + 6, row = 0; y < bb[3]; y += gy, row++) for (let x = bb[0] + (row % 2 ? gx / 2 : 0); x < bb[2]; x += gx) B.push([x + (R() - 0.5) * 6, y + (R() - 0.5) * 6, 10 + R() * 4]);
+      void n;
       B.sort((a, b) => a[1] - b[1]);
-      return `<g filter="url(#${u}b1)" opacity="${dark ? 0.7 : 0.55}" fill="${hcLine}">${B.map(([x, y, r]) => `<circle cx="${(x + 1.5).toFixed(1)}" cy="${(y + 3).toFixed(1)}" r="${r.toFixed(1)}"/>`).join("")}</g>` + B.map(([x, y, r]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="url(#${u}cb${dark ? "d" : ""})"/>`).join("");
+      return `<g filter="url(#${u}b2)" opacity="${dark ? 0.55 : 0.38}" fill="${hcLine}">${B.map(([x, y, r]) => `<circle cx="${(x + 1.5).toFixed(1)}" cy="${(y + 3).toFixed(1)}" r="${r.toFixed(1)}"/>`).join("")}</g>` + B.map(([x, y, r]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="url(#${u}cb${dark ? "d" : ""})"/>`).join("");
     };
-    const frontStrands = fam === "none" ? "" : fam === "curl" ? bundles(Math.round((c.hair === "afro" || c.hair === "curlylong" ? 170 : 80) * (big ? 1 : 0.6)), BB.curl, false) + curls(Math.round((c.hair === "afro" || c.hair === "curlylong" ? 520 : 240) * nS), BB.curl, false) : locks(Math.round((["long", "wavy"].includes(fam) ? 170 : 150) * (big ? 1 : 0.55)), BB[fam], false);
-    const backStrands = fam === "none" || !hairDef.back ? "" : fam === "curl" ? bundles(Math.round(110 * (big ? 1 : 0.6)), BB.curl, true) : locks(Math.round(110 * (big ? 1 : 0.55)), BB[fam] || BB.long, true);
+    // orderly clumps: smooth grooves that start at the part/crown and follow the flow, with a lit ridge on each clump
+    const grooves = (dark) => {
+      const longFam = fam === "long" || fam === "wavy" || (fam === "pony" && dark);
+      const ring = (cx, cy, r, a0, a1, st) => { const o = []; for (let a = a0; a <= a1 + 0.01; a += st) o.push([cx + r * Math.cos((a * Math.PI) / 180), cy + r * Math.sin((a * Math.PI) / 180)]); return o; };
+      const line = (x0, x1, st, yf) => { const o = []; for (let x = x0; x <= x1 + 0.01; x += st) o.push([x, yf(x)]); return o; };
+      const hl = (x) => 118 - 10 * (1 - ((x - CX) / 92) ** 2);
+      let seeds;
+      if (dark) seeds = line(CX - 128, CX + 128, 11, () => 120 + R() * 30);
+      else seeds = {
+        fwd: (() => { const o = []; for (let a = 200; a <= 340; a += 8.5) o.push([CX + 84 * Math.cos((a * Math.PI) / 180), 104 + 56 * Math.sin((a * Math.PI) / 180)]); return o; })(),
+        side: [...ring(CX - 54, 54, 16, -70, 250, 17)],
+        pixie: [...ring(CX + 52, 48, 16, -70, 250, 17)],
+        back: line(CX - 88, CX + 88, 11, hl), quiff: line(CX - 88, CX + 88, 11, hl), bun: line(CX - 92, CX + 92, 11, hl), pony: line(CX - 92, CX + 92, 11, hl),
+        long: [...ring(CX, 46, 18, 100, 262, 13), ...ring(CX, 46, 18, -82, 80, 13)], wavy: [...ring(CX, 46, 18, 100, 262, 13), ...ring(CX, 46, 18, -82, 80, 13)],
+      }[fam] || [];
+      const K = longFam ? 62 : fam === "back" || fam === "quiff" || fam === "bun" || fam === "pony" ? 17 : 30, step = longFam ? 6.5 : 4;
+      const f1 = (v) => v.toFixed(1);
+      let g = "", r1 = "", r2 = "";
+      for (const sd of seeds) {
+        let [x, y] = sd; const pts = [[x, y]];
+        for (let t = 0; t < K; t++) { const f = field(x, y); x += f[0] * step; y += f[1] * step; pts.push([x, y]); if (y > 470 || y < -30) break; }
+        const m = pts.length - 1, off = (k) => pts.map((p, i) => { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(m, i + 1)], tx = b[0] - a[0], ty = b[1] - a[1], tl = Math.hypot(tx, ty) || 1; let nx = -ty / tl, ny = tx / tl; if (nx * -0.6 + ny * -0.8 < 0) { nx = -nx; ny = -ny; } return [p[0] + nx * k, p[1] + ny * k]; });
+        const P = (arr, a = 0, b = arr.length) => "M" + arr.slice(a, b).map((q) => `${f1(q[0])} ${f1(q[1])}`).join("L");
+        g += P(pts, 1);
+        const lit = off(3.2), dim = off(-3.5);
+        let a = -1, b = -1; for (let i = 0; i <= m; i++) { const near = Math.abs(pts[i][1] - sparkY) < (longFam ? 34 : 16); if (near && a < 0) a = i; if (near) b = i; }
+        if (!dark && a >= 0 && b > a) r1 += P(lit, a, b + 1);
+        r2 += P(lit, 2, Math.max(3, m - 2));
+        void dim;
+      }
+      return `<path d="${g}" fill="none" stroke="${hcLine}" stroke-width="${big ? 2.6 : 2}" opacity="${dark ? 0.55 : 0.5}" stroke-linecap="round" stroke-linejoin="round" filter="url(#${u}b05)"/>` +
+        `<path d="${r2}" fill="none" stroke="${hcL}" stroke-width="${big ? 3.2 : 2.4}" opacity="${dark ? 0.08 : 0.16}" stroke-linecap="round" stroke-linejoin="round" filter="url(#${u}b1)"/>` +
+        (r1 ? `<path d="${r1}" fill="none" stroke="${mix(hcL, "#fff", 0.25 + lum(hc) * 0.15)}" stroke-width="${big ? 3.6 : 2.6}" opacity="${0.5 + lum(hc) * 0.2}" stroke-linecap="round" stroke-linejoin="round" filter="url(#${u}b1)"/>` : "");
+    };
+    /* ---- hand-laid locks: ordered clumps from the part/crown, tapered, with crease shadows and one highlight band ---- */
+    const bz = (a, b, c2, d, s) => { const m = 1 - s; return [m * m * m * a[0] + 3 * m * m * s * b[0] + 3 * m * s * s * c2[0] + s * s * s * d[0], m * m * m * a[1] + 3 * m * m * s * b[1] + 3 * m * s * s * c2[1] + s * s * s * d[1]]; };
+    const ribbon = (L) => {
+      const N = 14, left = [], right = [], cen = [];
+      for (let i = 0; i <= N; i++) {
+        const s = i / N, p = bz(L.r, L.c1, L.c2, L.t, s), q = bz(L.r, L.c1, L.c2, L.t, Math.min(1, s + 0.02)), o = bz(L.r, L.c1, L.c2, L.t, Math.max(0, s - 0.02));
+        const tx = q[0] - o[0], ty = q[1] - o[1], tl = Math.hypot(tx, ty) || 1, nx = -ty / tl, ny = tx / tl;
+        const prof = (s < 0.14 ? 0.72 + s * 2 : 1) * Math.pow(1 - s, 0.72), w = Math.max(L.w * prof, (L.tw || 0) * s) / 2;
+        left.push([p[0] + nx * w, p[1] + ny * w]); right.push([p[0] - nx * w, p[1] - ny * w]); cen.push([p[0], p[1], nx, ny, w]);
+      }
+      return { d: smooth([...left, ...right.slice().reverse()], 1 / 7), left, right, cen };
+    };
+    const f1 = (v) => (+v).toFixed(1), pl = (arr) => "M" + arr.map((q) => `${f1(q[0])} ${f1(q[1])}`).join("L");
+    const drawLocks = (arr, opt = {}) => {
+      let sd = "", bodies = "", crease = "", hi = "", hi2 = "";
+      const bands = opt.bands || [66];
+      arr.forEach((L, i) => {
+        const R = ribbon(L);
+        sd += `<path d="${R.d}" transform="translate(1.6 3.2)"/>`;
+        const tn = L.tone ?? (((i * 7) % 11) / 10);
+        bodies += `<path d="${R.d}" fill="${opt.dark ? mix(hcD, sh(hc, -0.5), tn * 0.5) : mix(sh(hc, -0.02), hcD, 0.1 + tn * 0.38)}"/>`;
+        crease += pl(R.right.slice(2, 13));
+        if (!opt.dark && L.hs) { if (i % 2 === 0) { const a0 = Math.round(L.hs[0] * 14), a1 = Math.round(L.hs[1] * 14); const seg = R.cen.slice(a0, a1 + 1).map(([x, y, nx, ny, w]) => [x + nx * w * 0.2, y + ny * w * 0.2]); hi += pl(seg); if (i % 4 === 0) hi2 += pl(seg.slice(1, -1)); } }
+        else if (!opt.dark) for (const by of bands) {
+          let k = -1, best = 1e9;
+          for (let j = 2; j <= 11; j++) { const dy = Math.abs(R.cen[j][1] - by); if (dy < best) { best = dy; k = j; } }
+          if (k < 0 || best > 30) continue;
+          const seg = R.cen.slice(Math.max(1, k - 2), Math.min(13, k + 3)).map(([x, y, nx, ny, w]) => [x + nx * w * 0.25, y + ny * w * 0.25]);
+          hi += pl(seg); if (i % 3 === 0) hi2 += pl(seg.slice(1, -1));
+        }
+      });
+      const hl = mix(hcL, "#fff", 0.12 + lum(hc) * 0.2);
+      return `<g fill="${hcLine}" opacity="${opt.dark ? 0.6 : 0.42}" filter="url(#${u}b1)">${sd}</g>${bodies}<path d="${crease}" fill="none" stroke="${hcLine}" stroke-width="1.4" opacity="${opt.dark ? 0.35 : 0.4}" stroke-linecap="round" filter="url(#${u}b05)"/>${hi ? `<path d="${hi}" fill="none" stroke="${hl}" stroke-width="7" opacity="${0.22 + lum(hc) * 0.2}" stroke-linecap="round" filter="url(#${u}b2)"/><path d="${hi}" fill="none" stroke="${hl}" stroke-width="2.6" opacity="${0.32 + lum(hc) * 0.25}" stroke-linecap="round" filter="url(#${u}b05)"/>` : ""}${hi2 ? `<path d="${hi2}" fill="none" stroke="#fff" stroke-width="1.2" opacity="${0.35 + lum(hc) * 0.2}" stroke-linecap="round"/>` : ""}`;
+    };
+    const fan = (n, rootF, tipF, ctrlF, w, extra = {}) => Array.from({ length: n }, (_, i) => { const u = n === 1 ? 0.5 : i / (n - 1), r = rootF(u, i), t = tipF(u, i), [c1, c2] = ctrlF(u, r, t, i); return { r, c1, c2, t, w: typeof w === "function" ? w(u, i) : w, ...extra }; });
+    const edgeY = (u, top = 116, drop = 62) => top + Math.pow(Math.abs(u - 0.5) * 2, 3) * drop;
+    const longLayout = (bottom, blunt, wavy, layered) => {
+      const fanL = fan(7, (u) => [197, 46 + u * 52], (u) => [104 + u * 8, 150 + u * 34], (u, r, t) => [[r[0] - 46, r[1] - 8 + u * 4], [t[0] + 2, t[1] - 54]], (u) => 30 + u * 4, { hs: [0.12, 0.42] });
+      const fanR = fan(7, (u) => [203, 46 + u * 52], (u) => [296 - u * 8, 150 + u * 34], (u, r, t) => [[r[0] + 46, r[1] - 8 + u * 4], [t[0] - 2, t[1] - 54]], (u) => 30 + u * 4, { hs: [0.12, 0.42] });
+      const fall = (side) => fan(8, (u) => [CX + side * (104 - u * 16), 152 + u * 40], (u, i) => [CX + side * (blunt ? 108 - u * 20 : 118 - u * 22 + (i % 2 ? 6 : -4)), layered ? bottom - 60 + ((i * 29) % 70) : bottom - (blunt ? 0 : (i % 3) * 10)], (u, r, t, i) => wavy ? [[r[0] + side * 24, r[1] + (t[1] - r[1]) * 0.33], [t[0] - side * 22, r[1] + (t[1] - r[1]) * 0.66]] : [[r[0] + side * 8, r[1] + 70], [t[0] + side * 2, t[1] - 70]], 22, blunt ? { tw: 22, hs: [0.25, 0.55] } : { hs: [0.25, 0.55] });
+      return { front: [...fall(-1), ...fall(1), ...fanL.reverse(), ...fanR.reverse()], back: fan(9, (u) => [CX + (u - 0.5) * 2 * 98, 112 + Math.abs(u - 0.5) * 2 * 50], (u, i) => [CX + (u - 0.5) * 2 * 132, (layered ? bottom - 30 : bottom) + (i % 2) * 8], (u, r, t) => wavy ? [[r[0] + (u - 0.5) * 60 + 20, r[1] + 100], [t[0] - 20, t[1] - 100]] : [[r[0] + (u - 0.5) * 40, r[1] + 100], [t[0], t[1] - 80]], 38, blunt ? { tw: 30 } : {}), bands: [70, 250] };
+    };
+    const LAYOUT = {
+      crop: () => ({ front: [...fan(12, (u) => [CX + (u - 0.5) * 44, 44 + Math.abs(u - 0.5) * 22], (u, i) => [CX + (u - 0.5) * 2 * 92, edgeY(u) + (i % 2 ? 7 : 0)], (u, r, t) => [[r[0] + (u - 0.5) * 80, r[1] - 8], [t[0] + (u - 0.5) * 40, t[1] - 42]], 32), ...fan(7, (u) => [CX + (u - 0.5) * 2 * 52, 76], (u, i) => [CX + (u - 0.5) * 2 * 70, 122 + (i % 2 ? 8 : 0)], (u, r, t) => [[r[0] + (u - 0.5) * 20, r[1] + 10], [t[0], t[1] - 20]], 24)] }),
+      fade: () => ({ front: fan(10, (u) => [CX + (u - 0.5) * 40, 40], (u, i) => [CX + (u - 0.5) * 2 * 76, 110 + Math.abs(u - 0.5) * 30 + (i % 2 ? 6 : 0)], (u, r, t) => [[r[0] + (u - 0.5) * 70, r[1] - 6], [t[0] + (u - 0.5) * 20, t[1] - 36]], 30) }),
+      sidepart: () => ({ front: [
+        ...fan(4, (u) => [156, 100 - u * 50], (u) => [110 + u * 8, 184 - u * 40], (u, r, t) => [[r[0] - 18, Math.max(r[1] - 10, 50)], [t[0] - 2, t[1] - 48]], 34, { hs: [0.15, 0.4] }).reverse(),
+        ...fan(6, (u) => [162 + u * 6, 104 - u * 58], (u) => [[248, 124], [282, 150], [294, 170], [298, 140], [296, 112], [286, 90]][Math.round(u * 5)], (u, r, t) => [[r[0] + 40, Math.max(r[1] - 24, 46)], [t[0] - 10, t[1] - 40]], (u) => 46 - u * 6, { hs: [0.12, 0.4] }).reverse()] }),
+      slick: () => ({ front: fan(12, (u) => [CX + (u - 0.5) * 2 * 92, edgeY(u, 126, 70)], (u) => [CX + (u - 0.5) * 34, 30], (u, r, t) => [[r[0] + (u - 0.5) * 8, r[1] - 34], [t[0] + (u - 0.5) * 70, t[1] + 14]], 30).sort((a, b) => Math.abs(b.r[0] - CX) - Math.abs(a.r[0] - CX)) }),
+      quiff: () => ({ front: [...fan(10, (u) => [CX + (u - 0.5) * 2 * 92, edgeY(u, 128, 70)], (u) => [CX + (u - 0.5) * 40, 34], (u, r, t) => [[r[0], r[1] - 34], [t[0] + (u - 0.5) * 70, t[1] + 14]], 30).sort((a, b) => Math.abs(b.r[0] - CX) - Math.abs(a.r[0] - CX)), ...fan(5, (u) => [CX - 30 + u * 60, 112], (u) => [CX - 10 + u * 70, 2 + u * 8], (u, r, t) => [[r[0] - 30, r[1] - 70], [t[0] - 50, t[1] + 4]], 34).map((L) => ({ ...L, r: [L.r[0], L.r[1] - 8] }))] }),
+      spiky: () => ({ front: fan(13, (u) => [CX + (u - 0.5) * 2 * 84, 98 - (1 - Math.abs(u - 0.5) * 2) * 30], (u) => [CX + (u - 0.5) * 2 * 112, 26 + Math.abs(u - 0.5) * 50 - (1 - Math.abs(u - 0.5) * 2) * 14], (u, r, t) => [[r[0], r[1] - 14], [t[0] - (u - 0.5) * 20, t[1] + 16]], 28) }),
+      mohawk: () => ({ front: fan(7, (u, i) => [CX + (i % 2 ? 4 : -4), 118 - u * 70], (u, i) => [CX + (i % 2 ? 10 : -10), 26 - u * 20], (u, r, t) => [[r[0], r[1] - 30], [t[0], t[1] + 20]], (u) => 26 - u * 6) }),
+      pixie: () => ({ front: [...fan(3, () => [250, 56], (u) => [266 + u * 26, 128 + u * 44], (u, r, t) => [[r[0] + 20, r[1] + 4], [t[0] + 4, t[1] - 30]], 26), ...fan(10, (u) => [248 - u * 16, 50 + u * 6], (u) => [272 - u * 164, 132 - u * 4 + Math.pow(u, 3) * 40], (u, r, t) => [[r[0] - 50, r[1] - 12], [t[0] + 34, t[1] - 34]], 30)] }),
+      ponytail: () => ({ front: [...fan(11, (u) => [CX + (u - 0.5) * 2 * 92, edgeY(u, 126, 70)], (u) => [288 + (u - 0.5) * 12, 84 + (u - 0.5) * 14], (u, r, t) => [[r[0] + (288 - r[0]) * 0.2, r[1] - 50], [t[0] - 40, t[1] - 24]], 30)] }),
+      bun: () => ({ front: [...fan(11, (u) => [CX + (u - 0.5) * 2 * 92, edgeY(u, 126, 70)], (u) => [CX + (u - 0.5) * 30, 44], (u, r, t) => [[r[0], r[1] - 34], [t[0] + (u - 0.5) * 50, t[1] + 10]], 30), { r: [170, 42], c1: [164, 8], c2: [224, -2], t: [232, 30], w: 22 }, { r: [228, 46], c1: [240, 64], c2: [176, 68], t: [168, 38], w: 20 }, { r: [182, 22], c1: [196, 8], c2: [222, 16], t: [220, 38], w: 16 }] }),
+      manbun: () => ({ front: [...fan(11, (u) => [CX + (u - 0.5) * 2 * 92, edgeY(u, 126, 70)], (u) => [206 + (u - 0.5) * 20, 50], (u, r, t) => [[r[0], r[1] - 34], [t[0] + (u - 0.5) * 40, t[1] + 10]], 30), { r: [188, 44], c1: [184, 22], c2: [222, 18], t: [228, 38], w: 16 }, { r: [226, 50], c1: [232, 62], c2: [188, 62], t: [186, 44], w: 14 }] }),
+      long: () => longLayout(430, false, false, false), layered: () => longLayout(380, false, false, true), longwavy: () => longLayout(430, false, true, false), bob: () => longLayout(298, true, false, false),
+    };
+    const lay = LAYOUT[c.hair] ? LAYOUT[c.hair]() : null;
+    if (lay?.tail === undefined && c.hair === "ponytail") lay.back = fan(5, (u) => [292 + u * 4, 92], (u, i) => [298 + u * 14 - 8, 332 - i * 12], (u, r, t) => [[322, 150], [312, 260]], 24);
+    const masked = ["slick", "quiff", "bun", "manbun", "ponytail"].includes(c.hair);
+    const lockFront = lay ? `<g${masked ? ` mask="url(#${u}hmx)"` : ""}><g transform="${HT}"${clipAttr}>${drawLocks(lay.front, { bands: lay.bands })}</g></g>` : "";
+    const lockBack = lay?.back ? `<g transform="${HT}"${hasHat && !["long", "longwavy", "layered", "bob", "ponytail"].includes(c.hair) ? clipAttr : ""}>${drawLocks(lay.back, { dark: true })}</g>` : "";
+    const frontStrands = lay ? "" : fam === "none" ? "" : fam === "curl" ? bundles(Math.round((c.hair === "afro" || c.hair === "curlylong" ? 170 : 80) * (big ? 1 : 0.6)), BB.curl, false) + curls(Math.round((c.hair === "afro" || c.hair === "curlylong" ? 300 : 140) * nS), BB.curl, false) : grooves(false);
+    const backStrands = lay || fam === "none" || !hairDef.back ? "" : fam === "curl" ? bundles(Math.round(110 * (big ? 1 : 0.6)), BB.curl, true) : grooves(true);
     const W_ = `<style>.${u}w *{fill:#fff!important;stroke:#fff!important}.${u}w [fill="none"]{fill:none!important}</style>`;
-    const dil = `<filter id="${u}dil" x="-20%" y="-20%" width="140%" height="140%"><feMorphology operator="dilate" radius="${big ? 5 : 3}"/></filter><radialGradient id="${u}cb" cx=".38" cy=".32" r=".7"><stop offset="0" stop-color="${mix(hcL, "#fff", 0.15)}"/><stop offset=".55" stop-color="${hc}"/><stop offset="1" stop-color="${hcD}"/></radialGradient><radialGradient id="${u}cbd" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="${hc}"/><stop offset="1" stop-color="${sh(hc, -0.45)}"/></radialGradient>`;
+    const dil = `<filter id="${u}dil" x="-20%" y="-20%" width="140%" height="140%"><feMorphology operator="dilate" radius="${big ? 5 : 3}"/></filter><radialGradient id="${u}cb" cx=".4" cy=".35" r=".72"><stop offset="0" stop-color="${sh(hc, 0.1)}"/><stop offset=".6" stop-color="${hc}"/><stop offset="1" stop-color="${sh(hc, -0.22)}"/></radialGradient><radialGradient id="${u}cbd" cx=".4" cy=".35" r=".7"><stop offset="0" stop-color="${hc}"/><stop offset="1" stop-color="${sh(hc, -0.45)}"/></radialGradient>`;
     const hairBackVol = backStrands ? `<defs>${dil}</defs><mask id="${u}hbm" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w" filter="url(#${u}dil)">${hairBackArt}</g></mask><g mask="url(#${u}hbm)"><g transform="${HT}">${backStrands}</g></g>` : "";
-    const hairVol = c.hair !== "bald" ? `${backStrands ? "" : `<defs>${dil}</defs>`}<mask id="${u}hm" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w" filter="url(#${u}dil)">${hairFrontArt}</g></mask><mask id="${u}hmx" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w">${hairFrontArt}</g></mask><g mask="url(#${u}hm)"><g transform="${HT}">${frontStrands}</g></g><g mask="url(#${u}hmx)"><rect x="-50" y="-60" width="500" height="560" fill="url(#${u}hv)" opacity=".8"/>${fam === "curl" ? "" : `<ellipse cx="${CX - 26}" cy="${sparkY}" rx="64" ry="12" fill="#fff" opacity="${lum(hc) > 0.6 ? 0.1 : 0.14}" filter="url(#${u}b4)" transform="rotate(-9 ${CX - 26} 66)"/>`}</g>` : "";
+    const hairVol = c.hair !== "bald" ? `${backStrands ? "" : `<defs>${dil}</defs>`}<mask id="${u}hm" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w" filter="url(#${u}dil)">${hairFrontArt}</g></mask><mask id="${u}hmx" maskUnits="userSpaceOnUse" x="-100" y="-100" width="600" height="800"><g class="${u}w">${hairFrontArt}</g></mask><g mask="url(#${u}hm)"><g transform="${HT}">${frontStrands}</g></g><g mask="url(#${u}hmx)">${fam === "curl" ? "" : `<rect x="-50" y="-60" width="500" height="560" fill="url(#${u}hv)" opacity=".8"/>`}${fam === "curl" ? "" : `<ellipse cx="${CX - 26}" cy="${sparkY}" rx="64" ry="12" fill="#fff" opacity="${lum(hc) > 0.6 ? 0.1 : 0.14}" filter="url(#${u}b4)" transform="rotate(-9 ${CX - 26} 66)"/>`}</g>` : "";
 
     /* ---- body ---- */
     const torso = `M${CX - nw - 6} 326 C${CX - nw - 22} 350 ${CX - SW + 44} 360 ${CX - SW + 16} 376 C${CX - SW - 6} 390 ${CX - SW - 14} 440 ${CX - SW - 16} 620 L${CX + SW + 16} 620 C${CX + SW + 14} 440 ${CX + SW + 6} 390 ${CX + SW - 16} 376 C${CX + SW - 44} 360 ${CX + nw + 22} 350 ${CX + nw + 6} 326Z`;
@@ -802,7 +901,7 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
 <pattern id="${u}den" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(40)"><rect width="2.2" height="5" fill="#fff" opacity=".1"/><rect x="2.6" width="1" height="5" fill="#000" opacity=".12"/></pattern>
 <style>.${u}w *{fill:#fff!important;stroke:#fff!important}.${u}w [fill="none"]{fill:none!important}</style></defs>`);
     const backdrop = opts.noBg ? "" : `<g filter="url(#${u}b14)" opacity=".38"><ellipse cx="${CX + 14}" cy="470" rx="${SW + 30}" ry="90" fill="#000"/><ellipse cx="${CX + 12}" cy="190" rx="${hw + 26}" ry="128" fill="#000" opacity=".35"/></g>`;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${W}" height="${Hh}" ${opts.slice ? 'preserveAspectRatio="xMidYMid slice"' : ""} role="img" aria-label="${esc(opts.label || "Character")}">${defs}${bgArt}${opts.noBg ? "" : `<rect x="-60" y="-60" width="520" height="680" fill="url(#${u}vg)"/>`}${backdrop}${hairBackArt}${hairBackVol}${body}${head}${hairFrontArt}${hairVol}${brimShadow}${glassesArt ? `<g filter="url(#${u}ds2)">${glassesArt}</g>` : ""}${hatArt ? `<g filter="url(#${u}ds)">${hatArt}</g>` : ""}</svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" width="${W}" height="${Hh}" ${opts.slice ? 'preserveAspectRatio="xMidYMid slice"' : ""} role="img" aria-label="${esc(opts.label || "Character")}">${defs}${bgArt}${opts.noBg ? "" : `<rect x="-60" y="-60" width="520" height="680" fill="url(#${u}vg)"/>`}${backdrop}${hairBackArt}${hairBackVol}${lockBack}${body}${head}${hairFrontArt}${hairVol}${lockFront}${brimShadow}${glassesArt ? `<g filter="url(#${u}ds2)">${glassesArt}</g>` : ""}${hatArt ? `<g filter="url(#${u}ds)">${hatArt}</g>` : ""}</svg>`;
     return svg;
   }
 
