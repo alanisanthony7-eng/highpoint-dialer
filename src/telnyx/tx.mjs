@@ -65,7 +65,7 @@ export async function txSearch(ac, st, contains) {
   let r = await tx("/v2/available_phone_numbers", { query: q }); let fallback = false;
   if (!r.data?.length && ac && st) { delete q["filter[national_destination_code]"]; q["filter[administrative_area]"] = st; r = await tx("/v2/available_phone_numbers", { query: q }); fallback = true; }
   const pretty = (e) => { const d = to10(e); return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
-  return { fallback, results: (r.data || []).map((n) => { const loc = Object.fromEntries((n.region_information || []).map((x) => [x.region_type, x.region_name])); return { e164: n.phone_number, pretty: pretty(n.phone_number), city: loc.rate_center || loc.location || "", state: loc.state || AREA[to10(n.phone_number).slice(0, 3)] || "", areaCode: to10(n.phone_number).slice(0, 3), sms: (n.features || []).some((f) => f.name === "sms"), monthly: n.cost_information?.monthly_cost }; }) };
+  return { fallback, results: (r.data || []).map((n) => { const loc = Object.fromEntries((n.region_information || []).map((x) => [x.region_type, x.region_name])); return { e164: n.phone_number, pretty: pretty(n.phone_number), city: String(loc.rate_center || loc.location || "").split(":")[0].toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase()), state: loc.state || AREA[to10(n.phone_number).slice(0, 3)] || "", areaCode: to10(n.phone_number).slice(0, 3), sms: (n.features || []).some((f) => f.name === "sms"), monthly: n.cost_information?.monthly_cost }; }) };
 }
 
 export async function txBuy(phoneNumber) {
