@@ -773,31 +773,41 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
     // facial hair
     const bcD = sh(bc, -0.25);
     const FPX = facePath(hw + 5, jw + 7, chinY + 14, cw + 7, 72, { tw: G.sc.tw + 5, cb: G.sc.cb + 5, uc: G.sc.uc + 6, jy: G.sc.jy + 6 });
-    defs = defs.replace("</defs>", `<clipPath id="${u}fx"><path d="${FPX}"/></clipPath></defs>`);
+    defs = defs.replace("</defs>", `<clipPath id="${u}fx"><path d="${FPX}"/></clipPath><linearGradient id="${u}mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${mix(bc, hcL, 0.25)}"/><stop offset="1" stop-color="${sh(bc, -0.2)}"/></linearGradient><filter id="${u}stub" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="1" seed="11"/><feColorMatrix type="matrix" values="0 0 0 0 ${(rgb(bc)[0] / 255).toFixed(3)} 0 0 0 0 ${(rgb(bc)[1] / 255).toFixed(3)} 0 0 0 0 ${(rgb(bc)[2] / 255).toFixed(3)} 7 0 0 0 -3.6"/></filter></defs>`);
     const my = G.mouthY;
     const cheekCut = (y0) => `M0 0 H400 V${y0} C${CX + hw} ${y0 + 2} ${CX + 70} ${my - 30} ${CX + 34} ${my - 22} C${CX + 16} ${my - 18} ${CX - 16} ${my - 18} ${CX - 34} ${my - 22} C${CX - 70} ${my - 30} ${CX - hw} ${y0 + 2} 0 ${y0}Z`;
     const beardBlock = (y0, fill = bc, extra = "") => `<g clip-path="url(#${u}fx)"><path d="M0 ${y0 - 60} H400 V420 H0Z" fill="${fill}" mask="url(#${u}bm)"/></g>${extra}`;
     const mustacheD = `M-27 5 C-21 -6 -9 -8 0 -4 C9 -8 21 -6 27 5 C17 1 9 1 0 3 C-9 1 -17 1 -27 5Z`;
-    const mustache = (d = mustacheD) => `<g transform="translate(${CX} ${(my - 13).toFixed(1)}) scale(${G.mw.toFixed(3)} 1)"><path d="${d}" fill="${bc}"/><path d="M-20 -1 C-12 -5 -4 -4 0 -2" stroke="${sh(bc, 0.25)}" stroke-width="1.6" fill="none" opacity=".4"/></g>`;
+    const fringe = (x0, x1, y, n, len) => Array.from({ length: n }, (_, i) => { const x = x0 + ((x1 - x0) * (i + 0.5)) / n, yy = y + Math.sin((x / (x1 - x0)) * Math.PI) * -2; return `M${x.toFixed(1)} ${yy.toFixed(1)}l${((x / 30) * 1.2).toFixed(1)} ${(len * (0.7 + ((i * 37) % 10) / 25)).toFixed(1)}`; }).join("");
+    const mustache = (d = mustacheD) => `<g transform="translate(${CX} ${(my - 15).toFixed(1)}) scale(${G.mw.toFixed(3)} 1)"><path d="${d}" fill="${bc}" transform="translate(.8 2)" opacity=".35" filter="url(#${u}b1)"/><path d="${d}" fill="url(#${u}mg)"/><path d="${fringe(-22, 22, 1.5, 9, 2.6)}" stroke="${bc}" stroke-width="1.5" stroke-linecap="round" opacity=".55" filter="url(#${u}b05)"/><path d="M-20 -1 C-12 -5 -4 -4 0 -2 M4 -2 C10 -4 16 -4 20 -1" stroke="${sh(bc, 0.35)}" stroke-width="1.4" fill="none" opacity=".45" stroke-linecap="round"/></g>`;
     const beardMask = (y0) => `<mask id="${u}bm"><rect x="0" y="0" width="400" height="500" fill="#fff"/><path d="${cheekCut(y0)}" fill="#000" filter="url(#${u}b2)"/><ellipse cx="${CX}" cy="${my + 4}" rx="${24 * G.mw}" ry="${11 * G.lips}" fill="#000"/></mask>`;
     let beardArt = "", beardTop = "";
     if (c.beard !== "none") {
       if (["full", "short", "long", "stubble"].includes(c.beard)) {
         const y0 = c.beard === "short" ? 236 : c.beard === "stubble" ? 228 : 214;
         defs = defs.replace("</defs>", beardMask(y0) + "</defs>");
-        const fill = c.beard === "stubble" ? `url(#${u}dots)` : bc;
-        beardArt = `<g opacity="${c.beard === "stubble" ? 0.85 : 1}">${beardBlock(y0, fill)}</g>`;
-        if (c.beard === "stubble") beardArt += `<g clip-path="url(#${u}fx)" opacity=".18"><path d="M0 ${y0 - 60} H400 V420 H0Z" fill="${bc}" mask="url(#${u}bm)"/></g>`;
+        beardArt = c.beard === "stubble"
+          ? `<g clip-path="url(#${u}fx)"><g mask="url(#${u}bm)"><rect x="0" y="${y0 - 60}" width="400" height="300" fill="${bc}" opacity=".2"/><rect x="0" y="${y0 - 60}" width="400" height="300" filter="url(#${u}stub)" opacity=".75"/></g></g>`
+          : beardBlock(y0, bc);
+        if (c.beard !== "stubble") {
+          // tufted lower edge following the jaw
+          const jy = G.sc.jy + 6, tuft = (side) => Array.from({ length: 15 }, (_, i) => {
+            const t = Math.min(1, (i + 0.5 + Math.sin(i * 2.3) * 0.35) / 15), a = [CX + side * (jw + 7), jy], q = [CX + side * jw * 0.45, chinY + 22], e = [CX, chinY + 14], m = 1 - t;
+            const x = m * m * a[0] + 2 * m * t * q[0] + t * t * e[0], y = m * m * a[1] + 2 * m * t * q[1] + t * t * e[1], L = 2.5 + ((i * 53) % 7) * 0.7, hw2 = 2.5 + ((i * 29) % 4) * 0.8;
+            return `M${(x - hw2).toFixed(1)} ${(y - 3).toFixed(1)} Q${(x - 1).toFixed(1)} ${(y + L * 0.6).toFixed(1)} ${(x + side * (1 - t) * 2.5).toFixed(1)} ${(y + L).toFixed(1)} Q${(x + 1).toFixed(1)} ${(y + L * 0.5).toFixed(1)} ${(x + hw2).toFixed(1)} ${(y - 3).toFixed(1)}Z`;
+          }).join("");
+          if (c.beard !== "long") beardArt += `<path d="${tuft(-1)}${tuft(1)}" fill="${bc}" filter="url(#${u}b05)"/>`;
+        }
         if (c.beard === "long") beardArt += `<path d="M${CX - jw + 4} ${chinY - 40} C${CX - jw + 10} ${chinY + 30} ${CX - 30} ${chinY + 70} ${CX} ${chinY + 76} C${CX + 30} ${chinY + 70} ${CX + jw - 10} ${chinY + 30} ${CX + jw - 4} ${chinY - 40}Z" fill="${bc}"/><path d="M${CX - 20} ${chinY + 10} C${CX - 16} ${chinY + 40} ${CX - 8} ${chinY + 56} ${CX} ${chinY + 66} M${CX + 18} ${chinY + 6} C${CX + 16} ${chinY + 36} ${CX + 10} ${chinY + 52} ${CX + 4} ${chinY + 62}" stroke="${bcD}" stroke-width="2.4" fill="none" opacity=".5"/>`;
         if (c.beard !== "stubble") { beardArt += `<path d="M${CX - jw} ${chinY - 30} C${CX - 40} ${chinY + 6} ${CX + 40} ${chinY + 6} ${CX + jw} ${chinY - 30}" stroke="${bcD}" stroke-width="3" fill="none" opacity=".35"/>`; beardTop = mustache(); }
         else beardTop = `<g opacity=".3">${mustache()}</g>`;
       } else if (c.beard === "chinstrap") {
-        beardArt = `<g clip-path="url(#${u}fx)"><path d="${FP}" fill="none" stroke="${bc}" stroke-width="20" clip-path="url(#${u}low)"/></g>`;
-        defs = defs.replace("</defs>", `<clipPath id="${u}low"><rect x="0" y="222" width="400" height="300"/></clipPath></defs>`);
+        beardArt = `<g clip-path="url(#${u}fx)"><path d="${FP}" fill="none" stroke="${bc}" stroke-width="16" mask="url(#${u}low)"/></g>`;
+        defs = defs.replace("</defs>", `<linearGradient id="${u}lowg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000"/><stop offset=".12" stop-color="#000"/><stop offset=".3" stop-color="#fff"/></linearGradient><mask id="${u}low" maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="500"><rect x="0" y="200" width="400" height="200" fill="url(#${u}lowg)"/></mask></defs>`);
       } else if (c.beard === "goatee" || c.beard === "circle" || c.beard === "soulpatch") {
         const patch = c.beard === "soulpatch" ? `<path d="M${CX - 7} ${my + 16} Q${CX} ${my + 30} ${CX + 7} ${my + 16} Q${CX} ${my + 20} ${CX - 7} ${my + 16}Z" fill="${bc}"/>`
           : `<path d="M${CX - 24} ${my + 10} C${CX - 26} ${chinY - 4} ${CX - 14} ${chinY + 12} ${CX} ${chinY + 12} C${CX + 14} ${chinY + 12} ${CX + 26} ${chinY - 4} ${CX + 24} ${my + 10} C${CX + 12} ${my + 18} ${CX - 12} ${my + 18} ${CX - 24} ${my + 10}Z" fill="${bc}"/>`;
-        beardArt = patch + (c.beard === "circle" ? `<path d="M${CX - 28} ${my - 6} C${CX - 32} ${my + 4} ${CX - 28} ${my + 10} ${CX - 24} ${my + 12} L${CX - 18} ${my + 10} C${CX - 22} ${my + 4} ${CX - 24} ${my} ${CX - 22} ${my - 6}Z M${CX + 28} ${my - 6} C${CX + 32} ${my + 4} ${CX + 28} ${my + 10} ${CX + 24} ${my + 12} L${CX + 18} ${my + 10} C${CX + 22} ${my + 4} ${CX + 24} ${my} ${CX + 22} ${my - 6}Z" fill="${bc}"/>` : "");
+        beardArt = patch + (c.beard !== "soulpatch" ? `<path d="${Array.from({ length: 7 }, (_, i) => { const x = CX - 18 + i * 6; return `M${x - 3} ${chinY + 7} Q${x} ${chinY + 11} ${x + (i - 3) * 0.5} ${chinY + 13 + (i % 2) * 2} Q${x + 1} ${chinY + 10} ${x + 3} ${chinY + 7}Z`; }).join("")}" fill="${bc}" filter="url(#${u}b05)"/>` : "") + (c.beard === "circle" ? `<path d="M${CX - 28} ${my - 6} C${CX - 32} ${my + 4} ${CX - 28} ${my + 10} ${CX - 24} ${my + 12} L${CX - 18} ${my + 10} C${CX - 22} ${my + 4} ${CX - 24} ${my} ${CX - 22} ${my - 6}Z M${CX + 28} ${my - 6} C${CX + 32} ${my + 4} ${CX + 28} ${my + 10} ${CX + 24} ${my + 12} L${CX + 18} ${my + 10} C${CX + 22} ${my + 4} ${CX + 24} ${my} ${CX + 22} ${my - 6}Z" fill="${bc}"/>` : "");
         if (c.beard !== "soulpatch") beardTop = mustache();
       } else if (c.beard === "mustache") beardTop = mustache();
       else if (c.beard === "handlebar") beardTop = mustache(`M-34 -6 C-38 2 -34 8 -28 6 C-22 -4 -9 -7 0 -4 C9 -7 22 -4 28 6 C34 8 38 2 34 -6 C36 2 32 4 28 1 C20 -6 9 -4 0 -1 C-9 -4 -20 -6 -28 1 C-32 4 -36 2 -34 -6Z`);
