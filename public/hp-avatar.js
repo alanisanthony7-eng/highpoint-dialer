@@ -1083,16 +1083,18 @@ ${c.nose === "roman" ? `<ellipse cx="2" cy="-30" rx="3" ry="6" fill="#fff" opaci
         snapCfg = snapCfg || (await fetch("/api/config").then((r) => r.json()).catch(() => ({})));
         if (!snapCfg.snapClientId) { msg("Bitmoji isn't switched on yet. Your admin adds the Snap Client ID in the site settings."); return; }
         await loadSnap();
+        let clicked = false;
+        m.querySelector("#hpaSnapBtn").addEventListener("click", () => { clicked = true; msg("Finish signing in to Snapchat in the window that opened…"); }, true);
         window.snap.loginkit.mountButton("hpaSnapBtn", {
           clientId: snapCfg.snapClientId, redirectURI: location.origin + "/", scopeList: ["user.display_name", "user.bitmoji.avatar"],
           handleResponseCallback: () => {
-            msg("Getting your Bitmoji…");
+            if (clicked) msg("Getting your Bitmoji…");
             window.snap.loginkit.fetchUserInfo().then((r) => {
               const url = r?.data?.me?.bitmoji?.avatar;
               if (!url || !/^https:\/\//.test(url)) { msg("Snapchat didn't share a Bitmoji. Make sure you have one in Snapchat and allow Bitmoji access."); return; }
               push(); st.c = { ...st.c, bitmoji: url }; m.remove(); bmBanner(); refreshAfterChange();
               if (!st.handle && r?.data?.me?.displayName) st.handle = String(r.data.me.displayName).slice(0, 20);
-            }, () => msg("Couldn't get your Bitmoji from Snapchat. Try again."));
+            }, () => msg(clicked ? "Couldn't get your Bitmoji from Snapchat. Try again." : ""));
           },
         });
         msg("");
