@@ -392,7 +392,7 @@ const Q=ls.get("hp.q",{tab:"FE",age:65,sex:"M",tob:"0",state:"CA",cls:"1",FE:{am
 if(!Q.FE)Q.FE={amt:15000,plan:"level"}; if(!Q.TERM)Q.TERM={amt:250000,term:20}; if(!Q.IUL)Q.IUL={amt:250000,focus:"protection"};
 const saveQ=()=>ls.set("hp.q",Q);
 const QCFG={
- FE:{min:2000,max:50000,step:500,base:[5000,10000,15000,20000,25000,30000,40000,50000],quick:[[10000,"$10K"],[15000,"$15K"],[25000,"$25K"]],
+ FE:{min:5000,max:50000,step:5000,base:[5000,10000,15000,20000,25000,30000,40000,50000],quick:[[10000,"$10K"],[15000,"$15K"],[25000,"$25K"]],
    plans:Object.entries(FE_PLANS).map(([k,v])=>[k,v[0].replace(" benefit","")]),cur:()=>Q.FE.plan,setPlan:v=>Q.FE.plan=v,desc:()=>FE_PLANS[Q.FE.plan][2],
    rows:()=>FE_CARRIERS.map(c=>{const ok=c.plans.includes(Q.FE.plan);const ageOk=Q.FE.plan==="gi"?(Q.age>=50&&Q.age<=80):(Q.age>=45&&Q.age<=85);
      return{n:c.n,sub:FE_PLANS[Q.FE.plan][0],why:!ok?"No "+FE_PLANS[Q.FE.plan][0].toLowerCase()+" plan":!ageOk?(Q.FE.plan==="gi"?"Typical ages 50–80":"Typical ages 45–85"):"",
@@ -484,7 +484,10 @@ const PAY={eft:"Bank draft / EFT",ssc:"Direct Express / SS card",cc:"Credit or d
 FE_CARRIERS.forEach(c=>c.pref=["Transamerica","Aetna","American Home Life","American Amicable","Royal Neighbors"].includes(c.n));
 
 if(!Q.FE.v2){Q.FE.plan="best";Q.FE.v2=1}if(!["best","level","graded","gi"].includes(Q.FE.plan))Q.FE.plan="best";
-Object.assign(Q.FE,Object.assign({mode:"face",budget:60,dob:{m:"",d:"",y:""},ft:"",inch:"",lb:"",nic:"none",pay:"eft",conds:[],meds:[]},Q.FE),{});
+Object.assign(Q.FE,Object.assign({mode:"face",budget:50,dob:{m:"",d:"",y:""},ft:"",inch:"",lb:"",nic:"none",pay:"eft",conds:[],meds:[]},Q.FE),{});
+// snap saved amounts to the slider steps ($5,000 coverage, $50 budget)
+Q.FE.budget=Math.min(500,Math.max(50,Math.round((+Q.FE.budget||50)/50)*50));Q.FE.amt=Math.min(50000,Math.max(5000,Math.round((+Q.FE.amt||15000)/5000)*5000));
+for(const k of["TERM","IUL"])Q[k].amt=Math.max(50000,Math.round((+Q[k].amt||250000)/5000)*5000);
 ["dob"].forEach(k=>{if(!Q.FE[k])Q.FE[k]={m:"",d:"",y:""}});
 const FAV=new Set(ls.get("hp.favs",[])); const CARR=ls.get("hp.carriers",{}); let feCmp=new Set(), feOpen=new Set(), fePending=null;
 const yrsSince=t=>(Date.now()-t)/(365.25*864e5);
@@ -505,9 +508,9 @@ function carrierPlan(c,t,filter,age){const opts=[];
 function feFee(c){return 3+c.f*1.5}
 function fePer1000(c,tier){const tob=NIC[Q.FE.nic]?.[1];return (feQuote({age:Q.age,sex:Q.sex,tob,face:1000,plan:"level"})-3)*TIER_MULT[tier]*c.f}
 function feCfg(){const B=Q.FE.mode==="budget";const uw=feUW();
-  return{budget:B,uw,min:B?20:2000,max:B?300:50000,step:B?5:500,
-   base:B?[25,30,40,50,60,75,100,125,150,200,250,300]:[5000,10000,15000,20000,25000,30000,40000,50000],
-   quick:B?[[40,"$40/mo"],[60,"$60/mo"],[100,"$100/mo"]]:[[10000,"$10K"],[15000,"$15K"],[25000,"$25K"]],
+  return{budget:B,uw,min:B?50:5000,max:B?500:50000,step:B?50:5000,
+   base:B?[50,100,150,200,250,300,400,500]:[5000,10000,15000,20000,25000,30000,40000,50000],
+   quick:B?[[50,"$50/mo"],[100,"$100/mo"],[150,"$150/mo"]]:[[10000,"$10K"],[15000,"$15K"],[25000,"$25K"]],
    plans:[["best","Best available"],["level","Level"],["graded","Graded"],["gi","Guaranteed issue"]],cur:()=>Q.FE.plan,setPlan:v=>Q.FE.plan=v,
    desc:()=>({best:"Each carrier is shown with the best plan this client likely qualifies for, based on the health answers below.",level:FE_PLANS.level[2],graded:FE_PLANS.graded[2],gi:FE_PLANS.gi[2]})[Q.FE.plan],
    rows:()=>FE_CARRIERS.filter(c=>!CARR[c.n]?.off).map(c=>{const tier=carrierPlan(c,uw.t,Q.FE.plan,Q.age);
