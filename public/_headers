@@ -14,3 +14,7 @@
   Cache-Control: no-cache
 /hp-pro.css
   Cache-Control: no-cache
+/*.js
+  Content-Type: text/javascript; charset=utf-8
+/*.css
+  Content-Type: text/css; charset=utf-8
