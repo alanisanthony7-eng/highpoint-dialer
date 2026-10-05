@@ -10,6 +10,7 @@ import numbers from "../../src/dialer/dialer-numbers.mjs";
 import vm from "../../src/dialer/dialer-vm.mjs";
 import calls from "../../src/dialer/dialer-calls.mjs";
 import sms from "../../src/dialer/dialer-sms.mjs";
+import { telnyxRoute } from "../../src/telnyx/tx.mjs";
 
 const DIALER = { setup, token, voice, events, power, numbers, vm, calls, sms };
 const json = (b, s) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -28,8 +29,9 @@ export async function onRequest(ctx) {
       case "room": return await roomRoute(req, parts[1]);
       case "ai": return await aiRoute(req);
       case "dialer": { const h = DIALER[parts[1]]; if (h) return await h(req, c); break; }
+      case "telnyx": return await telnyxRoute(req, parts[1]);
       case "config": return json({ snapClientId: ctx.env.HP_SNAP_CLIENT_ID || "" }, 200);
-      case "health": return json({ ok: true, db: !!ctx.env.DB, twilio: !!(ctx.env.TWILIO_ACCOUNT_SID && ctx.env.TWILIO_AUTH_TOKEN) }, 200);
+      case "health": return json({ ok: true, db: !!ctx.env.DB, twilio: !!(ctx.env.TWILIO_ACCOUNT_SID && ctx.env.TWILIO_AUTH_TOKEN), telnyx: !!ctx.env.TELNYX_API_KEY }, 200);
     }
     return json({ error: "Not found" }, 404);
   } catch (e) {
