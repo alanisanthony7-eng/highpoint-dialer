@@ -45,7 +45,7 @@ export default wrap(async (req) => {
   }
 
   if (req.method === "POST") {
-    if (!SID() || !TOKEN()) return bad("Add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in Netlify → Site configuration → Environment variables, then redeploy.", 400);
+    if (!SID() || !TOKEN()) return bad("Add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in Cloudflare Pages → Settings → Variables and secrets, then redeploy.", 400);
     if (!/^https:\/\//.test(siteUrl())) return bad("Site URL is missing. Set HP_PUBLIC_URL to your https site address.");
     const base = siteUrl();
     const next = { ...cfg };

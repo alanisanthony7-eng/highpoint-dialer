@@ -1,9 +1,10 @@
 {
-  "name": "highpoint-dialer",
+  "name": "highpoint-desk",
   "private": true,
   "type": "module",
-  "description": "Highpoint Dialer: browser phone, multi-line power dialing, local-presence numbers and call analytics on Twilio + Netlify",
-  "dependencies": {
-    "@netlify/blobs": ">=8.2.0"
+  "description": "Highpoint Desk + Highpoint Dialer on Cloudflare Pages (Functions + D1) with Twilio",
+  "scripts": {
+    "test": "node test/cf-sim.mjs",
+    "local": "node test/serve.mjs"
   }
 }

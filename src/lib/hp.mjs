@@ -1,11 +1,13 @@
 // Highpoint Dialer: shared server helpers (Netlify Functions v2, Node 18+)
-import { getStore } from "@netlify/blobs";
+import { Buffer } from "node:buffer";
+import { getStore } from "./store.mjs";
+import { requireUser as authUser, httpErr as authErr } from "./auth.mjs";
 import crypto from "node:crypto";
 
-export const env = (k, d = "") => (globalThis.Netlify?.env?.get?.(k) ?? process.env[k] ?? d);
+export const env = (k, d = "") => (globalThis.__ENV?.[k] ?? d);
 export const SID = () => env("TWILIO_ACCOUNT_SID");
 export const TOKEN = () => env("TWILIO_AUTH_TOKEN");
-export const siteUrl = () => (env("HP_PUBLIC_URL") || env("URL") || "").replace(/\/$/, "");
+export const siteUrl = () => (env("HP_PUBLIC_URL") || globalThis.__ORIGIN || "").replace(/\/$/, "");
 
 /* ---------- responses ---------- */
 export const json = (body, status = 200, headers = {}) =>
@@ -37,35 +39,10 @@ export async function listKeys(st, prefix) {
   return out;
 }
 
-/* ---------- auth (Netlify Identity) ---------- */
-const authCache = new Map();
-function tokenFrom(req) {
-  const h = req.headers.get("authorization") || "";
-  if (/^Bearer /i.test(h)) return h.slice(7).trim();
-  const m = (req.headers.get("cookie") || "").match(/(?:^|;\s*)nf_jwt=([^;]+)/);
-  return m ? decodeURIComponent(m[1]) : "";
-}
+/* ---------- auth (Highpoint accounts) ---------- */
 export async function requireUser(req) {
-  const t = tokenFrom(req);
-  if (!t) throw httpErr(401, "Sign in first");
-  const hit = authCache.get(t);
-  if (hit && hit.exp > Date.now()) return hit.user;
-  const base = new URL(req.url).origin;
-  const r = await fetch(base + "/.netlify/identity/user", { headers: { authorization: "Bearer " + t } });
-  if (!r.ok) throw httpErr(401, "Your sign-in expired. Sign in again.");
-  const u = await r.json();
-  const email = String(u.email || "").toLowerCase();
-  const admins = env("HP_ADMIN_EMAILS").toLowerCase().split(/[,\s]+/).filter(Boolean);
-  const roles = u.app_metadata?.roles || [];
-  const user = {
-    id: u.id, email,
-    name: u.user_metadata?.full_name || u.user_metadata?.name || email.split("@")[0],
-    admin: admins.includes(email) || roles.includes("admin") || roles.includes("owner"),
-    identity: "hp_" + String(u.id).replace(/[^A-Za-z0-9_]/g, "").slice(0, 100),
-  };
-  authCache.set(t, { user, exp: Date.now() + 60_000 });
-  // remember the agent so inbound calls / admin views can find them
-  setJ("agents", user.identity, { id: user.id, email, name: user.name, identity: user.identity, seen: Date.now() }).catch(() => {});
+  const user = await authUser(req);
+  setJ("agents", user.identity, { id: user.id, email: user.email, name: user.name, identity: user.identity, seen: Date.now() }).catch(() => {});
   return user;
 }
 export function httpErr(status, msg) { const e = new Error(msg); e.status = status; return e; }
@@ -76,7 +53,7 @@ export const wrap = (fn) => async (req, ctx) => {
 
 /* ---------- Twilio REST (no SDK) ---------- */
 export async function tw(path, { method = "GET", form, base = "https://api.twilio.com/2010-04-01", query } = {}) {
-  if (!SID() || !TOKEN()) throw httpErr(503, "Twilio isn't connected yet. Add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in Netlify.");
+  if (!SID() || !TOKEN()) throw httpErr(503, "Twilio isn't connected yet. Add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in Cloudflare Pages → Settings → Variables and secrets.");
   let url = base + path.replace("{SID}", SID());
   if (query) url += "?" + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== "")).toString();
   const body = form ? new URLSearchParams() : undefined;
