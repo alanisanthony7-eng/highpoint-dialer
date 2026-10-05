@@ -41,6 +41,21 @@ export async function docsRoute(req, parts) {
   return json({ error: "Method not allowed" }, 405);
 }
 
+// One request to check many collections: GET /api/docs/_sync?c=leads:3,appts:0
+export async function docsSync(req) {
+  const user = await requireUser(req); await ensureSchema();
+  const want = (new URL(req.url).searchParams.get("c") || "").split(",").map((x) => x.split(":")).filter(([n]) => okName(n || "")).slice(0, 20);
+  const out = {};
+  for (const [col, since] of want) {
+    const scope = TEAM.has(col) ? "team" : user.id;
+    const v = (await D1().prepare("SELECT v FROM colver WHERE scope=?1 AND col=?2").bind(scope, col).first())?.v || 0;
+    if (since !== "" && since !== undefined && +since === v) { out[col] = { unchanged: true, version: String(v) }; continue; }
+    const r = await D1().prepare("SELECT id, data FROM docs WHERE scope=?1 AND col=?2").bind(scope, col).all();
+    out[col] = { version: String(v), docs: (r.results || []).map((x) => ({ id: x.id, data: JSON.parse(x.data) })) };
+  }
+  return json({ cols: out });
+}
+
 // Many writes in one request (imports of hundreds of leads)
 export async function docsBatch(req) {
   const user = await requireUser(req); await ensureSchema();

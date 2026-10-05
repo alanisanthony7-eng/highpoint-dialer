@@ -1116,6 +1116,7 @@ addEventListener("resize",()=>{segPos.clear();document.querySelectorAll(".segthu
 
 /* ----- LED startup sign ----- */
 function ledIntro(){
+  if(window.hpNeon)return; // the neon sign intro runs at startup now
   let seen=false;try{seen=sessionStorage.getItem("hpv.led")}catch{}
   if(seen||RM)return; try{sessionStorage.setItem("hpv.led","1")}catch{}
   const wrap=document.createElement("div");wrap.id="led";wrap.setAttribute("aria-hidden","true");wrap.innerHTML=`<canvas></canvas><span class="skip">Tap to skip</span>`;document.body.append(wrap);

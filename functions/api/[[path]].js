@@ -1,6 +1,6 @@
 // One entry point for every /api/* request on Cloudflare Pages.
 import { authRoute } from "../../src/lib/auth.mjs";
-import { docsRoute, docsBatch, usersRoute, roomRoute, aiRoute } from "../../src/desk.mjs";
+import { docsRoute, docsBatch, docsSync, usersRoute, roomRoute, aiRoute } from "../../src/desk.mjs";
 import setup from "../../src/dialer/dialer-setup.mjs";
 import token from "../../src/dialer/dialer-token.mjs";
 import voice from "../../src/dialer/dialer-voice.mjs";
@@ -24,7 +24,7 @@ export async function onRequest(ctx) {
   try {
     switch (parts[0]) {
       case "auth": return await authRoute(req, parts[1]);
-      case "docs": return parts[1] === "_batch" ? await docsBatch(req) : await docsRoute(req, parts.slice(1).map(decodeURIComponent));
+      case "docs": return parts[1] === "_sync" ? await docsSync(req) : parts[1] === "_batch" ? await docsBatch(req) : await docsRoute(req, parts.slice(1).map(decodeURIComponent));
       case "users": return await usersRoute(req);
       case "room": return await roomRoute(req, parts[1]);
       case "ai": return await aiRoute(req);

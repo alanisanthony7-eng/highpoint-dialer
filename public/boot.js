@@ -4,8 +4,25 @@
   "use strict";
   const $ = (s, r = document) => r.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  /* connection status: a small pill appears while the desk can't reach the server, and everything resyncs when it's back */
+  const net = (() => {
+    let down = false, pill = null, onBack = new Set();
+    const show = (on) => {
+      if (on === down) return; down = on;
+      if (!pill) { pill = document.createElement("div"); pill.className = "hp-net"; pill.setAttribute("role", "status"); pill.setAttribute("aria-live", "polite"); document.body.append(pill); }
+      pill.innerHTML = on ? `<i></i>Reconnecting… your changes will save when you're back online` : `<i class="ok"></i>Back online`;
+      pill.classList.toggle("show", true); pill.classList.toggle("ok", !on);
+      if (!on) { onBack.forEach((f) => { try { f(); } catch {} }); setTimeout(() => !down && pill.classList.remove("show"), 1800); }
+    };
+    addEventListener("offline", () => show(true)); addEventListener("online", () => show(false));
+    return { fail: () => show(true), ok: () => down && show(false), onBack: (f) => onBack.add(f), get down() { return down; } };
+  })();
   async function call(path, { method = "GET", body } = {}) {
-    const r = await fetch(path, { method, credentials: "same-origin", headers: body !== undefined ? { "content-type": "application/json" } : {}, body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
+    let r;
+    for (let i = 0; ; i++) {
+      try { r = await fetch(path, { method, credentials: "same-origin", headers: body !== undefined ? { "content-type": "application/json" } : {}, body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) }); net.ok(); break; }
+      catch (e) { net.fail(); if (method !== "GET" && method !== "PUT" && method !== "DELETE" || i >= 2) throw Object.assign(new Error("You're offline. Check your connection and try again."), { status: 0 }); await new Promise((res) => setTimeout(res, 800 * (i + 1))); }
+    }
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { const e = new Error(j.error || `Request failed (${r.status})`); e.status = r.status; e.code = j.code; throw e; }
     return j;
@@ -45,8 +62,21 @@
   }
   const cols = new Map();
   const col = (n) => { if (!cols.has(n)) cols.set(n, new Col(n)); return cols.get(n); };
-  setInterval(() => { if (visible()) cols.forEach((c) => c.listeners.size && c.refresh()); }, 8000);
-  document.addEventListener("visibilitychange", () => { if (visible()) cols.forEach((c) => c.listeners.size && c.refresh()); });
+  // one request checks every open collection; only the ones that changed come back
+  let syncing = false;
+  async function syncAll() {
+    if (syncing || !visible()) return; const live = [...cols.values()].filter((c) => c.listeners.size && c.loaded);
+    if (!live.length) return; syncing = true;
+    const gens = new Map(live.map((c) => [c.name, c.gen]));
+    try {
+      const r = await call("/api/docs/_sync?c=" + live.map((c) => `${c.name}:${c.version}`).join(","));
+      for (const c of live) { const x = r.cols?.[c.name]; if (!x || gens.get(c.name) !== c.gen) continue; if (x.unchanged) continue; c.docs = new Map(x.docs.map((d) => [d.id, d.data])); c.version = x.version; c.emit(); }
+    } catch (e) { if (e.status === 401) location.reload(); }
+    finally { syncing = false; }
+  }
+  setInterval(syncAll, 6000);
+  document.addEventListener("visibilitychange", () => { if (visible()) syncAll(); });
+  net.onBack(() => { cols.forEach((c) => c.listeners.size && (c.loaded ? null : c.refresh())); syncAll(); });
   const db = { collection: col, doc: (path) => { const [c, id] = String(path).split("/"); return col(c).doc(id); } };
 
   /* ---------- people + lobby ---------- */
@@ -64,7 +94,7 @@
       } catch {}
     };
     return {
-      presence: (state) => call("/api/room/presence", { method: "POST", body: state }).then(pollPeers),
+      presence: (() => { let lastKey = "", lastAt = 0, t = 0; return (state) => { const k = state?.status || ""; const now = Date.now(); if (k === lastKey && now - lastAt < 45000) return Promise.resolve(); clearTimeout(t); return new Promise((res) => { t = setTimeout(() => { lastKey = k; lastAt = Date.now(); call("/api/room/presence", { method: "POST", body: state }).then(pollPeers).catch(() => {}).finally(res); }, 1200); }); }; })(),
       onPeers(cb) { peerCbs.add(cb); if (!pTimer) pTimer = setInterval(pollPeers, 20000); pollPeers(); return () => peerCbs.delete(cb); },
       on(topic, cb) { if (!topicCbs.has(topic)) topicCbs.set(topic, []); topicCbs.get(topic).push(cb); if (!eTimer) eTimer = setInterval(pollEvents, 10000); pollEvents(); return () => {}; },
       emit: (topic, data) => call("/api/room/emit", { method: "POST", body: { topic, data } }),
@@ -138,6 +168,11 @@
   @media (max-width:900px){#hpGate .gx-bg::after{background:rgba(5,6,16,.6)}#hpGate .gx{grid-template-columns:1fr;gap:26px;padding:32px 18px 60px;align-content:start}
     #hpGate h1{font-size:clamp(38px,11vw,56px)}#hpGate .gx-sub{font-size:15px}#hpGate .gx-lock svg{width:72px}#hpGate .gx-lock b{font-size:24px}#hpGate .gx-foot{position:static;padding:0 18px 20px}}
   @media (prefers-reduced-motion:reduce){#hpGate .gx-hero,#hpGate .g-card{animation:none}}
+  .hp-net{position:fixed;left:50%;bottom:22px;z-index:2000;transform:translate(-50%,30px);opacity:0;pointer-events:none;display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:999px;font:600 13px var(--f-ui,system-ui);color:#fff;background:rgba(14,10,24,.92);border:1px solid rgba(255,79,163,.45);box-shadow:0 12px 30px rgba(0,0,0,.5),0 0 18px -6px rgba(255,46,136,.7);transition:transform .3s cubic-bezier(.2,.8,.2,1),opacity .3s}
+  .hp-net.show{transform:translate(-50%,0);opacity:1}
+  .hp-net i{width:9px;height:9px;border-radius:50%;background:#FF9E3D;box-shadow:0 0 10px #FF9E3D;animation:hpNetP 1s ease-in-out infinite}
+  .hp-net.ok{border-color:rgba(59,211,139,.5)}.hp-net i.ok{background:#3BD38B;box-shadow:0 0 10px #3BD38B;animation:none}
+  @keyframes hpNetP{50%{opacity:.35}}
   .hp-acct{display:inline-flex;align-items:center;gap:8px;font-size:13px;margin-left:6px}
   .hp-acct i{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;background:linear-gradient(135deg,#FF2E88,#FF9E3D);color:#fff}
   .hp-acct button{all:unset;cursor:pointer;font-size:12.5px;color:#C9CDD5;padding:6px 8px;border-radius:8px}
@@ -218,6 +253,7 @@
 
   async function boot() {
     document.documentElement.classList.add("gated");
+    window.hpNeon?.intro();
     try { const r = await call("/api/auth/me"); start(r.user); }
     catch (e) { gate(e.status === 401 ? "" : e.status === 503 ? e.message : ""); }
   }

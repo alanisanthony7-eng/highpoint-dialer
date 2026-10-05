@@ -1,0 +1,59 @@
+/* Highpoint neon: real-tube glow, flicker and power-on for every neon part of the desk */
+:root{--nn-pink:#FF2E88;--nn-pink-core:#FFE1F0;--nn-orange:#FF9E3D;--nn-orange-core:#FFEBD2;--nn-sky:#3DB8FF;--nn-sky-core:#E6F6FF}
+
+/* ---------- tube text ---------- */
+.nn-text{--nn-c:var(--nn-pink);--nn-core:#FFF4FA;
+  -webkit-text-fill-color:var(--nn-core)!important;color:var(--nn-core)!important;background:none!important;-webkit-background-clip:border-box!important;background-clip:border-box!important;filter:none!important;
+  text-shadow:0 0 1px #fff,0 0 3px var(--nn-core),0 0 7px var(--nn-c),0 0 14px var(--nn-c),0 0 26px var(--nn-c),0 0 48px color-mix(in srgb,var(--nn-c) 70%,transparent)!important}
+.nn-text.nn-o{--nn-c:var(--nn-orange);--nn-core:var(--nn-orange-core)}
+.nn-text.nn-s{--nn-c:var(--nn-sky);--nn-core:var(--nn-sky-core)}
+.nn-text.nn-soft{text-shadow:0 0 1px #fff,0 0 4px var(--nn-c),0 0 10px var(--nn-c),0 0 20px color-mix(in srgb,var(--nn-c) 60%,transparent)!important}
+.nn-text em,.nn-text .nn-hl{font-style:inherit;--nn-c:var(--nn-pink);--nn-core:#FFD3E8;-webkit-text-fill-color:var(--nn-core)!important;color:var(--nn-core)!important;
+  text-shadow:0 0 1px #fff,0 0 4px #FF7DBA,0 0 10px var(--nn-c),0 0 20px var(--nn-c),0 0 38px var(--nn-c),0 0 70px var(--nn-c)!important}
+/* the one loose tube in each sign */
+.nn-text .nn-word{-webkit-text-fill-color:inherit!important;color:inherit!important;background:none!important}
+.nn-text .nn-bad{-webkit-text-fill-color:inherit!important;color:inherit!important;background:none!important}
+.nn-bad{animation:nnBad 7.7s steps(1,end) infinite;animation-delay:var(--nn-d,0s)}
+@keyframes nnBad{0%,61%,63%,64.5%,66%,100%{opacity:1}62%{opacity:.42;text-shadow:none}64%{opacity:.6}65.2%{opacity:.4;text-shadow:none}}
+
+/* ---------- tube outlines and bars ---------- */
+.nn-box{box-shadow:0 0 0 1px color-mix(in srgb,var(--nn-c,var(--nn-pink)) 70%,transparent),0 0 10px -1px var(--nn-c,var(--nn-pink)),0 0 26px -6px var(--nn-c,var(--nn-pink)),inset 0 0 14px -6px var(--nn-c,var(--nn-pink))!important}
+.nn-svg{filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 4px var(--nn-c,var(--nn-pink))) drop-shadow(0 0 12px var(--nn-c,var(--nn-pink)))}
+
+/* ---------- flicker ---------- */
+.nn-stutter{animation:nnStutter .95s steps(1,end) 1!important}
+@keyframes nnStutter{0%{opacity:1}6%{opacity:.45}10%{opacity:1}17%{opacity:.35}21%{opacity:.9}24%{opacity:.5}29%{opacity:1}58%{opacity:.75}61%{opacity:1}100%{opacity:1}}
+.nn-power{animation:nnPower 1.15s steps(1,end) 1 both}
+@keyframes nnPower{0%{opacity:.06}12%{opacity:.55}15%{opacity:.06}30%{opacity:.8}33%{opacity:.15}38%{opacity:1}52%{opacity:.4}55%{opacity:1}100%{opacity:1}}
+.nn-hum{animation:nnHum 3.6s ease-in-out infinite}
+@keyframes nnHum{0%,100%{opacity:1}50%{opacity:.86}}
+@media (prefers-reduced-motion:reduce){.nn-bad,.nn-stutter,.nn-power,.nn-hum{animation:none!important}}
+
+/* ---------- where the neon lives ---------- */
+/* active nav tube + section underline hum like a lit tube */
+html.hp-pro .nav[aria-current=page]::before{box-shadow:0 0 4px #fff,0 0 10px var(--nn-pink),0 0 22px var(--nn-pink)!important;animation:nnHum 3.2s ease-in-out infinite}
+html.hp-pro section[data-v] > .head::after{height:2px!important;background:linear-gradient(90deg,#FF7DBA,#FF2E88)!important;box-shadow:0 0 4px #fff,0 0 10px #FF2E88,0 0 22px #FF2E88}
+@media (prefers-reduced-motion:reduce){html.hp-pro .nav[aria-current=page]::before{animation:none}}
+
+/* ---------- intro: neon sign powers on ---------- */
+#nnIntro{position:fixed;inset:0;z-index:3000;display:grid;place-items:center;overflow:hidden;cursor:pointer;
+  background:radial-gradient(1200px 700px at 50% 42%,#1B0C2C 0%,#0B0614 55%,#040208 100%);transition:opacity .7s ease,transform .9s cubic-bezier(.2,.8,.2,1)}
+#nnIntro.out{opacity:0;transform:scale(1.06);pointer-events:none}
+#nnIntro::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background:repeating-linear-gradient(0deg,rgba(255,255,255,.018) 0 1px,transparent 1px 3px),radial-gradient(closest-side at 50% 45%,transparent 60%,rgba(0,0,0,.6))}
+#nnIntro .nn-haze{position:absolute;left:50%;top:44%;width:min(1200px,120vw);height:min(720px,90vh);transform:translate(-50%,-50%);pointer-events:none;
+  background:radial-gradient(closest-side,rgba(255,46,136,.32),rgba(61,184,255,.10) 55%,transparent 75%);opacity:0;transition:opacity .25s}
+#nnIntro .nn-stage{position:relative;width:min(980px,94vw);display:flex;flex-direction:column;align-items:center}
+#nnIntro svg{width:100%;height:auto;overflow:visible}
+#nnIntro .nn-refl{width:100%;height:auto;transform:scaleY(-1);margin-top:-1%;opacity:.14;filter:blur(2.5px);
+  -webkit-mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 55%);mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 55%)}
+#nnIntro .t{fill:none;stroke:rgba(255,255,255,.07);stroke-linecap:round;stroke-linejoin:round;transition:stroke .05s}
+#nnIntro .f{fill:rgba(255,255,255,.06);stroke:none}
+#nnIntro g.lit .t{stroke:var(--core)}
+#nnIntro g.lit .f{fill:var(--core)}
+#nnIntro g.lit{filter:drop-shadow(0 0 1.2px #fff) drop-shadow(0 0 5px var(--glow)) drop-shadow(0 0 14px var(--glow)) drop-shadow(0 0 30px var(--glow))}
+#nnIntro .skip{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);font:700 11px/1 "Montserrat",system-ui,sans-serif;letter-spacing:.32em;text-transform:uppercase;color:rgba(255,255,255,.4)}
+#nnIntro .bar{position:absolute;bottom:58px;left:50%;width:140px;height:2px;transform:translateX(-50%);border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+#nnIntro .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#FF2E88,#FF9E3D);box-shadow:0 0 10px #FF2E88;transition:width 3.1s linear}
+#nnIntro.go .bar i{width:100%}
+@media (prefers-reduced-motion:reduce){#nnIntro,#nnIntro.out{transition:opacity .3s}#nnIntro.out{transform:none}}
