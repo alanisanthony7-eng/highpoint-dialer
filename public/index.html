@@ -122,7 +122,7 @@
     <!-- DIALER -->
     <section id="v-dialer" data-v hidden>
       <div class="head">
-        <div><h1>Highpoint Dialer</h1><p>Call from your browser with local caller ID, power-dial up to 3 lines, drop voicemails, and log every call to the lead automatically.</p></div>
+        <div><h1>Highpoint Dialer</h1><p>Call from your browser with local caller ID, drop voicemails, and log every call to the lead automatically.</p></div>
         <div class="row">
           <select id="dqStage" style="width:auto" aria-label="Queue stage"></select>
           <select id="dqProduct" style="width:auto" aria-label="Queue product"><option value="">All products</option><option value="FE">Final Expense</option><option value="MP">Mortgage Protection</option><option value="IUL">IUL</option></select>
@@ -147,13 +147,8 @@
         <div class="panel stack" style="gap:14px" id="dCur"></div>
         <div class="stack side" style="gap:12px">
           <div class="panel stack">
-            <h2>WAVV</h2>
-            <p class="muted" style="margin:0;font-size:12.5px">WAVV runs in its own window and can't be embedded inside this page. Paste the link you use to open your WAVV dialer and launch it from here.</p>
-            <label class="field"><span>Your WAVV dialer link</span><input id="wavvUrl" placeholder="https://…" inputmode="url"></label>
-            <div class="row"><a class="btn primary" id="wavvOpen" href="https://www.wavv.com" target="_blank" rel="noopener">Open WAVV</a><button class="btn" id="wavvSave">Save link</button></div>
             <button class="btn" id="dScript">Float script for this lead</button>
-            <button class="btn" id="wavvCsv">Download queue for WAVV (CSV)</button>
-            <p class="muted" style="margin:0;font-size:12px">Upload the CSV as a list in WAVV to power-dial this exact queue.</p>
+            <button class="btn" id="wavvCsv">Download this queue (CSV)</button>
           </div>
           <div class="panel stack">
             <span class="label">This session</span>

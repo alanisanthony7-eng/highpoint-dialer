@@ -265,7 +265,7 @@ function renderDialer(){
     <button class="btn" id="dcOpen" style="align-self:flex-start">Open full lead</button>`;
   $("#dcCopy").onclick=async()=>{try{await navigator.clipboard.writeText(fmtPhone(l.phone));toast("Number copied")}catch{const s=getSelection(),r=document.createRange();r.selectNodeContents($(".bigphone"));s.removeAllRanges();s.addRange(r);toast("Number selected, press Ctrl/Cmd+C")}};
   $("#dcOpen").onclick=()=>openDrawer(l.id);
-  $("#dcStart").onclick=async()=>{if(window.hpDialer?.ready){if(window.hpDialer.busy){toast("Finish the current call first");return}window.hpDialer.dialLead(l);return}if(callT0&&callLead===l.id){callStop();renderDialer();return}callT0=Date.now();callLead=l.id;window.dispatchEvent(new Event("hp:callstart"));try{await navigator.clipboard.writeText(normPhone(l.phone))}catch{}toast("Timer started · number copied for WAVV");tickCall();renderDialer()};
+  $("#dcStart").onclick=async()=>{if(window.hpDialer?.ready){if(window.hpDialer.busy){toast("Finish the current call first");return}window.hpDialer.dialLead(l);return}if(callT0&&callLead===l.id){callStop();renderDialer();return}callT0=Date.now();callLead=l.id;window.dispatchEvent(new Event("hp:callstart"));try{await navigator.clipboard.writeText(normPhone(l.phone))}catch{}toast("Timer started · number copied");tickCall();renderDialer()};
   $$("[data-dz]").forEach(b=>b.onclick=()=>dispo(l,b.dataset.dz));
   saveSess(); window.dispatchEvent(new Event("hp:leadchange"));
 }
@@ -287,10 +287,8 @@ async function dispo(l,kind){
     if(kind==="sold"){celebrate(`Sold! ${fullName(l)} is on the books.`);awardXP(100,"policy sold")}else if(kind==="apptgo"||kind==="appt"){celebrate(`Appointment set with ${fullName(l)}`);awardXP(30,"appointment set")}else{toast(`${fullName(l)}: ${lab}`);awardXP(5,"call logged")}renderDialer()}catch(e){toast("Couldn't log the call: "+e.message)}
 }
 $("#dqStage").onchange=()=>{ls.set("hp.dqStage",$("#dqStage").value);dCurId=null;renderDialer()};$("#dqProduct").onchange=()=>{dCurId=null;renderDialer()};
-const wv=ls.get("hp.wavv",""); $("#wavvUrl").value=wv; if(/^https:\/\//.test(wv))$("#wavvOpen").href=wv;
-$("#wavvSave").onclick=()=>{const u=$("#wavvUrl").value.trim();if(u&&!/^https:\/\//.test(u)){toast("Use a link that starts with https://");return}ls.set("hp.wavv",u);$("#wavvOpen").href=u||"https://www.wavv.com";toast(u?"WAVV link saved on this device":"Link cleared")};
-$("#wavvCsv").onclick=()=>{const q=dialQueue();if(!q.length){toast("Queue is empty");return}
-  offerFile(`wavv-${$("#dqStage").value}-${new Date().toISOString().slice(0,10)}.csv`,toCSV(["First Name","Last Name","Phone","Email","State","Notes"],q.map(l=>[l.first||"",l.last||"",normPhone(l.phone),l.email||"",l.state||"",[PROD[l.product],l.source].filter(Boolean).join(" · ")])))};
+$("#wavvCsv")?.addEventListener("click",()=>{const q=dialQueue();if(!q.length){toast("Queue is empty");return}
+  offerFile(`queue-${$("#dqStage").value}-${new Date().toISOString().slice(0,10)}.csv`,toCSV(["First Name","Last Name","Phone","Email","State","Notes"],q.map(l=>[l.first||"",l.last||"",normPhone(l.phone),l.email||"",l.state||"",[PROD[l.product],l.source].filter(Boolean).join(" · ")])))});
 
 /* ---------- Highpoint Dialer hooks ---------- */
 window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,renderDialer,openDrawer,

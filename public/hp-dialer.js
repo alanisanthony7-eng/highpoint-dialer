@@ -14,6 +14,11 @@
   const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
   const toast = (m) => (window.hpDesk?.toast || console.log)(m);
+  const dialSubtitle = () => S.via === "phone"
+    ? "Call from your own phone. Outcomes, notes and callbacks still log to the lead."
+    : S.provider === "telnyx"
+      ? "Call from your browser with local caller ID. Telnyx is one line at a time — drop voicemails and log every call to the lead automatically."
+      : "Call from your browser with local caller ID, power-dial up to 3 lines, drop voicemails, and log every call to the lead automatically.";
   const I = {
     phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
     mic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>',
@@ -28,7 +33,7 @@
 
   /* ================= state ================= */
   const S = {
-    demo: false, ready: false, twilio: false, me: null, settings: {}, prefs: lsGet("hpd.prefs", {}), trust: {},
+    demo: false, ready: false, twilio: false, me: null, settings: {}, prefs: lsGet("hpd.prefs", {}), trust: {}, camps: lsGet("hpd.camps", []),
     device: null, call: null, callLead: null, callSid: null, muted: false, padOpen: false,
     mode: lsGet("hpd.mode", "single"), lines: lsGet("hpd.lines", 1), campaign: lsGet("hpd.campaign", ""),
     power: null, // {session, lines, paused, batch, waitingDispo, attempted:Set, poll}
@@ -69,7 +74,7 @@
     }
     S.lines = Math.min(S.lines, S.settings.maxLines || 3);
     if (S.ready || S.demo) document.body.classList.add("hpd-on");
-    if (Array.isArray(S.prefs.camps) && S.prefs.camps.length > S.camps.length) { S.camps = S.prefs.camps; lsSet("hpd.camps", S.camps); }
+    if (Array.isArray(S.prefs.camps) && S.prefs.camps.length > (S.camps?.length || 0)) { S.camps = S.prefs.camps; lsSet("hpd.camps", S.camps); }
     buildHome(); renderPhone();
     if (S.ready) startDevice();
     refreshNumbers(); loadGreetings(); inboxBadge();
@@ -80,7 +85,7 @@
   function buildUI() {
     const v = $("#v-dialer");
     const h1 = $(".head h1", v); if (h1) h1.textContent = "Highpoint Dialer";
-    const p = $(".head p", v); if (p) p.textContent = "Call from your browser with local caller ID, power-dial up to 3 lines, drop voicemails, and log every call to the lead automatically.";
+    const p = $(".head p", v); if (p) p.textContent = dialSubtitle();
     const crumb = $("#crumb"); if (crumb && crumb.textContent === "WAVV dialer") crumb.textContent = "Highpoint Dialer";
     $$('.nav[data-view="dialer"]').forEach((n) => { const t = [...n.childNodes].find((c) => c.nodeType === 3 && /WAVV/i.test(c.textContent)); if (t) t.textContent = t.textContent.replace(/WAVV/i, "Highpoint"); const s = $("span", n); if (s && /WAVV/i.test(s.textContent)) s.textContent = s.textContent.replace(/WAVV/i, "Highpoint"); });
 
@@ -581,7 +586,7 @@
       <div class="hpd-grid2">
         <div class="panel stack" style="gap:12px">
           <h2>Get a local number</h2>
-          <p class="muted" style="margin:0;font-size:13px">Pick numbers in the area codes you call most. Leads pick up local numbers far more often. About $1.15/month each through Twilio.</p>
+          <p class="muted" style="margin:0;font-size:13px">Pick numbers in the area codes you call most. Leads pick up local numbers far more often. About $${S.provider === "telnyx" ? "1.00" : "1.15"}/month each through ${S.provider === "telnyx" ? "Telnyx" : "Twilio"}.</p>
           <div class="hpd-flex"><input id="hpdAc" inputmode="numeric" maxlength="3" placeholder="Area code, e.g. 305" style="width:190px"><input id="hpdSt" maxlength="2" placeholder="State" style="width:100px"><input id="hpdHas" inputmode="numeric" maxlength="7" placeholder="Contains (optional)" style="width:160px"><button class="btn primary" id="hpdFind" type="button">Search</button></div>
           ${S.me?.admin ? `<label class="field" style="max-width:280px"><span>Assign new numbers to</span><select id="hpdOwner"><option value="__me">Me</option>${agentOpts("")}</select></label>` : `<span class="hpd-sm">You have ${mine} of ${S.settings.agentMaxNumbers ?? 5} numbers.</span>`}
           <div class="hpd-results" id="hpdRes"></div>
@@ -600,7 +605,7 @@
         </div>
       </div>
       <div class="panel stack" style="gap:10px">
-        <div class="row" style="justify-content:space-between"><h2>${S.me?.admin ? "All numbers" : "Your numbers"}</h2>${S.me?.admin ? `<button class="btn" id="hpdImport" type="button">Add numbers already in Twilio</button>` : ""}</div>
+        <div class="row" style="justify-content:space-between"><h2>${S.me?.admin ? "All numbers" : "Your numbers"}</h2>${S.me?.admin ? `<button class="btn" id="hpdImport" type="button">Add numbers already in ${S.provider === "telnyx" ? "Telnyx" : "Twilio"}</button>` : ""}</div>
         <div class="tablewrap" style="overflow-x:auto"><table class="hpd-tbl"><thead><tr><th>Number</th><th>Health</th><th>Today</th><th class="hide-sm">7-day answer rate</th><th>Owner</th><th></th></tr></thead><tbody>
         ${S.numbers.map((n) => {
           const h = n.health || {}; const status = n.paused ? "paused" : h.status;
@@ -892,7 +897,7 @@
     async function api(path, { method, body }) {
       await sleep(120);
       const p = path.split("?")[0], q = new URLSearchParams(path.split("?")[1] || "");
-      if (p === "/setup") { if (method === "PUT") { Object.assign(settings, body.settings || {}); return { settings }; } return { ok: true }; }
+      if (p === "/setup") { if (method === "PUT") { Object.assign(settings, body.settings || {}); return { settings }; } return { ok: true, ready: true, twilio: true, provider: "twilio", me: { name: "You", admin: true, identity: "me" }, settings }; }
       if (p === "/numbers") return { numbers: nums, agents: { me: "You", a2: "Jordan R.", a3: "Kiara M." } };
       if (p === "/numbers/search") { const ac = q.get("areaCode") || "305"; return { results: Array.from({ length: 9 }, () => ({ e164: `+1${ac}555${String(rnd(1000, 9999))}`, city: { 305: "Miami", 786: "Miami", 954: "Fort Lauderdale", 407: "Orlando", 813: "Tampa" }[ac] || "", state: q.get("state") || "FL" })) }; }
       if (p === "/numbers/buy") { nums.unshift({ e164: body.phoneNumber, state: "FL", areaCode: body.phoneNumber.slice(2, 5), mine: true, boughtAt: Date.now(), health: { status: "healthy", why: ["warming up (day 1 of 14)"], todayDials: 0, cap: 15, week: { dials: 0, answered: 0 } } }); return { ok: true }; }
@@ -1396,6 +1401,7 @@
   function renderHome() {
     const el = $("#hpdHome"); if (!el || !window.hpDesk) return;
     const D = window.hpDesk, q = campaignQueue(), oneLine = S.via === "phone" || S.provider === "telnyx", lines = oneLine ? 1 : Math.min(S.lines, S.settings.maxLines || 3);
+    const sub = $("#v-dialer .head p"); if (sub) sub.textContent = dialSubtitle();
     const headset = S.via === "phone" ? (S.phoneLead ? "live" : "on") : S.call || S.power?.connected ? "live" : S.power ? "dial" : (S.deviceReady || S.demo) ? "on" : "off";
     const t = usage?.today || {}, m = usage?.month || {};
     const estMin = (x) => Math.round(((x.talkSec || 0) + (x.dials || 0) * 25) / 60); // talk + ~25s ringing per dial, both legs billed per minute
@@ -1432,7 +1438,7 @@
         <div class="hph-ctl">
           <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
           <label class="hph-sel"><span>Who to call</span><select id="hphFilter" ${S.power ? "disabled" : ""}>${FILTERS.map(([k, n]) => `<option value="${k}" ${S.filter === k ? "selected" : ""}>${n} (${fCount[k]})</option>`).join("")}</select></label>
-          <div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (oneLine ? 1 : S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>
+          ${oneLine ? `<p class="hpd-sm" style="margin:0;align-self:center">${S.via === "phone" ? "Your phone is one line at a time." : "Telnyx browser calling is one line at a time."}</p>` : `<div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>`}
           ${oneLine ? (S.ps ? `<button type="button" class="btn" id="hphPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hphPsEnd">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphPsGo" ${q.length ? "" : "disabled"}>${I.phone} Start calling</button>`) : S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
         </div>
       </div>
@@ -1478,7 +1484,7 @@
     $$("[data-usec]", el).forEach((b) => (b.onclick = () => { setSrc("c:" + b.dataset.usec); renderHome(); }));
     $$("[data-cpause]", el).forEach((b) => (b.onclick = () => { const c = S.camps.find((x) => x.id === b.dataset.cpause); c.paused = !c.paused; saveCamps(); renderHome(); }));
     $$("[data-cdel]", el).forEach((b) => (b.onclick = () => { if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Delete?"; b.classList.add("armed"); return; } S.camps = S.camps.filter((x) => x.id !== b.dataset.cdel); if (S.src === "c:" + b.dataset.cdel) setSrc("all"); saveCamps(); renderHome(); toast("Campaign deleted. The leads are still in your CRM."); }));
-    $("#hphManual").onclick = () => { $("#dPane").classList.toggle("hpd-showmanual"); renderHome(); };
+    $("#hphManual")?.addEventListener("click", () => { $("#dPane").classList.toggle("hpd-showmanual"); renderHome(); });
     const mb = $("#hpdManualBar"); if (mb) mb.hidden = !$("#dPane").classList.contains("hpd-showmanual") || el.hidden;
   }
   async function fillDevices() {
@@ -1600,6 +1606,6 @@
   }
 
   window.hpDialer = { openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
-  window.addEventListener("hp:leadchange", () => { if (!S.call && !S.power) renderActions(); });
+  window.addEventListener("hp:leadchange", () => { if (!S.call && !S.power) renderActions(); if (!$("#hpdHome")?.hidden) renderHome(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
