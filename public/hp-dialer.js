@@ -300,11 +300,13 @@
     let box = document.getElementById("hpdPhoneCard");
     if (!l) { box?.remove(); return; }
     if (!box) { box = document.createElement("div"); box.id = "hpdPhoneCard"; box.className = "hpd hpd-phonecard"; box.setAttribute("role", "status"); document.body.append(box); }
-    const P = S.ps;
-    box.innerHTML = `<div class="hpd-sm">${P ? `${S.via === "phone" ? "Phone" : "Calling"} session · lead ${P.i + 1} of ${P.ids.length}` : "Calling on your phone"}</div>
-      <b style="font-size:17px">${esc(D.fullName(l))}</b><a class="num" href="${telHref(l.phone)}" style="color:inherit">${esc(fmt(l.phone))}</a>
-      <span class="hpd-sm">${S.via === "phone" ? "Your phone should be ringing them now." : "Calling from your headset."} When you hang up, pick a result under Log the call${P ? " and the next lead opens" : ""}.</span>
-      <div class="row" style="gap:6px;flex-wrap:wrap"><a class="btn primary" href="${telHref(l.phone)}">Call again</a>${P ? `<button type="button" class="btn" id="hpdPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hpdPsEnd">End session</button>` : `<button type="button" class="btn" id="hpdPsDone">Done</button>`}</div>`;
+    const P = S.ps, cell = S.via === "phone";
+    box.innerHTML = `<div class="hpd-sm">${P ? `${cell ? "Phone" : "Calling"} session · lead ${P.i + 1} of ${P.ids.length}` : cell ? "Calling on your phone" : "Calling from your headset"}</div>
+      <b style="font-size:17px">${esc(D.fullName(l))}</b><span class="num">${esc(fmt(l.phone))}</span>
+      <span class="hpd-sm">${cell ? "Windows is sending this to your default phone app (often Chrome / Google Voice). Switch Call with to Browser phone line to stay in the desk." : "Stay in this tab. Talk on your headset. When you hang up, pick a result under Log the call"}${P ? " and the next lead opens" : ""}.</span>
+      <div class="row" style="gap:6px;flex-wrap:wrap">${cell ? `<button type="button" class="btn primary" id="hpdPsTel">Open on my phone</button>` : `<button type="button" class="btn primary" id="hpdPsRedial">Call again</button>`}${P ? `<button type="button" class="btn" id="hpdPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hpdPsEnd">End session</button>` : `<button type="button" class="btn" id="hpdPsDone">Done</button>`}</div>`;
+    $("#hpdPsTel", box)?.addEventListener("click", () => ringMyPhone(l));
+    $("#hpdPsRedial", box)?.addEventListener("click", () => dialLead(l, true));
     $("#hpdPsSkip", box)?.addEventListener("click", () => phoneNext());
     $("#hpdPsEnd", box)?.addEventListener("click", () => phoneEnd());
     $("#hpdPsDone", box)?.addEventListener("click", () => { window.hpDesk.callStop(); S.phoneLead = null; S.callLead = null; phoneCard(); renderHome(); });
@@ -1416,7 +1418,7 @@
         <button type="button" class="btn" id="hphPick">Campaigns</button>
       </div>
       <div class="hph-via" role="group" aria-label="Call with"><span class="hpd-sm">Call with</span><button type="button" data-via="line" aria-pressed="${S.via !== "phone"}">Browser phone line</button><button type="button" data-via="phone" aria-pressed="${S.via === "phone"}">My phone</button></div>
-      ${S.via === "phone" ? `<div class="hph-setup"><div><b>Calling from your own phone</b><span>Each call opens on your phone: Phone Link on Windows, your iPhone on a Mac, or Google Voice. Leads see your cell number. One line at a time, and recording, voicemail drop and local caller ID need the browser phone line.</span></div></div>` : ""}
+      ${S.via === "phone" ? `<div class="hph-setup"><div><b>Calling from your own phone</b><span>Each call opens your computer’s phone app. On this PC that is often Google Chrome / Google Voice, not the Highpoint headset. Switch to <b>Browser phone line</b> to talk in this tab with your Telnyx number.</span></div></div>` : ""}
       ${S.via !== "phone" && !S.demo && !S.ready ? `<div class="hph-setup"><div><b>${S.twilio ? "One step left: connect your phone line" : "Phone line not connected"}</b><span>${S.twilio ? (S.me?.admin ? `Your ${S.provider === "telnyx" ? "Telnyx" : "Twilio"} key is in. Press Connect once and every agent's dialer turns on.` : "Your admin needs to press Connect once.") : "Your admin needs to add the phone keys in Cloudflare first."}</span></div>${S.twilio && S.me?.admin ? `<button type="button" class="btn primary" id="hphSetup">Connect phone line</button>` : ""}</div>` : ""}
       ${S.via !== "phone" && !S.demo && S.ready && !S.numbers.length ? `<div class="hph-setup"><div><b>Get your first phone number</b><span>You need a number to call from. Pick one in your area code; ${S.provider === "telnyx" ? "Telnyx charges about $1 a month" : "Twilio charges about $1.15 a month"}.</span></div><button type="button" class="btn primary" id="hphBuy">Get a number</button></div>` : ""}
       <div class="hph-bar" data-h="${headset}"><span class="hph-dot"></span><b>${S.via === "phone" ? (S.phoneLead ? "Calling on your phone" : "Your phone is ready") : headset === "live" ? "On a call" : headset === "dial" ? "Headset on · dialing" : headset === "on" ? "Headset on" : "Headset off"}</b>
