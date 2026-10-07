@@ -295,22 +295,7 @@
     ringMyPhone(lead);
     phoneCard();
   }
-  function phoneCard() {
-    const D = window.hpDesk, id = S.phoneLead, l = id && D.leads.get(id);
-    let box = document.getElementById("hpdPhoneCard");
-    if (!l) { box?.remove(); return; }
-    if (!box) { box = document.createElement("div"); box.id = "hpdPhoneCard"; box.className = "hpd hpd-phonecard"; box.setAttribute("role", "status"); document.body.append(box); }
-    const P = S.ps, cell = S.via === "phone";
-    box.innerHTML = `<div class="hpd-sm">${P ? `${cell ? "Phone" : "Calling"} session · lead ${P.i + 1} of ${P.ids.length}` : cell ? "Calling on your phone" : "Calling from your headset"}</div>
-      <b style="font-size:17px">${esc(D.fullName(l))}</b><span class="num">${esc(fmt(l.phone))}</span>
-      <span class="hpd-sm">${cell ? "Windows is sending this to your default phone app (often Chrome / Google Voice). Switch Call with to Browser phone line to stay in the desk." : "Stay in this tab. Talk on your headset. When you hang up, pick a result under Log the call"}${P ? " and the next lead opens" : ""}.</span>
-      <div class="row" style="gap:6px;flex-wrap:wrap">${cell ? `<button type="button" class="btn primary" id="hpdPsTel">Open on my phone</button>` : `<button type="button" class="btn primary" id="hpdPsRedial">Call again</button>`}${P ? `<button type="button" class="btn" id="hpdPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hpdPsEnd">End session</button>` : `<button type="button" class="btn" id="hpdPsDone">Done</button>`}</div>`;
-    $("#hpdPsTel", box)?.addEventListener("click", () => ringMyPhone(l));
-    $("#hpdPsRedial", box)?.addEventListener("click", () => dialLead(l, true));
-    $("#hpdPsSkip", box)?.addEventListener("click", () => phoneNext());
-    $("#hpdPsEnd", box)?.addEventListener("click", () => phoneEnd());
-    $("#hpdPsDone", box)?.addEventListener("click", () => { window.hpDesk.callStop(); S.phoneLead = null; S.callLead = null; phoneCard(); renderHome(); });
-  }
+  function phoneCard() { dock(); }
   function startPhoneSession() {
     const ids = campaignQueue().map((l) => l.id);
     if (!ids.length) { toast("Nobody to call in this list right now"); return; }
@@ -977,37 +962,101 @@
   }
 
   /* ================= floating dialer (follows you around the desk) ================= */
-  function renderFloat(list) {
-    let f = $("#hpdFloat");
-    if (!S.call && !S.power) { f?.remove(); return; }
+  function renderFloat(list) { if (list) S.lastTiles = list; dock(); }
+
+  /* ================= call dock: one compact panel for every call (single, session, multi-line) ================= */
+  const DZ = [["na", "No answer"], ["vm", "Voicemail"], ["cb", "Call back"], ["appt", "Appointment"], ["sold", "Sold"], ["ni", "Not interested"], ["bad", "Bad number"], ["dnc", "Do not call"]];
+  const mmss = (ms) => { const t = Math.max(0, Math.floor(ms / 1000)); return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`; };
+  function dockLead() {
+    const D = window.hpDesk, P = S.power;
+    const id = S.callLead || S.phoneLead || P?.connectedLead || (S.lastTiles || []).find((t) => t.s === "live")?.leadId || (S.lastTiles || [])[0]?.leadId;
+    return id ? D.leads.get(id) : null;
+  }
+  function dock() {
+    const D = window.hpDesk, P = S.power, tiles = S.lastTiles || [];
+    let f = document.getElementById("hpdDock");
+    const active = S.call || P || S.ps || S.phoneLead;
+    if (!active) { f?.remove(); clearInterval(S.dockTick); S.dockLiveAt = 0; return; }
     if (!f) {
-      f = document.createElement("div"); f.id = "hpdFloat"; f.className = "hpd hpd-float"; document.body.append(f);
-      const pos = lsGet("hpd.floatPos", null); if (pos) { f.style.left = Math.min(pos[0], innerWidth - 300) + "px"; f.style.top = Math.min(pos[1], innerHeight - 120) + "px"; f.style.right = "auto"; f.style.bottom = "auto"; }
+      f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Call controls"); document.body.append(f);
+      const pos = lsGet("hpd.dockPos", null); if (pos) { f.style.left = Math.max(4, Math.min(pos[0], innerWidth - 340)) + "px"; f.style.top = Math.max(4, Math.min(pos[1], innerHeight - 160)) + "px"; f.style.right = "auto"; f.style.bottom = "auto"; }
     }
-    const P = S.power;
-    f.innerHTML = `
-      <div class="hpd-fhead" id="hpdFDrag"><b>HP</b><span>${S.call ? "On call" : P?.connected ? "Connected" : P?.paused ? "Paused" : "Calling"}</span><span class="hpd-sm" style="margin-left:auto">${P ? esc(listName()) : ""}</span></div>
-      <div class="hpd-fbtns">
-        <button type="button" class="hpd-fb hang" id="hpdFHang" ${S.call || P?.connected ? "" : "disabled"}>${I.phone} Hangup</button>
-        ${P ? `<button type="button" class="hpd-fb ${P.paused ? "go" : ""}" id="hpdFPause">${P.paused ? I.play + " Resume" : I.pause + " Pause"}</button>` : `<button type="button" class="hpd-fb" id="hpdFMute">${S.muted ? I.micoff : I.mic} ${S.muted ? "Unmute" : "Mute"}</button>`}
+    const l = dockLead(), live = tiles.some((t) => t.s === "live") || (S.call && S.callSid);
+    if (live && !S.dockLiveAt) S.dockLiveAt = Date.now(); if (!live) S.dockLiveAt = 0;
+    const cell = S.via === "phone";
+    const state = cell ? (S.phoneLead ? "On your phone" : "Ready") : live ? "Connected" : P ? (P.paused ? "Paused" : `Dialing ${P.lines || 1} line${(P.lines || 1) > 1 ? "s" : ""}`) : S.call ? "Ringing" : S.ps ? "Ready for next" : "Ready";
+    const tone = live || (cell && S.phoneLead) ? "live" : P?.paused ? "pause" : (S.call || P) ? "ring" : "idle";
+    const prog = S.ps ? `${Math.min(S.ps.i + 1, S.ps.ids.length)} / ${S.ps.ids.length}` : P ? esc(listName()) : "";
+    const ini = l ? (D.fullName(l).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?") : "•";
+    const clock = l ? leadClock(l) : null;
+    const multi = P && tiles.length > 1;
+    const onCall = !!(S.call || P?.connected || (cell && S.phoneLead));
+    const min = S.dockMin;
+    f.classList.toggle("min", !!min);
+    if (min) {
+      f.innerHTML = `<button type="button" class="hpdk-pill" id="hpdkMax" data-tone="${tone}"><i></i><b>${esc(state)}</b><span class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</span><span class="nm">${l ? esc(D.fullName(l)) : ""}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>`;
+      $("#hpdkMax", f).onclick = () => { S.dockMin = false; dock(); };
+    } else {
+      f.innerHTML = `
+      <div class="hpdk-head" id="hpdkDrag">
+        <span class="hpdk-brand">HP<em>Dialer</em></span>
+        <span class="hpdk-state" data-tone="${tone}"><i></i>${esc(state)}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>
+        ${prog ? `<span class="hpdk-prog">${prog}</span>` : ""}
+        <button type="button" class="hpdk-ic" id="hpdkMin" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
       </div>
-      <div class="hpd-frows">${(list || []).map((l) => `<button type="button" class="hpd-frow" data-s="${l.s}" data-lead="${esc(l.leadId || "")}"><span><b>${esc(l.name || fmt(l.to))}</b><small>${esc(fmt(l.to))}</small></span><em>${esc(l.label)}</em></button>`).join("")}</div>
-      <div class="hpd-fmini"><button type="button" id="hpdFVm" title="Drop voicemail">${I.vm}<span>Drop VM</span></button><button type="button" id="hpdFPad" title="Keypad">${I.pad}<span>Keypad</span></button>${P ? `<button type="button" id="hpdFMute2">${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button><button type="button" id="hpdFEnd">${I.skip}<span>End</span></button>` : ""}</div>`;
-    $("#hpdFHang").onclick = hangup;
-    $("#hpdFPause")?.addEventListener("click", togglePause);
-    $("#hpdFMute")?.addEventListener("click", () => { toggleMute(); renderFloat(list); });
-    $("#hpdFMute2")?.addEventListener("click", () => { toggleMute(); renderFloat(list); });
-    $("#hpdFEnd")?.addEventListener("click", stopPower);
-    $("#hpdFVm").onclick = dropVm;
-    $("#hpdFPad").onclick = () => { openProfile(S.power?.connectedLead || S.callLead); setTimeout(() => { S.padOpen = true; const pd = $("#hpfPad"); if (pd) pd.hidden = false; }, 50); };
-    $$(".hpd-frow", f).forEach((b) => (b.onclick = () => b.dataset.lead && openProfile(b.dataset.lead)));
-    // drag
-    const h = $("#hpdFDrag", f);
-    h.onpointerdown = (e) => {
-      const r = f.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top; h.setPointerCapture(e.pointerId);
-      h.onpointermove = (m) => { const x = Math.max(4, Math.min(innerWidth - r.width - 4, m.clientX - dx)), y = Math.max(4, Math.min(innerHeight - 60, m.clientY - dy)); f.style.left = x + "px"; f.style.top = y + "px"; f.style.right = "auto"; f.style.bottom = "auto"; };
-      h.onpointerup = () => { h.onpointermove = null; lsSet("hpd.floatPos", [parseInt(f.style.left), parseInt(f.style.top)]); };
-    };
+      <div class="hpdk-who">
+        <span class="hpdk-av" data-tone="${tone}">${esc(ini)}</span>
+        <span class="hpdk-id"><b>${l ? esc(D.fullName(l)) : multi ? "Dialing your list" : "—"}</b><span class="num">${l ? esc(fmt(l.phone)) : ""}</span>
+          ${l ? `<small>${esc(l.state || "")}${clock ? ` · ${esc(clock.txt)} local` : ""}${l.product ? ` · ${esc(l.product)}` : ""} · <em class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</em></small>` : ""}</span>
+        ${l ? `<button type="button" class="hpdk-ic" id="hpdkOpen" title="Open profile" aria-label="Open profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M10 14L20 4M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></button>` : ""}
+      </div>
+      ${multi ? `<div class="hpdk-lines">${tiles.map((t) => `<button type="button" class="hpdk-line" data-s="${esc(t.s)}" data-lead="${esc(t.leadId || "")}"><i></i><b>${esc(t.name || fmt(t.to))}</b><em>${esc(t.label)}</em></button>`).join("")}</div>` : ""}
+      <div class="hpdk-ctl">
+        ${cell ? "" : `<button type="button" class="hpdk-rb ${S.muted ? "on" : ""}" id="hpdkMute" ${onCall ? "" : "disabled"}>${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button>
+        <button type="button" class="hpdk-rb ${S.dockPad ? "on" : ""}" id="hpdkPadBtn" ${onCall ? "" : "disabled"}>${I.pad}<span>Keypad</span></button>
+        <button type="button" class="hpdk-rb" id="hpdkVm" ${onCall ? "" : "disabled"}>${I.vm}<span>Drop VM</span></button>`}
+        ${S.ps ? `<button type="button" class="hpdk-rb" id="hpdkSkip">${I.skip}<span>Skip</span></button>` : P ? `<button type="button" class="hpdk-rb ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? I.play : I.pause}<span>${P.paused ? "Resume" : "Pause"}</span></button>` : ""}
+      </div>
+      ${S.dockPad && onCall && !cell ? `<div class="hpdk-pad">${["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((k) => `<button type="button" data-k="${k}">${k}</button>`).join("")}</div>` : ""}
+      <div class="hpdk-main">
+        ${onCall && !cell ? `<button type="button" class="hpdk-end" id="hpdkHang">${I.phone}<span>End call</span></button>`
+          : cell && l ? `<button type="button" class="hpdk-call" id="hpdkTel">${I.phone}<span>Call on my phone</span></button>`
+          : l && !S.call && !P ? `<button type="button" class="hpdk-call" id="hpdkRedial">${I.phone}<span>Call again</span></button>` : ""}
+      </div>
+      ${l ? `<div class="hpdk-dz-h">Log the call${S.ps ? " · next lead dials after" : ""}</div><div class="hpdk-dz">${DZ.map(([k, t]) => `<button type="button" class="hpdk-chip k-${k}" data-dz="${k}">${t}</button>`).join("")}</div>` : ""}
+      ${S.ps || P ? `<div class="hpdk-foot"><button type="button" class="hpdk-link" id="hpdkStop">End session</button></div>` : !onCall && S.phoneLead ? `<div class="hpdk-foot"><button type="button" class="hpdk-link" id="hpdkDone">Close</button></div>` : ""}`;
+      $("#hpdkMin", f).onclick = () => { S.dockMin = true; dock(); };
+      $("#hpdkOpen", f)?.addEventListener("click", () => l && openProfile(l.id));
+      $("#hpdkMute", f)?.addEventListener("click", () => { toggleMute(); dock(); });
+      $("#hpdkPadBtn", f)?.addEventListener("click", () => { S.dockPad = !S.dockPad; dock(); });
+      $$(".hpdk-pad [data-k]", f).forEach((b) => (b.onclick = () => dtmf(b.dataset.k)));
+      $("#hpdkVm", f)?.addEventListener("click", dropVm);
+      $("#hpdkSkip", f)?.addEventListener("click", () => phoneNext());
+      $("#hpdkPause", f)?.addEventListener("click", togglePause);
+      $("#hpdkHang", f)?.addEventListener("click", hangup);
+      $("#hpdkTel", f)?.addEventListener("click", () => l && ringMyPhone(l));
+      $("#hpdkRedial", f)?.addEventListener("click", () => l && dialLead(l, true));
+      $("#hpdkStop", f)?.addEventListener("click", () => (S.ps ? phoneEnd() : stopPower()));
+      $("#hpdkDone", f)?.addEventListener("click", () => { window.hpDesk.callStop(); S.phoneLead = null; S.callLead = null; dock(); renderHome(); });
+      $$(".hpdk-line", f).forEach((b) => (b.onclick = () => b.dataset.lead && openProfile(b.dataset.lead)));
+      $$(".hpdk-chip", f).forEach((b) => (b.onclick = () => {
+        if (!l) return;
+        const k = b.dataset.dz;
+        if (PF.id !== l.id || $("#hpdProfile")?.hidden) openProfile(l.id, { keepList: PF.id != null });
+        setTimeout(() => profileDispo(window.hpDesk.leads.get(l.id) || l, k), 80);
+        if (k === "cb" || k === "appt") toast("Pick the date and time in the profile, then Save");
+      }));
+      // drag by the header
+      const h = $("#hpdkDrag", f);
+      h.onpointerdown = (e) => {
+        if (e.target.closest("button")) return;
+        const r = f.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top; h.setPointerCapture(e.pointerId);
+        h.onpointermove = (m) => { const x = Math.max(4, Math.min(innerWidth - r.width - 4, m.clientX - dx)), y = Math.max(4, Math.min(innerHeight - 80, m.clientY - dy)); f.style.left = x + "px"; f.style.top = y + "px"; f.style.right = "auto"; f.style.bottom = "auto"; };
+        h.onpointerup = () => { h.onpointermove = null; lsSet("hpd.dockPos", [parseInt(f.style.left), parseInt(f.style.top)]); };
+      };
+    }
+    clearInterval(S.dockTick);
+    S.dockTick = setInterval(() => { const c = document.getElementById("hpdkClock"); if (c) c.textContent = S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""; }, 1000);
   }
 
   /* ================= lead profile (opens when a call connects) ================= */
