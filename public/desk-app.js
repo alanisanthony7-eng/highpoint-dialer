@@ -537,17 +537,22 @@ function feCfg(){const B=Q.FE.mode==="budget";const uw=feUW();
    quick:B?[[50,"$50/mo"],[100,"$100/mo"],[150,"$150/mo"]]:[[10000,"$10K"],[15000,"$15K"],[25000,"$25K"]],
    plans:[["best","Best available"],["level","Level"],["graded","Graded"],["gi","Guaranteed issue"]],cur:()=>Q.FE.plan,setPlan:v=>Q.FE.plan=v,
    desc:()=>({best:"Each carrier is shown with the best plan this client likely qualifies for, based on the health answers below.",level:FE_PLANS.level[2],graded:FE_PLANS.graded[2],gi:FE_PLANS.gi[2]})[Q.FE.plan],
-   rows:()=>FE_CARRIERS.filter(c=>!CARR[c.n]?.off).map(c=>{const tier=carrierPlan(c,uw.t,Q.FE.plan,Q.age);
+   rows:()=>FE_CARRIERS.filter(c=>!CARR[c.n]?.off).map(c=>{let tier=carrierPlan(c,uw.t,Q.FE.plan,Q.age);
      const why=tier==null?(uw.t>=4?"Doesn't qualify (health)":Q.age<45||Q.age>85?"Outside typical issue ages":uw.t>3?"Doesn't qualify":"No plan for this health profile"):"";
      const xo=c.n==="Transamerica"&&tier!=null&&tier<=1?{age:Q.age,sex:Q.sex,tob:!!NIC[Q.FE.nic]?.[1],tier,state:Q.state}:null;
      const xq=xo&&taFexQuote({...xo,face:B?10000:Q.FE.amt});
      if(xo)return{n:c.n,c,tier,exact:true,sub:`Level · ${xq?xq.cls:TIERS[tier]}`,plan:"FE Express",why:Q.state==="NY"?"Not sold in New York":"",reasons:uw.reasons,
        price:a=>B?taFexBudget(xo,a):taFexQuote({...xo,face:a})?.m??null};
+     let tierX=tier,dz=null;
+     if(c.n==="Aetna Accendo"&&tier!=null){dz=accendoDrugs(Q.FE.meds);if(dz.tier>=4)return{n:c.n,c,tier:null,sub:"",why:"Declined: Accendo drug list",reasons:[...uw.reasons,...dz.hits.map(h=>({txt:`${h.m}: not accepted for ${h.plans.join(", ")}${h.any?"":" if prescribed for "+h.cond}`,tier:h.any?Math.min(3,h.t):1}))],price:()=>null};
+       if(dz.tier>tier){tierX=dz.tier>=2?2:1}}
+     tier=tierX;
      const lim=c.ages&&tier!=null&&tier<3?(Q.age<c.ages[0]||Q.age>c.ages[1]?`Issue ages ${c.ages[0]}–${c.ages[1]}`:c.noNY&&Q.state==="NY"?"Not sold in New York":""):"";
      if(lim)return{n:c.n,c,tier,sub:"",why:lim,reasons:uw.reasons,price:()=>null};
      const eq=tier!=null&&estQuote(c.n,{age:Q.age,sex:Q.sex,tob:!!NIC[Q.FE.nic]?.[1],tier});
      const one=eq&&!["M","F"].some(s=>window.HP_EST.curves[c.n][s]?.std);
-     if(eq)return{n:c.n,c,tier,checked:true,sub:tier<=1?(one?"Level":`Level · ${TIERS[tier]}`):TIERS[tier],why,reasons:uw.reasons,
+     const rs=dz?.hits?.length?[...uw.reasons,...dz.hits.map(h=>({txt:`Accendo drug list: ${h.m} not accepted for ${h.plans.join(", ")}${h.any?"":" if prescribed for "+h.cond}`,tier:h.any?Math.min(3,h.t>=2?2:1):1}))]:uw.reasons;
+     if(eq)return{n:c.n,c,tier,checked:true,sub:tier<=1?(one?"Level":`Level · ${TIERS[tier]}`):tier===2&&c.n==="Aetna Accendo"?"Modified":TIERS[tier],why,reasons:rs,
        price:a=>{if(B){const f=Math.max(0,Math.floor((a-eq.fee)/eq.unit*1000/500)*500);return f&&(!c.face||f>=c.face[0])?Math.min(f,c.face?.[1]??f):null}if(c.face&&(a<c.face[0]||a>c.face[1]))return null;return Math.round((a/1000*eq.unit+eq.fee)*100)/100}};
      return{n:c.n,c,tier,sub:tier==null?"":`${tier<=1?"Level · ":""}${TIERS[tier]}`,why,reasons:uw.reasons,
        price:a=>tier==null?null:B?Math.max(0,Math.floor((a-feFee(c))/fePer1000(c,tier)*1000/500)*500)||null:Math.round((a/1000*fePer1000(c,tier)+feFee(c))*100)/100}}),
@@ -581,6 +586,12 @@ function suggest(inp,list,pick){const q=inp.value.trim().toLowerCase();const box
   box.querySelectorAll("[data-i]").forEach(b=>b.onmousedown=e=>{e.preventDefault();pick(hits[+b.dataset.i]);inp.value="";box.hidden=true})}
 const CLIST=Object.entries(COND).map(([k,v])=>({k,label:v.n}));
 const MLIST=Object.keys(MEDS).map(m=>({m,label:m,hint:COND[MEDS[m]].n}));
+const tcase=s=>s.toLowerCase().replace(/(^|[\s\-\/(])([a-z])/g,(a,b,c)=>b+c.toUpperCase());
+{const seen=new Set(MLIST.map(x=>x.m.toLowerCase()));for(const r of window.HP_DRUGS?.accendo?.rows||[]){const n=tcase(r[0]);if(seen.has(n.toLowerCase()))continue;seen.add(n.toLowerCase());MLIST.push({m:n,label:n,hint:"On Aetna Accendo's drug list"})}}
+/* Accendo drug list check: hard = blocked for any condition; soft = blocked only if prescribed for the listed condition */
+function accendoDrugs(meds){const R=window.HP_DRUGS?.accendo?.rows;if(!R||!meds.length)return{tier:0,hits:[]};const hits=[];let tier=0;
+  for(const m of meds){const k=m.toLowerCase();for(const [d,cond,p,s,mo] of R){if(d.toLowerCase()!==k)continue;const any=/^any condition$/i.test(cond);const t=p&&s&&mo?4:p&&s?2:p?1:0;hits.push({m,cond,any,t,plans:[p&&"Preferred",s&&"Standard",mo&&"Modified"].filter(Boolean)});if(any)tier=Math.max(tier,t)}}
+  return{tier,hits}}
 $("#feCondQ").addEventListener("input",e=>suggest(e.target,CLIST,h=>{askDate(h.k)}));
 $("#feMedQ").addEventListener("input",e=>suggest(e.target,MLIST,h=>{const F=Q.FE;if(!F.meds.includes(h.m))F.meds.push(h.m);const k=MEDS[h.m];if(k&&!F.conds.some(c=>c.k===k)){saveQ();renderQuoter();askDate(k);toast(`Added ${h.m}. When was ${COND[k].n.toLowerCase()} last treated?`)}else{saveQ();renderQuoter()}}));
 [$("#feCondQ"),$("#feMedQ")].forEach(i=>i.addEventListener("blur",()=>setTimeout(()=>i.nextElementSibling.hidden=true,150)));
