@@ -237,6 +237,17 @@
       const c = n.call; let w = calls.get(c.id);
       if (!w && c.direction === "inbound" && c.state === "ringing") { w = txCall(c, true); calls.set(c.id, w); incoming(w); }
       if (!w) return;
+      if (c.state === "hangup" && c.direction !== "inbound" && !w._live) {
+        const code = +(c.sipCode || c.cause_code || 0), why = String(c.sipReason || c.cause || "");
+        const msg = code === 403 || code === 603 || /forbidden|decline|reject/i.test(why)
+          ? "<b>Telnyx refused this call</b> before it rang. New Telnyx accounts can only call numbers you've verified. Finish your account verification in the Telnyx portal (Account → Verification) to call anyone."
+          : code === 486 || /busy/i.test(why) ? "<b>The line was busy.</b>"
+          : code === 404 || code === 484 || /not found|invalid/i.test(why) ? "<b>That number didn't go through.</b> Check the number on the lead."
+          : code === 402 || /payment|balance/i.test(why) ? "<b>Your Telnyx balance is too low.</b> Add funds in the Telnyx portal."
+          : code >= 400 ? `<b>The call didn't connect</b> (${esc(why || "code " + code)}).` : "";
+        if (msg) note(msg, "warn");
+      }
+      if (c.state === "active") w._live = true;
       w._state(c.state);
       if (["hangup", "destroy", "purge"].includes(c.state)) calls.delete(c.id);
     });
