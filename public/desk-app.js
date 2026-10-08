@@ -662,6 +662,7 @@ function openCarriers(){const b=openWin("carriers",{title:"Customize carriers",s
   b.querySelectorAll("[data-rmlogo]").forEach(x=>x.onclick=async()=>{const n=x.dataset.rmlogo,id=LOGOS[n];delete LOGOS[n];await saveLogos();const A=await getAssets();if(A&&id)A.delete(id).catch(()=>{});toast("Logo removed");openCarriers();renderQuoter()});
 }
 $("#qCarriers").onclick=openCarriers;
+if($("#wavvCopy"))$("#wavvCopy").onclick=()=>copyText("ANT");
 
 function renderQuoter(){
   leadOptions($("#qLead")); const T=Q.tab, cfg=T==="FE"?feCfg():QCFG[T], st=Q[T], K=cfg.amtKey||"amt", B=!!cfg.budget;
