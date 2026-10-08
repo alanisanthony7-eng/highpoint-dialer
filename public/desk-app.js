@@ -337,7 +337,7 @@ const FOCUS={protection:[0.55,"Maximize death benefit coverage with limited cash
 const FE_CARRIERS=[
  {n:"Transamerica",f:.97,plans:["level","graded"]},{n:"Mutual of Omaha",f:1.02,plans:["level","graded","gi"]},{n:"Aetna",f:.99,plans:["level","graded"]},{n:"Aetna Accendo",f:1,plans:["level","graded"]},
  {n:"American Amicable",f:1.04,plans:["level","graded"]},{n:"Royal Neighbors",f:1.01,plans:["level","graded"]},{n:"Foresters",f:1.06,plans:["level","graded"]},
- {n:"American Home Life",f:1.03,plans:["level","graded"]},{n:"Corebridge",f:1.05,plans:["level","gi"]},{n:"Ethos",f:1.08,plans:["level","gi"]},{n:"Fidelity Life",f:1.06,plans:["level","gi"]}];
+ {n:"American Home Life",f:1.03,plans:["level","graded"]},{n:"Corebridge",f:1.05,plans:["level","graded","gi"],ages:[50,80],face:[5000,25000],noNY:true},{n:"Ethos",f:1.08,plans:["level","gi"]},{n:"Fidelity Life",f:1.06,plans:["level","gi"]}];
 const TERM_CARRIERS=[{n:"Corebridge (AIG)",f:.96},{n:"Transamerica",f:.98},{n:"Mutual of Omaha",f:1.03},{n:"Ethos",f:1.05},{n:"Foresters",f:1.07},{n:"American Amicable",f:1.1}];
 const IUL_CARRIERS=[{k:"ta",n:"Transamerica",f:1,coi:1,load:.06,fee:90},{k:"fg",n:"F&G",f:.97,coi:.97,load:.065,fee:96},{k:"moo",n:"Mutual of Omaha",f:1.03,coi:1.02,load:.055,fee:84},
  {k:"eth",n:"Ethos",f:.9,coi:1.06,load:.08,fee:110,prot:true},{k:"aig",n:"AIG",f:.93,coi:1.04,load:.075,fee:102,prot:true}];
@@ -543,10 +543,12 @@ function feCfg(){const B=Q.FE.mode==="budget";const uw=feUW();
      const xq=xo&&taFexQuote({...xo,face:B?10000:Q.FE.amt});
      if(xo)return{n:c.n,c,tier,exact:true,sub:`Level · ${xq?xq.cls:TIERS[tier]}`,plan:"FE Express",why:Q.state==="NY"?"Not sold in New York":"",reasons:uw.reasons,
        price:a=>B?taFexBudget(xo,a):taFexQuote({...xo,face:a})?.m??null};
+     const lim=c.ages&&tier!=null&&tier<3?(Q.age<c.ages[0]||Q.age>c.ages[1]?`Issue ages ${c.ages[0]}–${c.ages[1]}`:c.noNY&&Q.state==="NY"?"Not sold in New York":""):"";
+     if(lim)return{n:c.n,c,tier,sub:"",why:lim,reasons:uw.reasons,price:()=>null};
      const eq=tier!=null&&estQuote(c.n,{age:Q.age,sex:Q.sex,tob:!!NIC[Q.FE.nic]?.[1],tier});
      const one=eq&&!["M","F"].some(s=>window.HP_EST.curves[c.n][s]?.std);
      if(eq)return{n:c.n,c,tier,checked:true,sub:tier<=1?(one?"Level":`Level · ${TIERS[tier]}`):TIERS[tier],why,reasons:uw.reasons,
-       price:a=>B?Math.max(0,Math.floor((a-eq.fee)/eq.unit*1000/500)*500)||null:Math.round((a/1000*eq.unit+eq.fee)*100)/100};
+       price:a=>{if(B){const f=Math.max(0,Math.floor((a-eq.fee)/eq.unit*1000/500)*500);return f&&(!c.face||f>=c.face[0])?Math.min(f,c.face?.[1]??f):null}if(c.face&&(a<c.face[0]||a>c.face[1]))return null;return Math.round((a/1000*eq.unit+eq.fee)*100)/100}};
      return{n:c.n,c,tier,sub:tier==null?"":`${tier<=1?"Level · ":""}${TIERS[tier]}`,why,reasons:uw.reasons,
        price:a=>tier==null?null:B?Math.max(0,Math.floor((a-feFee(c))/fePer1000(c,tier)*1000/500)*500)||null:Math.round((a/1000*fePer1000(c,tier)+feFee(c))*100)/100}}),
    summary:()=>B?`${money(Q.FE.budget)}/mo final expense budget`:`${money(Q.FE.amt)} final expense`,
