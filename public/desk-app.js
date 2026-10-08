@@ -335,7 +335,7 @@ const FOCUS={protection:[0.55,"Maximize death benefit coverage with limited cash
 
 /* carriers: Highpoint's carrier partners. Factors are relative pricing estimates for this model, not carrier rates. */
 const FE_CARRIERS=[
- {n:"Transamerica",f:.97,plans:["level","graded"]},{n:"Mutual of Omaha",f:1.02,plans:["level","graded","gi"]},{n:"Aetna",f:.99,plans:["level","graded"]},
+ {n:"Transamerica",f:.97,plans:["level","graded"]},{n:"Mutual of Omaha",f:1.02,plans:["level","graded","gi"]},{n:"Aetna",f:.99,plans:["level","graded"]},{n:"Aetna Accendo",f:1,plans:["level","graded"]},
  {n:"American Amicable",f:1.04,plans:["level","graded"]},{n:"Royal Neighbors",f:1.01,plans:["level","graded"]},{n:"Foresters",f:1.06,plans:["level","graded"]},
  {n:"American Home Life",f:1.03,plans:["level","graded"]},{n:"Corebridge",f:1.05,plans:["level","gi"]},{n:"Ethos",f:1.08,plans:["level","gi"]},{n:"Fidelity Life",f:1.06,plans:["level","gi"]}];
 const TERM_CARRIERS=[{n:"Corebridge (AIG)",f:.96},{n:"Transamerica",f:.98},{n:"Mutual of Omaha",f:1.03},{n:"Ethos",f:1.05},{n:"Foresters",f:1.07},{n:"American Amicable",f:1.1}];
@@ -343,7 +343,7 @@ const IUL_CARRIERS=[{k:"ta",n:"Transamerica",f:1,coi:1,load:.06,fee:90},{k:"fg",
  {k:"eth",n:"Ethos",f:.9,coi:1.06,load:.08,fee:110,prot:true},{k:"aig",n:"AIG",f:.93,coi:1.04,load:.075,fee:102,prot:true}];
 const STATES="AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 $$(".stateSel").forEach(s=>s.innerHTML=STATES.map(x=>`<option ${x==="CA"?"selected":""}>${x}</option>`).join(""));
-const ABBR={"Transamerica":"TA","Mutual of Omaha":"MO","Aetna":"AE","American Amicable":"AA","Royal Neighbors":"RN","Foresters":"FF","American Home Life":"AHL","AIG":"AIG","Corebridge":"CB","Fidelity Life":"FL","Ethos":"ETH","Corebridge (AIG)":"CB","F&G":"F&G"};
+const ABBR={"Transamerica":"TA","Mutual of Omaha":"MO","Aetna":"AE","American Amicable":"AA","Royal Neighbors":"RN","Foresters":"FF","American Home Life":"AHL","AIG":"AIG","Corebridge":"CB","Fidelity Life":"FL","Aetna Accendo":"AC","Ethos":"ETH","Corebridge (AIG)":"CB","F&G":"F&G"};
 const initials=n=>ABBR[n]||n.split(/\s+/).map(w=>w[0]).join("").slice(0,3).toUpperCase();
 let LOGOS=ls.get("hp.logos",{});
 const cbadge=n=>LOGOS[n]?`<span class="cb logo"><img src="/_blob/${encodeURIComponent(LOGOS[n])}" alt="${esc(n)} logo" loading="lazy" onerror="this.parentNode.classList.add('broken')"></span>`:`<span class="cb" aria-hidden="true">${esc(initials(n))}</span>`;
@@ -487,7 +487,7 @@ const MEDS={"Lantus":"dmi","Humalog":"dmi","Novolog":"dmi","Levemir":"dmi","Tres
  "Levothyroxine":"thyroid","Synthroid":"thyroid","Ocrevus":"ms","Tecfidera":"ms"};
 const NIC={none:["None",false],cig:["Cigarettes",true],cigar:["Cigars",true],pipe:["Pipe",true],chew:["Chewing tobacco",true],vape:["Vape or e-cigarette",true],nrt:["Nicotine patch or gum",true],mj:["Marijuana",false]};
 const PAY={eft:"Bank draft / EFT",ssc:"Direct Express / SS card",cc:"Credit or debit card",dc:"Direct bill (mailed)"};
-FE_CARRIERS.forEach(c=>c.pref=["Transamerica","Aetna","American Home Life","American Amicable","Royal Neighbors","Foresters","Corebridge","Ethos","Fidelity Life"].includes(c.n));
+FE_CARRIERS.forEach(c=>c.pref=["Transamerica","Aetna","American Home Life","American Amicable","Royal Neighbors","Foresters","Corebridge","Ethos","Fidelity Life","Aetna Accendo"].includes(c.n));
 
 if(!Q.FE.v2){Q.FE.plan="best";Q.FE.v2=1}if(!["best","level","graded","gi"].includes(Q.FE.plan))Q.FE.plan="best";
 Object.assign(Q.FE,Object.assign({mode:"face",budget:50,dob:{m:"",d:"",y:""},ft:"",inch:"",lb:"",nic:"none",pay:"eft",conds:[],meds:[]},Q.FE),{});

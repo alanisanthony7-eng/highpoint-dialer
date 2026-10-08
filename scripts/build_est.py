@@ -6,7 +6,8 @@ D = json.load(open("data/toolkits-checks.json"))
 # plan name -> (desk carrier, class)
 MAP = {
  ("Aetna","Protection Series Preferred"):("Aetna","pref"),
- ("Aetna (CVS/Accendo)","Accendo Standard"):("Aetna","std"),
+ ("Aetna (CVS/Accendo)","Accendo Standard"):[("Aetna","std"),("Aetna Accendo","std")],
+ ("Aetna (CVS/Accendo)","Accendo Preferred"):("Aetna Accendo","pref"),
  ("Foresters","PlanRight Preferred"):("Foresters","pref"),
  ("Foresters","PlanRight Standard"):("Foresters","std"),
  ("Corebridge","SimpliNow Legacy Max"):("Corebridge","pref"),
@@ -16,22 +17,29 @@ MAP = {
  ("Fidelity Life","Level"):("Fidelity Life","pref"),
 }
 # monthly policy fee, from $10k vs $20k quotes for male 60 (Foresters / AHL not measured: assumed $3.00)
-FEE = {"Corebridge":3.20,"Aetna":3.34,"Ethos":6.00,"Fidelity Life":7.40,"Foresters":3.00,"American Home Life":3.00}
+FEE = {"Corebridge":3.20,"Aetna":3.34,"Aetna Accendo":3.50,"Ethos":6.00,"Fidelity Life":7.40,"Foresters":3.00,"American Home Life":3.00}
 pts = {}
 for q in D["quotes"]:
     if q["health"]!="clean" or q["tobacco"] or q["face"]!=10000: continue
     for r in q["rows"]:
-        k = MAP.get((r["carrier"],r["plan"]))
-        if not k: continue
-        pts.setdefault(k[0],{}).setdefault(q["sex"],{}).setdefault(k[1],{})[q["age"]] = r["monthly"]
+        ks = MAP.get((r["carrier"],r["plan"]))
+        if not ks: continue
+        for k in (ks if isinstance(ks,list) else [ks]):
+            pts.setdefault(k[0],{}).setdefault(q["sex"],{}).setdefault(k[1],{})[q["age"]] = r["monthly"]
+# published Aetna rates (bestquoteinc.com), verified 19/19 against Toolkits; Toolkits wins on conflicts
+_b = json.load(open("data/aetna-bestquote.json"))
+for plan,car in (("Accendo Preferred","Aetna Accendo"),("Protection Series Preferred","Aetna")):
+    for sx,ages in _b[plan].items():
+        for a,v in ages.items():
+            pts.setdefault(car,{}).setdefault(sx,{}).setdefault("pref",{}).setdefault(int(a),v)
 # tobacco: male 60 $20k smoker vs nonsmoker, per-unit ratio (only carriers seen in both)
 def tob():
     ns = {}; sm = {}
     for q in D["quotes"]:
         if q["face"]!=20000: continue
         for r in q["rows"]:
-            k = MAP.get((r["carrier"],r["plan"]))
-            if k: (sm if q["tobacco"] else ns)[k] = r["monthly"]
+            ks = MAP.get((r["carrier"],r["plan"]))
+            for k in (ks if isinstance(ks,list) else [ks] if ks else []): (sm if q["tobacco"] else ns)[k] = r["monthly"]
     out = {}
     for k in sm:
         if k in ns: out[k[0]] = round((sm[k]-FEE[k[0]])/(ns[k]-FEE[k[0]]),3)
