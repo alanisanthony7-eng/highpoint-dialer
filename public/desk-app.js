@@ -335,9 +335,9 @@ const FOCUS={protection:[0.55,"Maximize death benefit coverage with limited cash
 
 /* carriers: Highpoint's carrier partners. Factors are relative pricing estimates for this model, not carrier rates. */
 const FE_CARRIERS=[
- {n:"Transamerica",f:.97,plans:["level","graded"]},{n:"Mutual of Omaha",f:1.02,plans:["level","graded","gi"]},{n:"Aetna",f:.99,plans:["level","graded"]},{n:"Aetna Accendo",f:1,plans:["level","graded"]},
- {n:"American Amicable",f:1.04,plans:["level","graded"]},{n:"Royal Neighbors",f:1.01,plans:["level","graded"]},{n:"Foresters",f:1.06,plans:["level","graded"]},
- {n:"American Home Life",f:1.03,plans:["level","graded"]},{n:"Corebridge",f:1.05,plans:["level","graded","gi"],ages:[50,80],face:[5000,25000],noNY:true},{n:"Ethos",f:1.08,plans:["level","gi"]},{n:"Fidelity Life",f:1.06,plans:["level","gi"]}];
+ {n:"Transamerica",f:.97,plans:["level","graded"]},{n:"Mutual of Omaha",f:1.02,plans:["level","graded"],ages:[45,80],face:[2000,40000],gradedMax:20000},{n:"Aetna",f:.99,plans:["level","graded"]},{n:"Aetna Accendo",f:1,plans:["level","graded"]},
+ {n:"American Amicable",f:1.04,plans:["level","graded"],ages:[50,85],face:[2500,50000],faceOld:[76,25000],gradedMax:25000,noDE:true},{n:"Royal Neighbors",f:1.01,plans:["level","graded"]},{n:"Foresters",f:1.06,plans:["level","graded"]},
+ {n:"American Home Life",f:1.03,plans:["level","graded"]},{n:"Corebridge",f:1.05,plans:["level","graded","gi"],ages:[50,80],giAges:[50,85],face:[5000,35000],giMax:25000,smoker:[70,30000],noNY:true},{n:"Ethos",f:1.08,plans:["level","gi"],face:[1000,30000],noNY:true},{n:"Fidelity Life",f:1.06,plans:["level","gi"]}];
 const TERM_CARRIERS=[{n:"Corebridge (AIG)",f:.96},{n:"Transamerica",f:.98},{n:"Mutual of Omaha",f:1.03},{n:"Ethos",f:1.05},{n:"Foresters",f:1.07},{n:"American Amicable",f:1.1}];
 const IUL_CARRIERS=[{k:"ta",n:"Transamerica",f:1,coi:1,load:.06,fee:90},{k:"fg",n:"F&G",f:.97,coi:.97,load:.065,fee:96},{k:"moo",n:"Mutual of Omaha",f:1.03,coi:1.02,load:.055,fee:84},
  {k:"eth",n:"Ethos",f:.9,coi:1.06,load:.08,fee:110,prot:true},{k:"aig",n:"AIG",f:.93,coi:1.04,load:.075,fee:102,prot:true}];
@@ -504,6 +504,11 @@ function feUW(){const reasons=[];let t=0;
     reasons.push({txt:`${C.n}${c.at?` · last treated ${new Date(c.at).toLocaleDateString([],{month:"short",year:"numeric"})}`:""}`,tier:rule[1]});t=Math.max(t,rule[1])}
   const bmi=feBMI();if(bmi){const bt=bmi<17?2:bmi<38?0:bmi<43?1:bmi<48?2:3;if(bt)reasons.push({txt:`Build: BMI ${bmi}`,tier:bt});t=Math.max(t,bt)}
   return{t,reasons,bmi}}
+const CUW={"American Amicable":{afib:[[99,1]],dmi:[[99,1]],bipolar:[[99,1]],schizo:[[99,1]],depression:[[99,0]]},
+  "Mutual of Omaha":{afib:[[1,2],[99,1]],cancerPast:[[4,2],[99,1]],mi:[[2,2],[99,1]],stroke:[[2,2],[99,1]],cad:[[2,2],[99,1]],dm:[[99,1]]}};
+function carrierT(c,uw){const o=CUW[c.n];if(!o)return uw.t;let t=0;
+  for(const x of Q.FE.conds){const C=COND[x.k];if(!C)continue;const r=o[x.k]||C.r;const y=x.at?yrsSince(x.at):0;t=Math.max(t,(r.find(q=>y<q[0])||r[r.length-1])[1])}
+  for(const r of uw.reasons)if(/^Build/.test(r.txt))t=Math.max(t,r.tier);return t}
 function carrierPlan(c,t,filter,age){const opts=[];
   const lvlOk=age>=45&&age<=85,giOk=age>=50&&age<=80;
   if(c.plans.includes("level")&&t<=1&&lvlOk)opts.push(t===0&&c.pref?0:1);
@@ -537,8 +542,8 @@ function feCfg(){const B=Q.FE.mode==="budget";const uw=feUW();
    quick:B?[[50,"$50/mo"],[100,"$100/mo"],[150,"$150/mo"]]:[[10000,"$10K"],[15000,"$15K"],[25000,"$25K"]],
    plans:[["best","Best available"],["level","Level"],["graded","Graded"],["gi","Guaranteed issue"]],cur:()=>Q.FE.plan,setPlan:v=>Q.FE.plan=v,
    desc:()=>({best:"Each carrier is shown with the best plan this client likely qualifies for, based on the health answers below.",level:FE_PLANS.level[2],graded:FE_PLANS.graded[2],gi:FE_PLANS.gi[2]})[Q.FE.plan],
-   rows:()=>FE_CARRIERS.filter(c=>!CARR[c.n]?.off).map(c=>{let tier=carrierPlan(c,uw.t,Q.FE.plan,Q.age);
-     const why=tier==null?(uw.t>=4?"Doesn't qualify (health)":Q.age<45||Q.age>85?"Outside typical issue ages":uw.t>3?"Doesn't qualify":"No plan for this health profile"):"";
+   rows:()=>FE_CARRIERS.filter(c=>!CARR[c.n]?.off).map(c=>{const ct=carrierT(c,uw);let tier=carrierPlan(c,ct,Q.FE.plan,Q.age);
+     const why=tier==null?(ct>=4?"Doesn't qualify (health)":Q.age<45||Q.age>85?"Outside typical issue ages":ct>3?"Doesn't qualify":"No plan for this health profile"):"";
      const xo=c.n==="Transamerica"&&tier!=null&&tier<=1?{age:Q.age,sex:Q.sex,tob:!!NIC[Q.FE.nic]?.[1],tier,state:Q.state}:null;
      const xq=xo&&taFexQuote({...xo,face:B?10000:Q.FE.amt});
      if(xo)return{n:c.n,c,tier,exact:true,sub:`Level · ${xq?xq.cls:TIERS[tier]}`,plan:"FE Express",why:Q.state==="NY"?"Not sold in New York":"",reasons:uw.reasons,
@@ -547,15 +552,18 @@ function feCfg(){const B=Q.FE.mode==="budget";const uw=feUW();
      if(c.n==="Aetna Accendo"&&tier!=null){dz=accendoDrugs(Q.FE.meds);if(dz.tier>=4)return{n:c.n,c,tier:null,sub:"",why:"Declined: Accendo drug list",reasons:[...uw.reasons,...dz.hits.map(h=>({txt:`${h.m}: not accepted for ${h.plans.join(", ")}${h.any?"":" if prescribed for "+h.cond}`,tier:h.any?Math.min(3,h.t):1}))],price:()=>null};
        if(dz.tier>tier){tierX=dz.tier>=2?2:1}}
      tier=tierX;
-     const lim=c.ages&&tier!=null&&tier<3?(Q.age<c.ages[0]||Q.age>c.ages[1]?`Issue ages ${c.ages[0]}–${c.ages[1]}`:c.noNY&&Q.state==="NY"?"Not sold in New York":""):"";
+     const tobX=!!NIC[Q.FE.nic]?.[1], ag=tier===3&&c.giAges?c.giAges:c.ages;
+     const lim=tier==null?"":c.noDE&&Q.FE.pay==="ssc"?"Doesn't take Direct Express cards":c.noNY&&Q.state==="NY"?"Not sold in New York":ag&&(Q.age<ag[0]||Q.age>ag[1])?`Issue ages ${ag[0]}–${ag[1]}`:c.smoker&&tobX&&tier<3&&Q.age>c.smoker[0]?`Tobacco users only to age ${c.smoker[0]}`:"";
      if(lim)return{n:c.n,c,tier,sub:"",why:lim,reasons:uw.reasons,price:()=>null};
      const eq=tier!=null&&estQuote(c.n,{age:Q.age,sex:Q.sex,tob:!!NIC[Q.FE.nic]?.[1],tier});
      const one=eq&&!["M","F"].some(s=>window.HP_EST.curves[c.n][s]?.std);
      const rs=dz?.hits?.length?[...uw.reasons,...dz.hits.map(h=>({txt:`Accendo drug list: ${h.m} not accepted for ${h.plans.join(", ")}${h.any?"":" if prescribed for "+h.cond}`,tier:h.any?Math.min(3,h.t>=2?2:1):1}))]:uw.reasons;
+     const fmax=tier===3&&c.giMax?c.giMax:tier===2&&c.gradedMax?c.gradedMax:c.smoker&&tobX&&tier<3?Math.min(c.smoker[1],c.face?.[1]??1e9):c.faceOld&&Q.age>=c.faceOld[0]?c.faceOld[1]:c.face?.[1];
+     const fok=a=>a>=(c.face?.[0]??0)&&(fmax==null||a<=fmax);
      if(eq)return{n:c.n,c,tier,checked:true,sub:tier<=1?(one?"Level":`Level · ${TIERS[tier]}`):tier===2&&c.n==="Aetna Accendo"?"Modified":TIERS[tier],why,reasons:rs,
-       price:a=>{if(B){const f=Math.max(0,Math.floor((a-eq.fee)/eq.unit*1000/500)*500);return f&&(!c.face||f>=c.face[0])?Math.min(f,c.face?.[1]??f):null}if(c.face&&(a<c.face[0]||a>c.face[1]))return null;return Math.round((a/1000*eq.unit+eq.fee)*100)/100}};
+       price:a=>{if(B){const f=Math.max(0,Math.floor((a-eq.fee)/eq.unit*1000/500)*500);return f&&(!c.face||f>=c.face[0])?Math.min(f,fmax??f):null}if(!fok(a))return null;return Math.round((a/1000*eq.unit+eq.fee)*100)/100}};
      return{n:c.n,c,tier,sub:tier==null?"":`${tier<=1?"Level · ":""}${TIERS[tier]}`,why,reasons:uw.reasons,
-       price:a=>tier==null?null:B?Math.max(0,Math.floor((a-feFee(c))/fePer1000(c,tier)*1000/500)*500)||null:Math.round((a/1000*fePer1000(c,tier)+feFee(c))*100)/100}}),
+       price:a=>tier==null?null:B?Math.min(fmax??1e9,Math.max(0,Math.floor((a-feFee(c))/fePer1000(c,tier)*1000/500)*500))||null:fok(a)?Math.round((a/1000*fePer1000(c,tier)+feFee(c))*100)/100:null}}),
    summary:()=>B?`${money(Q.FE.budget)}/mo final expense budget`:`${money(Q.FE.amt)} final expense`,
    amtKey:B?"budget":"amt"}}
 
