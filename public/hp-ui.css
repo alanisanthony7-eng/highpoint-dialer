@@ -53,10 +53,7 @@ html.hp-pro .toast{border-radius:14px!important;border:1px solid rgba(255,79,163
   html.hp-pro .topbar>.row>.btn svg{width:18px;height:18px}
   html.hp-pro .topbar>.row>[data-goto="pipeline"]{display:none!important}
   html.hp-pro .topbar .sp-btn{font-size:0!important}
-  html.hp-pro .topbar .hp-acct{margin-left:2px}
   html.hp-pro .topbar .hp-acct i{width:34px;height:34px}
-  html.hp-pro .topbar .hp-acct button{font-size:0!important;padding:0!important;width:34px;height:34px;display:grid;place-items:center}
-  html.hp-pro .topbar .hp-acct button::before{content:"";width:16px;height:16px;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11'/%3E%3C/svg%3E") center/contain no-repeat}
   html.hp-pro .board{grid-template-columns:repeat(6,minmax(78vw,1fr))!important}
 }
 
@@ -72,3 +69,11 @@ html.hp-pro .toast{border-radius:14px!important;border:1px solid rgba(255,79,163
 .wavvpromo{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 16px!important;margin:0 0 14px;flex-wrap:wrap}
 .wavvpromo .wv-t{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1 1 280px;font-size:13.5px}
 .wavvpromo code{font:700 12.5px/1 ui-monospace,Menlo,monospace;padding:2px 7px;border-radius:6px;background:rgba(255,79,163,.14);border:1px solid rgba(255,79,163,.4);color:#FFD3E8}
+
+/* ---------- top bar: nothing overlaps; the search shrinks first, then the row wraps ---------- */
+html.hp-pro .topbar #hpdBar{flex:0 1 auto;min-width:auto}
+html.hp-pro .topbar #hpdBar .hpd-srch{min-width:110px;flex:1 1 200px}
+html.hp-pro .topbar #hpdBar .hpd-status{flex:none}
+html.hp-pro .topbar>.row{flex:0 0 auto}
+@media (max-width:1320px) and (min-width:761px){html.hp-pro .topbar #hpdBar .hpd-srch{display:none}}
+html.hp-pro .topbar #hpdBar .hpd-srch{flex:1 1 160px}

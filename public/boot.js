@@ -176,11 +176,19 @@
   .hp-net i{width:9px;height:9px;border-radius:50%;background:#FF9E3D;box-shadow:0 0 10px #FF9E3D;animation:hpNetP 1s ease-in-out infinite}
   .hp-net.ok{border-color:rgba(59,211,139,.5)}.hp-net i.ok{background:#3BD38B;box-shadow:0 0 10px #3BD38B;animation:none}
   @keyframes hpNetP{50%{opacity:.35}}
-  .hp-acct{display:inline-flex;align-items:center;gap:8px;font-size:13px;margin-left:6px}
-  .hp-acct i{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;background:linear-gradient(135deg,#FF2E88,#FF9E3D);color:#fff}
-  .hp-acct button{all:unset;cursor:pointer;font-size:12.5px;color:#C9CDD5;padding:6px 8px;border-radius:8px}
-  .hp-acct button:hover{background:rgba(255,255,255,.08);color:#fff}
-  @media (max-width:900px){.hp-acct span{display:none}}`;
+  .hp-acct{position:relative;display:inline-flex;align-items:center;margin-left:4px;flex:none}
+  .hp-acct-b{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:3px 10px 3px 3px;border-radius:999px;font-size:13px;font-weight:600;color:#E4E6EC;border:1px solid transparent;white-space:nowrap}
+  .hp-acct-b:hover,.hp-acct-b[aria-expanded=true]{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12)}
+  .hp-acct-b:focus-visible{outline:2px solid #FF4FA3;outline-offset:2px}
+  .hp-acct-b svg{width:14px;height:14px;opacity:.7}
+  .hp-acct i{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;background:linear-gradient(135deg,#FF2E88,#FF9E3D);color:#fff;flex:none}
+  .hp-acct-m{position:absolute;right:0;top:calc(100% + 8px);z-index:1200;min-width:220px;padding:6px;border-radius:14px;background:rgba(16,10,26,.97);border:1px solid rgba(255,79,163,.35);box-shadow:0 18px 40px rgba(0,0,0,.55);backdrop-filter:blur(12px)}
+  .hp-acct-m[hidden]{display:none}
+  .hp-acct-who{display:flex;flex-direction:column;gap:2px;padding:8px 10px 10px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,.08);font-size:13px}
+  .hp-acct-who span{font-size:12px;color:#8C92A0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hp-acct-m button{all:unset;cursor:pointer;display:block;box-sizing:border-box;width:100%;padding:9px 10px;border-radius:9px;font-size:13.5px;color:#E4E6EC}
+  .hp-acct-m button:hover,.hp-acct-m button:focus-visible{background:rgba(255,79,163,.14);color:#fff}
+  @media (max-width:1100px){.hp-acct-b span,.hp-acct-b svg{display:none}.hp-acct-b{padding:2px}}`;
   const st = document.createElement("style"); st.textContent = css; document.head.append(st);
 
   const MARK = `<svg viewBox="0 0 132 96" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="#FFFFFF"/><path d="M104 22 L128 12 L118 30 L113 24 Z" fill="#FFFFFF"/><path d="M113 24 L118 30 L112 31Z" fill="#FF9E3D"/></svg>`;
@@ -250,9 +258,15 @@
   function account(u) {
     const row = document.querySelector(".topbar .row"); if (!row || row.querySelector(".hp-acct")) return;
     const a = document.createElement("div"); a.className = "hp-acct";
-    a.innerHTML = `<i aria-hidden="true">${esc((u.name || u.email)[0].toUpperCase())}</i><span>${esc(u.name || u.email)}</span>${u.admin ? `<button type="button" data-team>Team</button>` : ""}<button type="button" data-bill>Billing</button><button type="button" data-out>Sign out</button>`;
-    a.querySelector("[data-bill]").onclick = () => window.hpTeam?.openBilling();
-    const tb = a.querySelector("[data-team]"); if (tb) tb.onclick = () => window.hpTeam?.openTeam();
+    a.innerHTML = `<button type="button" class="hp-acct-b" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu"><i aria-hidden="true">${esc((u.name || u.email)[0].toUpperCase())}</i><span>${esc((u.name || u.email).split(" ")[0])}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+      <div class="hp-acct-m" role="menu" hidden><div class="hp-acct-who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}</span></div>${u.admin ? `<button type="button" role="menuitem" data-team>Team</button>` : ""}<button type="button" role="menuitem" data-bill>Billing</button><button type="button" role="menuitem" data-out>Sign out</button></div>`;
+    const btn = a.querySelector(".hp-acct-b"), menu = a.querySelector(".hp-acct-m");
+    const open = (on) => { menu.hidden = !on; btn.setAttribute("aria-expanded", on); if (on) menu.querySelector("[role=menuitem]")?.focus(); };
+    btn.onclick = (e) => { e.stopPropagation(); open(menu.hidden); };
+    document.addEventListener("click", (e) => { if (!a.contains(e.target)) open(false); });
+    a.addEventListener("keydown", (e) => { if (e.key === "Escape") { open(false); btn.focus(); } });
+    a.querySelector("[data-bill]").onclick = () => { open(false); window.hpTeam?.openBilling(); };
+    const tb = a.querySelector("[data-team]"); if (tb) tb.onclick = () => { open(false); window.hpTeam?.openTeam(); };
     a.querySelector("[data-out]").onclick = async () => { try { await call("/api/auth/logout", { method: "POST" }); } finally { location.reload(); } };
     row.append(a);
   }
