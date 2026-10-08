@@ -249,7 +249,7 @@
     account(u);
     call("/api/room/presence", { method: "POST", body: { status: "Online", at: Date.now() } }).catch(() => {});
     // characters load right after sign-in (not on the sign-in screen), then the desk, in order
-    for (const src of ["/hp-avatar.js", "/hp-rates.js", "/desk-app.js"]) { if (src === "/hp-avatar.js" && window.hpAvatar) continue; const s = document.createElement("script"); s.src = src; s.async = false; document.body.append(s); }
+    for (const src of ["/hp-avatar.js", "/hp-rates.js", "/hp-est.js", "/desk-app.js"]) { if (src === "/hp-avatar.js" && window.hpAvatar) continue; const s = document.createElement("script"); s.src = src; s.async = false; document.body.append(s); }
   }
 
   async function boot() {

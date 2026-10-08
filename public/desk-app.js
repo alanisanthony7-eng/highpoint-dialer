@@ -330,13 +330,13 @@ const FOCUS={protection:[0.55,"Maximize death benefit coverage with limited cash
 const FE_CARRIERS=[
  {n:"Transamerica",f:.97,plans:["level","graded"]},{n:"Mutual of Omaha",f:1.02,plans:["level","graded","gi"]},{n:"Aetna",f:.99,plans:["level","graded"]},
  {n:"American Amicable",f:1.04,plans:["level","graded"]},{n:"Royal Neighbors",f:1.01,plans:["level","graded"]},{n:"Foresters",f:1.06,plans:["level","graded"]},
- {n:"American Home Life",f:1.03,plans:["level","graded"]},{n:"AIG",f:1.05,plans:["level","gi"]},{n:"Ethos",f:1.08,plans:["level"]}];
+ {n:"American Home Life",f:1.03,plans:["level","graded"]},{n:"Corebridge",f:1.05,plans:["level","gi"]},{n:"Ethos",f:1.08,plans:["level","gi"]},{n:"Fidelity Life",f:1.06,plans:["level","gi"]}];
 const TERM_CARRIERS=[{n:"Corebridge (AIG)",f:.96},{n:"Transamerica",f:.98},{n:"Mutual of Omaha",f:1.03},{n:"Ethos",f:1.05},{n:"Foresters",f:1.07},{n:"American Amicable",f:1.1}];
 const IUL_CARRIERS=[{k:"ta",n:"Transamerica",f:1,coi:1,load:.06,fee:90},{k:"fg",n:"F&G",f:.97,coi:.97,load:.065,fee:96},{k:"moo",n:"Mutual of Omaha",f:1.03,coi:1.02,load:.055,fee:84},
  {k:"eth",n:"Ethos",f:.9,coi:1.06,load:.08,fee:110,prot:true},{k:"aig",n:"AIG",f:.93,coi:1.04,load:.075,fee:102,prot:true}];
 const STATES="AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 $$(".stateSel").forEach(s=>s.innerHTML=STATES.map(x=>`<option ${x==="CA"?"selected":""}>${x}</option>`).join(""));
-const ABBR={"Transamerica":"TA","Mutual of Omaha":"MO","Aetna":"AE","American Amicable":"AA","Royal Neighbors":"RN","Foresters":"FF","American Home Life":"AHL","AIG":"AIG","Ethos":"ETH","Corebridge (AIG)":"CB","F&G":"F&G"};
+const ABBR={"Transamerica":"TA","Mutual of Omaha":"MO","Aetna":"AE","American Amicable":"AA","Royal Neighbors":"RN","Foresters":"FF","American Home Life":"AHL","AIG":"AIG","Corebridge":"CB","Fidelity Life":"FL","Ethos":"ETH","Corebridge (AIG)":"CB","F&G":"F&G"};
 const initials=n=>ABBR[n]||n.split(/\s+/).map(w=>w[0]).join("").slice(0,3).toUpperCase();
 let LOGOS=ls.get("hp.logos",{});
 const cbadge=n=>LOGOS[n]?`<span class="cb logo"><img src="/_blob/${encodeURIComponent(LOGOS[n])}" alt="${esc(n)} logo" loading="lazy" onerror="this.parentNode.classList.add('broken')"></span>`:`<span class="cb" aria-hidden="true">${esc(initials(n))}</span>`;
@@ -479,7 +479,7 @@ const MEDS={"Lantus":"dmi","Humalog":"dmi","Novolog":"dmi","Levemir":"dmi","Tres
  "Levothyroxine":"thyroid","Synthroid":"thyroid","Ocrevus":"ms","Tecfidera":"ms"};
 const NIC={none:["None",false],cig:["Cigarettes",true],cigar:["Cigars",true],pipe:["Pipe",true],chew:["Chewing tobacco",true],vape:["Vape or e-cigarette",true],nrt:["Nicotine patch or gum",true],mj:["Marijuana",false]};
 const PAY={eft:"Bank draft / EFT",ssc:"Direct Express / SS card",cc:"Credit or debit card",dc:"Direct bill (mailed)"};
-FE_CARRIERS.forEach(c=>c.pref=["Transamerica","Aetna","American Home Life","American Amicable","Royal Neighbors"].includes(c.n));
+FE_CARRIERS.forEach(c=>c.pref=["Transamerica","Aetna","American Home Life","American Amicable","Royal Neighbors","Foresters","Corebridge","Ethos","Fidelity Life"].includes(c.n));
 
 if(!Q.FE.v2){Q.FE.plan="best";Q.FE.v2=1}if(!["best","level","graded","gi"].includes(Q.FE.plan))Q.FE.plan="best";
 Object.assign(Q.FE,Object.assign({mode:"face",budget:50,dob:{m:"",d:"",y:""},ft:"",inch:"",lb:"",nic:"none",pay:"eft",conds:[],meds:[]},Q.FE),{});
@@ -511,6 +511,15 @@ function taFexQuote({age,sex,tob,tier,face,state}){const R=window.HP_RATES?.taFe
   let i,cls;if(band===1){i=(sex==="M"?2:0)+(tob?1:0);cls=tob?"Select Smoker":"Select Nonsmoker"}
   else{const prem=tier===0&&!tob&&state!=="CA";i=(sex==="M"?3:0)+(tob?2:prem?0:1);cls=tob?"Smoker":prem?"Premier":"Select Nonsmoker"}
   return{m:Math.round((row[i]*units+R.fee)*R.monthly*100)/100,cls}}
+/* market-checked estimates (public/hp-est.js): curves of real Toolkits quotes at $10,000, interpolated between ages */
+function estM10(c,sex,cls,age){const E=window.HP_EST,f=E.fee[c],cv=(s,k)=>E.curves[c]?.[s]?.[k]||[];
+  let p=cv(sex,cls),sh=0;if(p.length<2){const o=cv(sex==="M"?"F":"M",cls);if(o.length>=2){p=o;sh=sex==="F"?-5:5}}
+  if(p.length<2){if(cls==="std"){const q=estM10(c,sex,"pref",age);return q==null?null:f+(q-f)*1.3}return null}
+  const a=age+sh,n=p.length;const i=a<=p[0][0]?1:a>=p[n-1][0]?n-1:p.findIndex(x=>a<=x[0]);const [x0,y0]=p[i-1],[x1,y1]=p[i],t=(a-x0)/(x1-x0);
+  return f+Math.exp(Math.log(y0-f)+t*(Math.log(y1-f)-Math.log(y0-f)))}
+function estQuote(c,{age,sex,tob,tier}){const E=window.HP_EST;if(!E?.curves?.[c])return null;const f=E.fee[c];
+  const single=!["M","F"].some(s=>E.curves[c][s]?.std);const m=estM10(c,sex,tier===0||single||tier>1?"pref":"std",age);if(m==null)return null;
+  let unit=(m-f)/10;if(tob)unit*=E.tob[c]||1.39;if(tier===2)unit*=1.35;if(tier===3)unit*=1.5;return{unit,fee:f}}
 function taFexBudget(o,budget){const max=o.age<=75?100000:25000;let best=null;
   for(let f=5000;f<=max;f+=1000){const q=taFexQuote({...o,face:f});if(q&&q.m<=budget)best=f}return best}
 function fePer1000(c,tier){const tob=NIC[Q.FE.nic]?.[1];return (feQuote({age:Q.age,sex:Q.sex,tob,face:1000,plan:"level"})-3)*TIER_MULT[tier]*c.f}
@@ -526,6 +535,10 @@ function feCfg(){const B=Q.FE.mode==="budget";const uw=feUW();
      const xq=xo&&taFexQuote({...xo,face:B?10000:Q.FE.amt});
      if(xo)return{n:c.n,c,tier,exact:true,sub:`Level · ${xq?xq.cls:TIERS[tier]}`,plan:"FE Express",why:Q.state==="NY"?"Not sold in New York":"",reasons:uw.reasons,
        price:a=>B?taFexBudget(xo,a):taFexQuote({...xo,face:a})?.m??null};
+     const eq=tier!=null&&estQuote(c.n,{age:Q.age,sex:Q.sex,tob:!!NIC[Q.FE.nic]?.[1],tier});
+     const one=eq&&!["M","F"].some(s=>window.HP_EST.curves[c.n][s]?.std);
+     if(eq)return{n:c.n,c,tier,checked:true,sub:tier<=1?(one?"Level":`Level · ${TIERS[tier]}`):TIERS[tier],why,reasons:uw.reasons,
+       price:a=>B?Math.max(0,Math.floor((a-eq.fee)/eq.unit*1000/500)*500)||null:Math.round((a/1000*eq.unit+eq.fee)*100)/100};
      return{n:c.n,c,tier,sub:tier==null?"":`${tier<=1?"Level · ":""}${TIERS[tier]}`,why,reasons:uw.reasons,
        price:a=>tier==null?null:B?Math.max(0,Math.floor((a-feFee(c))/fePer1000(c,tier)*1000/500)*500)||null:Math.round((a/1000*fePer1000(c,tier)+feFee(c))*100)/100}}),
    summary:()=>B?`${money(Q.FE.budget)}/mo final expense budget`:`${money(Q.FE.amt)} final expense`,
@@ -653,7 +666,7 @@ function renderQuoter(){
   $("#qCmpBar").innerHTML=FEX?`<button class="btn sm" id="qCmpGo" ${feCmp.size<2?"disabled":""}>Compare selected (${feCmp.size})</button>${feCmp.size?`<button class="btn sm" id="qCmpClr">Clear</button>`:""}<span class="muted" style="font-size:12.5px">Tick up to 3 carriers. Tap ★ to pin favorites to the top.</span>`:"";
   if($("#qCmpGo"))$("#qCmpGo").onclick=()=>openCompare(rows,amts,cfg); if($("#qCmpClr"))$("#qCmpClr").onclick=()=>{feCmp.clear();renderQuoter()};
   $("#qTable").innerHTML=`<table><thead><tr>${FEX?"<th></th>":""}<th>Carrier</th>${amts.map(a=>`<th class="amtcol ${a===amt?"you":""}"><button type="button" data-sort="${a}" aria-pressed="${a===sortBy}">${a===amt?(B?"Your budget<br>":"Your amount<br>"):""}${B?money(a)+"/mo":kfmt(a)}${a===sortBy?" ↓":""}</button></th>`).join("")}<th></th></tr></thead><tbody>
-    ${rows.map((r,i)=>{const open=FEX&&feOpen.has(r.n);return `<tr class="${r.why?"off":""}">${FEX?`<td class="lead"><button class="star ${FAV.has(r.n)?"on":""}" data-fav="${esc(r.n)}" aria-label="Favorite ${esc(r.n)}">★</button>${r.why?"":`<input type="checkbox" data-cmp="${esc(r.n)}" ${feCmp.has(r.n)?"checked":""} aria-label="Compare ${esc(r.n)}">`}</td>`:""}<td><div class="crow">${r.why?"":`<span class="rank">#${i+1}</span>`}${cbadge(r.n)}<div><b>${esc(r.n)}</b>${r.exact&&!r.why?`<span class="xrate" title="${esc(window.HP_RATES.taFex.source)}">Carrier rates · ${esc(window.HP_RATES.taFex.asOf)}</span>`:""}${FEX&&!r.why?`<span class="tierpill sm ${TIER_CLS[r.tier]}">${esc(r.sub)}</span>`:`<span class="muted">${esc(r.why||r.sub)}</span>`}</div></div></td>${amts.map(a=>`<td class="num ${a===amt?"you":""}">${cell(r.p[a])}</td>`).join("")}<td><div class="row" style="flex-wrap:nowrap;gap:6px;justify-content:flex-end">${r.why?"":`${FEX&&CARR[r.n]?.url?`<a class="btn sm primary" href="${esc(CARR[r.n].url)}" target="_blank" rel="noopener">E-App</a>`:""}<button class="btn sm" data-crm="${i}">+ CRM</button>`}${FEX?`<button class="wbtn chev ${open?"open":""}" data-open="${esc(r.n)}" aria-label="Details">⌄</button>`:""}</div></td></tr>
+    ${rows.map((r,i)=>{const open=FEX&&feOpen.has(r.n);return `<tr class="${r.why?"off":""}">${FEX?`<td class="lead"><button class="star ${FAV.has(r.n)?"on":""}" data-fav="${esc(r.n)}" aria-label="Favorite ${esc(r.n)}">★</button>${r.why?"":`<input type="checkbox" data-cmp="${esc(r.n)}" ${feCmp.has(r.n)?"checked":""} aria-label="Compare ${esc(r.n)}">`}</td>`:""}<td><div class="crow">${r.why?"":`<span class="rank">#${i+1}</span>`}${cbadge(r.n)}<div><b>${esc(r.n)}</b>${r.exact&&!r.why?`<span class="xrate" title="${esc(window.HP_RATES.taFex.source)}">Carrier rates · ${esc(window.HP_RATES.taFex.asOf)}</span>`:r.checked&&!r.why?`<span class="xrate chk" title="Estimate built from real Insurance Toolkits quotes (Texas, bank draft)">Market-checked estimate</span>`:FEX&&!r.why?`<span class="xrate rough" title="Highpoint model only. Not checked against real quotes yet.">Rough estimate</span>`:""}${FEX&&!r.why?`<span class="tierpill sm ${TIER_CLS[r.tier]}">${esc(r.sub)}</span>`:`<span class="muted">${esc(r.why||r.sub)}</span>`}</div></div></td>${amts.map(a=>`<td class="num ${a===amt?"you":""}">${cell(r.p[a])}</td>`).join("")}<td><div class="row" style="flex-wrap:nowrap;gap:6px;justify-content:flex-end">${r.why?"":`${FEX&&CARR[r.n]?.url?`<a class="btn sm primary" href="${esc(CARR[r.n].url)}" target="_blank" rel="noopener">E-App</a>`:""}<button class="btn sm" data-crm="${i}">+ CRM</button>`}${FEX?`<button class="wbtn chev ${open?"open":""}" data-open="${esc(r.n)}" aria-label="Details">⌄</button>`:""}</div></td></tr>
       ${open?`<tr class="detail"><td colspan="${amts.length+3}"><div class="det">${r.why?`<b>${esc(r.why)}</b>`:`<b>${esc(r.sub)}</b> · ${esc(FE_PLANS[r.tier<=1?"level":r.tier===2?"graded":"gi"][2])}`}${r.reasons.length?`<ul>${r.reasons.map(x=>`<li>${esc(x.txt)} <span class="tierpill sm ${TIER_CLS[x.tier]}">${TIERS[x.tier]}</span></li>`).join("")}</ul>`:`<p class="muted" style="margin:6px 0 0">No health items entered.</p>`}<p class="muted" style="margin:6px 0 0;font-size:12px">Payment: ${esc(PAY[Q.FE.pay])}. Confirm this carrier accepts it. Nicotine: ${esc(NIC[Q.FE.nic][0])}.</p></div></td></tr>`:""}`}).join("")}</tbody></table>`;
   $$("#qTable [data-sort]").forEach(b=>b.onclick=()=>{Q.sort=+b.dataset.sort;saveQ();renderQuoter()});
   $$("#qTable [data-crm]").forEach(b=>b.onclick=()=>{const r=rows[+b.dataset.crm];attachQuote($("#qLead").value,{...q,carrier:r.n,exact:!!r.exact,monthly:B?amt:r.p[amt],summary:(B?`${money(r.p[amt])} ${r.sub} final expense`:cfg.summary()+(r.sub?` · ${r.sub}`:""))+`, age ${Q.age}`})});
@@ -661,7 +674,7 @@ function renderQuoter(){
   $$("#qTable [data-cmp]").forEach(b=>b.onchange=()=>{const n=b.dataset.cmp;if(b.checked){if(feCmp.size>=3){b.checked=false;toast("Compare up to 3 carriers");return}feCmp.add(n)}else feCmp.delete(n);renderQuoter()});
   $$("#qTable [data-open]").forEach(b=>b.onclick=()=>{const n=b.dataset.open;feOpen.has(n)?feOpen.delete(n):feOpen.add(n);renderQuoter()});
   $("#qNote").innerHTML=Q.state==="NY"?`<div class="notice">Many carriers file different products in New York, or don't offer these plans there. Confirm availability before quoting.</div>`:T==="FE"&&Q.age<45?`<div class="notice">Final expense plans usually start at age 45 or 50. For a ${Q.age}-year-old, quote term or IUL instead.</div>`:T==="FE"&&Q.FE.pay==="ssc"?`<div class="notice">Not every carrier drafts from a Direct Express / Social Security card. Confirm before you submit.</div>`:"";
-  countUp($("#qLeadWith"));$("#qDisc").textContent=T==="FE"?`Transamerica level quotes use Transamerica's FE Express rate chart (${window.HP_RATES?.taFex?.asOf||""}): exact monthly bank-draft premiums, $42 policy fee included. The risk class still comes from Transamerica's own health questions. Other carriers and graded plans are estimates from Highpoint's model, not carrier rates.`:`Estimates from Highpoint's rate model using typical market curves and relative pricing for each carrier. They are not carrier rates. Run the carrier's own quote before presenting. Monthly bank-draft premiums; policy fees included.`;
+  countUp($("#qLeadWith"));$("#qDisc").textContent=T==="FE"?`Transamerica level quotes use Transamerica's FE Express rate chart (${window.HP_RATES?.taFex?.asOf||""}): exact monthly bank-draft premiums, $42 policy fee included. The risk class still comes from Transamerica's own health questions. Aetna, Foresters, Corebridge, Ethos, American Home Life and Fidelity Life are "market-checked" estimates built from real Insurance Toolkits quotes (Texas, bank draft): usually within a few dollars for clean nonsmokers, rougher for smokers, graded and guaranteed-issue plans. Other carriers are estimates from Highpoint's model. Confirm before presenting.`:`Estimates from Highpoint's rate model using typical market curves and relative pricing for each carrier. They are not carrier rates. Run the carrier's own quote before presenting. Monthly bank-draft premiums; policy fees included.`;
 }
 $$("#qTabs button").forEach(b=>b.onclick=()=>{Q.tab=b.dataset.q;Q.sort=null;saveQ();renderQuoter()});
 [["#qAge","age",v=>Math.min(90,Math.max(18,+v||18))],["#qSex","sex"],["#qTob","tob"],["#qState","state"],["#qClass","cls"]].forEach(([s,k,f])=>$(s).addEventListener("change",()=>{Q[k]=f?f($(s).value):$(s).value;saveQ();renderQuoter()}));
