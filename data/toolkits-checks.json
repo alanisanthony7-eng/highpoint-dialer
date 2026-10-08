@@ -1,0 +1,38 @@
+{
+  "source": "Insurance Toolkits quotes run by Anthony, read off screen 2026-10-07. Texas, bank draft/EFT, monthly premium, $10,000 face.",
+  "notes": "Only scenarios whose inputs were confirmed are listed. Transamerica rows were used to confirm the scenario (they match the FE Express rate chart to the cent).",
+  "quotes": [
+    {"age":55,"sex":"M","tobacco":false,"health":"clean","face":10000,"rows":[
+      {"carrier":"American Home Life","plan":"Patriot Series Preferred","monthly":48.72},
+      {"carrier":"Transamerica","plan":"FE Express Select","monthly":53.17},
+      {"carrier":"American Home Life","plan":"GuideStar Level","monthly":54.16}]},
+    {"age":55,"sex":"F","tobacco":false,"health":"clean","face":10000,"rows":[
+      {"carrier":"Corebridge","plan":"SimpliNow Legacy Max","monthly":30.15},
+      {"carrier":"Aetna","plan":"Protection Series Preferred","monthly":32.25},
+      {"carrier":"Foresters","plan":"PlanRight Preferred","monthly":32.47},
+      {"carrier":"Transamerica","plan":"FE Express Premier","monthly":32.86},
+      {"carrier":"American Home Life","plan":"Patriot Series Preferred","monthly":34.04},
+      {"carrier":"Aetna (CVS/Accendo)","plan":"Accendo Preferred","monthly":34.39}]},
+    {"age":55,"sex":"M","tobacco":true,"health":"COPD (treated now)","face":10000,"rows":[
+      {"carrier":"Foresters","plan":"PlanRight Standard","monthly":81.66},
+      {"carrier":"Transamerica","plan":"FE Express Select (smoker)","monthly":88.63}]},
+    {"age":55,"sex":"F","tobacco":true,"health":"COPD + diabetes (no complications)","face":10000,"rows":[
+      {"carrier":"Transamerica","plan":"FE Express Select (smoker)","monthly":75.47},
+      {"carrier":"American Home Life","plan":"GuideStar Graded","monthly":71.93}]}
+  ],
+  "guaranteedIssue": [
+    {"carrier":"Ethos","age":55,"sex":"M","face":10000,"monthly":60.00},
+    {"carrier":"Ethos","age":55,"sex":"F","face":10000,"monthly":49.00},
+    {"carrier":"Corebridge","age":55,"sex":"M","face":10000,"monthly":66.72},
+    {"carrier":"Corebridge","age":55,"sex":"F","face":10000,"monthly":50.61}
+  ],
+  "underwritingRules": [
+    "AIG SIWL: COPD ever treated + tobacco = Decline",
+    "TruStage FE Level: COPD + tobacco, and diabetes + tobacco, each move the client down one tier",
+    "TruStage FE Level: past cancer diagnosed 2-5 years ago = no level rate at $10,000, age 55",
+    "TruStage FE Guaranteed: not offered in TX",
+    "Foresters BrightFuture: past cancer ever treated = Decline",
+    "Aetna Accendo: past cancer treated within 2 years = Decline",
+    "Kidney dialysis (current): only guaranteed-issue plans quoted"
+  ]
+}
