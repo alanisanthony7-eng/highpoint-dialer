@@ -1,5 +1,6 @@
 // One entry point for every /api/* request on Cloudflare Pages.
-import { authRoute } from "../../src/lib/auth.mjs";
+import { authRoute, currentUser } from "../../src/lib/auth.mjs";
+import { billingRoute, teamRoute } from "../../src/lib/team.mjs";
 import { docsRoute, docsBatch, docsSync, usersRoute, roomRoute, aiRoute } from "../../src/desk.mjs";
 import setup from "../../src/dialer/dialer-setup.mjs";
 import token from "../../src/dialer/dialer-token.mjs";
@@ -24,6 +25,8 @@ export async function onRequest(ctx) {
   try {
     switch (parts[0]) {
       case "auth": return await authRoute(req, parts[1]);
+      case "billing": return await billingRoute(req, parts[1], parts[1] === "webhook" ? null : await currentUser(req));
+      case "team": { const r = await teamRoute(req, parts[1], await currentUser(req)); if (req.method === "POST") (await import("../../src/lib/auth.mjs")).clearUserCache(); return r; }
       case "docs": return parts[1] === "_sync" ? await docsSync(req) : parts[1] === "_batch" ? await docsBatch(req) : await docsRoute(req, parts.slice(1).map(decodeURIComponent));
       case "users": return await usersRoute(req);
       case "room": return await roomRoute(req, parts[1]);
@@ -36,6 +39,6 @@ export async function onRequest(ctx) {
     return json({ error: "Not found" }, 404);
   } catch (e) {
     if (!e.status || e.status >= 500) console.error(e);
-    return json({ error: e.message || "Server error" }, e.status || 500);
+    return new Response(JSON.stringify({ error: e.message || "Server error", ...(e.code ? { code: e.code } : {}) }), { status: e.status || 500, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
 }

@@ -1,0 +1,16 @@
+:root{--bg:#0B0714;--panel:#140D22;--ink:#EDEEF3;--muted:#A9AEBB;--accent:#FF4FA3;--accent2:#FF9E3D;--line:rgba(255,255,255,.1)}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#FBF8FC;--panel:#FFFFFF;--ink:#1B1426;--muted:#5D5770;--accent:#C2186D;--accent2:#B85A00;--line:rgba(0,0,0,.1)}}
+:root[data-theme="light"]{--bg:#FBF8FC;--panel:#FFFFFF;--ink:#1B1426;--muted:#5D5770;--accent:#C2186D;--accent2:#B85A00;--line:rgba(0,0,0,.1)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 "Inter",system-ui,-apple-system,"Segoe UI",sans-serif}
+.lg{max-width:760px;margin:0 auto;padding:40px 16px 80px}
+.lg-back{display:inline-block;margin-bottom:22px;color:var(--accent2);text-decoration:none;font-weight:600;font-size:14px}
+.lg-back:hover{text-decoration:underline}
+h1{margin:0 0 4px;font-size:clamp(28px,6vw,40px);line-height:1.15;letter-spacing:-.01em}
+.lg-date{margin:0 0 28px;color:var(--muted);font-size:14px}
+h2{margin:34px 0 10px;font-size:20px;padding-top:14px;border-top:1px solid var(--line)}
+h3{margin:18px 0 6px;font-size:16px}
+p,li{color:var(--ink)}
+ul{padding-left:22px}
+li{margin:6px 0}
+a{color:var(--accent)}

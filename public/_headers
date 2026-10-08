@@ -12,6 +12,8 @@
   Cache-Control: no-cache
 /hp-pro.js
   Cache-Control: no-cache
+/hp-team.js
+  Cache-Control: no-cache
 /hp-drugs.js
   Cache-Control: no-cache
 /hp-est.js

@@ -1,7 +1,7 @@
 // Highpoint Dialer: shared server helpers (Netlify Functions v2, Node 18+)
 import { Buffer } from "node:buffer";
 import { getStore } from "./store.mjs";
-import { requireUser as authUser, httpErr as authErr } from "./auth.mjs";
+import { requireDialer as authUser, httpErr as authErr } from "./auth.mjs";
 import crypto from "node:crypto";
 
 export const env = (k, d = "") => (globalThis.__ENV?.[k] ?? d);

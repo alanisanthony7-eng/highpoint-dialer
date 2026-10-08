@@ -162,6 +162,9 @@
   #hpGate .g-go:disabled{opacity:.65;cursor:default;transform:none}
   #hpGate .g-go:focus-visible,#hpGate .g-eye:focus-visible{outline:2px solid #fff;outline-offset:3px}
   #hpGate .g-err{margin:0;padding:10px 12px;border-radius:10px;background:rgba(255,90,106,.14);border:1px solid rgba(255,90,106,.45);font-size:13.5px;color:#FFD2D7}
+  #hpGate .g-agree{flex-direction:row;align-items:flex-start;gap:10px;font-weight:500;font-size:12.5px;line-height:1.5;letter-spacing:0;color:#C9CDD5}
+  #hpGate .g-agree input{margin-top:2px;width:17px;height:17px;flex:none;accent-color:#FF2E88}
+  #hpGate .g-agree a{color:#FF9E3D}
   #hpGate .g-fine{margin:2px 0 0;font-size:12px;color:#8C92A0;text-align:center;line-height:1.5}
   #hpGate .gx-foot{position:fixed;left:clamp(20px,6vw,96px);bottom:18px;font-size:12px;color:rgba(255,255,255,.55)}
   @keyframes gxIn{from{opacity:0;transform:translateY(14px)}}
@@ -182,7 +185,9 @@
 
   const MARK = `<svg viewBox="0 0 132 96" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="#FFFFFF"/><path d="M104 22 L128 12 L118 30 L113 24 Z" fill="#FFFFFF"/><path d="M113 24 L118 30 L112 31Z" fill="#FF9E3D"/></svg>`;
   function gate(msg) {
-    let mode = "in", showPw = false;
+    const inviteToken = new URLSearchParams(location.search).get("invite") || "";
+    let mode = inviteToken ? "up" : "in", showPw = false, inviteInfo = null;
+    if (inviteToken) call("/api/auth/invite?code=" + encodeURIComponent(inviteToken)).then((r) => { inviteInfo = r; draw(""); }).catch((e) => { inviteInfo = { error: e.message }; draw(""); });
     const keep = {};
     const g = document.createElement("div"); g.id = "hpGate"; g.setAttribute("role", "dialog"); g.setAttribute("aria-label", "Sign in to Highpoint");
     g.innerHTML = `<div class="gx-bg"></div><div class="gx-content"></div>`;
@@ -194,6 +199,7 @@
     const box = $(".gx-content", g);
     const draw = (err = msg || "") => {
       ["gName", "gEmail", "gCode"].forEach((id) => { const el = document.getElementById(id); if (el) keep[id] = el.value; });
+      const agreeEl = document.getElementById("gAgree"); if (agreeEl) keep.gAgree = agreeEl.checked;
       const up = mode === "up";
       box.innerHTML = `<div class="gx">
         <section class="gx-hero">
@@ -204,11 +210,13 @@
         </section>
         <form class="g-card" novalidate>
           <h2>${up ? "Join the Highpoint team" : "Welcome back"}</h2>
-          <p class="g-lead">${up ? "Create your agent login. You'll need the team code from your admin." : "Sign in to pick up where you left off."}</p>
+          <p class="g-lead">${up ? (inviteToken ? (inviteInfo?.error ? "" : `You're invited to the Highpoint desk${inviteInfo?.plan ? ` (${inviteInfo.plan === "starter" ? "Starter" : "Pro"} plan)` : ""}. Create your agent login.`) : "Create your agent login. You'll need the team code from your admin.") : "Sign in to pick up where you left off."}</p>
+          ${up && inviteInfo?.error ? `<p class="g-err" role="alert">${esc(inviteInfo.error)}</p>` : ""}
           ${up ? `<label for="gName">Full name<input class="g-in" id="gName" autocomplete="name" placeholder="First and last name" value="${esc(keep.gName || "")}"></label>` : ""}
           <label for="gEmail">Email<input class="g-in" id="gEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(keep.gEmail || "")}"></label>
           <label for="gPw">Password<span class="g-pw"><input class="g-in" id="gPw" type="${showPw ? "text" : "password"}" autocomplete="${up ? "new-password" : "current-password"}" placeholder="${up ? "At least 8 characters" : "Your password"}" style="padding-right:64px"><button type="button" class="g-eye" aria-label="${showPw ? "Hide" : "Show"} password">${showPw ? "Hide" : "Show"}</button></span></label>
-          ${up ? `<label for="gCode">Team code<input class="g-in" id="gCode" autocomplete="off" placeholder="From your Highpoint admin" value="${esc(keep.gCode || "")}"></label>` : ""}
+          ${up && !inviteToken ? `<label for="gCode">Team code<input class="g-in" id="gCode" autocomplete="off" placeholder="From your Highpoint admin" value="${esc(keep.gCode || "")}"></label>` : ""}
+          ${up ? `<label class="g-agree" for="gAgree"><input type="checkbox" id="gAgree" ${keep.gAgree ? "checked" : ""}><span>I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>, and I'm responsible for following calling and texting laws (TCPA, Do Not Call, recording consent).</span></label>` : ""}
           ${err ? `<p class="g-err" role="alert">${esc(err)}</p>` : ""}
           <button class="g-go" type="submit">${up ? "Create my account" : "Sign in"}</button>
           <p class="g-sw">${up ? `Already on the team? <a data-m="in" tabindex="0" role="button">Sign in</a>` : `New agent? <a data-m="up" tabindex="0" role="button">Create an account</a>`}</p>
@@ -225,8 +233,12 @@
         const pw = $("#gPw").value;
         try {
           const body = { email: $("#gEmail").value, password: pw };
-          if (up) Object.assign(body, { name: $("#gName").value, invite: $("#gCode").value });
+          if (up) {
+            if (!$("#gAgree").checked) { draw("Please agree to the Terms of Service and Privacy Policy."); return; }
+            Object.assign(body, { name: $("#gName").value, invite: $("#gCode")?.value || "", inviteToken, agree: true });
+          }
           const r = await call(`/api/auth/${up ? "signup" : "login"}`, { method: "POST", body });
+          if (inviteToken) history.replaceState(null, "", location.pathname);
           g.style.transition = "opacity .35s"; g.style.opacity = "0"; setTimeout(() => { g.giveBack(); g.remove(); }, 360); start(r.user);
         } catch (er) { draw(er.message); }
       };
@@ -238,12 +250,17 @@
   function account(u) {
     const row = document.querySelector(".topbar .row"); if (!row || row.querySelector(".hp-acct")) return;
     const a = document.createElement("div"); a.className = "hp-acct";
-    a.innerHTML = `<i aria-hidden="true">${esc((u.name || u.email)[0].toUpperCase())}</i><span>${esc(u.name || u.email)}</span><button type="button" data-out>Sign out</button>`;
+    a.innerHTML = `<i aria-hidden="true">${esc((u.name || u.email)[0].toUpperCase())}</i><span>${esc(u.name || u.email)}</span>${u.admin ? `<button type="button" data-team>Team</button>` : ""}<button type="button" data-bill>Billing</button><button type="button" data-out>Sign out</button>`;
+    a.querySelector("[data-bill]").onclick = () => window.hpTeam?.openBilling();
+    const tb = a.querySelector("[data-team]"); if (tb) tb.onclick = () => window.hpTeam?.openTeam();
     a.querySelector("[data-out]").onclick = async () => { try { await call("/api/auth/logout", { method: "POST" }); } finally { location.reload(); } };
     row.append(a);
   }
 
-  function start(u) {
+  function loadTeam() { return window.hpTeam ? Promise.resolve() : new Promise((res) => { const s = document.createElement("script"); s.src = "/hp-team.js"; s.onload = res; s.onerror = res; document.body.append(s); }); }
+  async function start(u) {
+    await loadTeam();
+    if (window.hpTeam) u = await window.hpTeam.ready(u);
     ME = u; window.hpUser = u;
     document.documentElement.classList.remove("gated");
     account(u);

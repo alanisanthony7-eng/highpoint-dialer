@@ -240,7 +240,11 @@ const SCRIPTS={
   MP:l=>`Hi ${esc(l.first||"…")}, this is [your name]. I'm following up on the mortgage protection form you sent back${l.lender?` about your loan with ${esc(l.lender)}`:""}. It's the coverage that pays off or keeps up the house payment if something happens to you. Did I catch you at an okay time to go over it for a few minutes?`,
   IUL:l=>`Hi ${esc(l.first||"…")}, this is [your name]. You'd asked about building tax-advantaged savings that also carries life insurance. I'd like to learn a little about your goals and then show you how an indexed universal life policy could fit. Do you have a few minutes now?`,
   "":l=>`Hi, is this ${esc(l.first||"…")}? This is [your name] following up on the information you requested about life insurance. Do you have a couple of minutes?`};
-function renderDialer(){
+function dialerUpsell(){const v=$("#v-dialer");if(!v)return false;let n=$("#dUpsell");const need=window.hpUser?.access&&!window.hpUser.access.dialer;
+  if(!need){if(n)n.remove();return false}
+  if(!n){n=document.createElement("div");n.id="dUpsell";n.className="notice";n.style.margin="0 0 14px";n.innerHTML=`<b>The dialer is part of the Pro plan.</b> You're on Starter, so calling is turned off. <button type="button" class="btn sm primary" style="margin-left:8px">Upgrade in Billing</button>`;n.querySelector("button").onclick=()=>window.hpTeam?.openBilling();v.querySelector(".head")?.after(n)}
+  return true}
+function renderDialer(){dialerUpsell();
   const q=dialQueue(); $("#dqCount").textContent=`${q.length} to call`;
   if(!q.find(l=>l.id===dCurId)) dCurId=q[0]?.id||null;
   $("#queue").innerHTML=q.slice(0,300).map(l=>`<button data-id="${esc(l.id)}" aria-current="${l.id===dCurId}"><span>${esc(fullName(l))}</span><span class="muted num">${l.callCount?l.callCount+"×":""}${l.callbackAt?` · ${new Date(l.callbackAt).toLocaleDateString(undefined,{month:"short",day:"numeric"})}`:""}</span></button>`).join("")||`<div class="empty-col">No leads with phone numbers in ${stageName($("#dqStage").value)}.</div>`;
