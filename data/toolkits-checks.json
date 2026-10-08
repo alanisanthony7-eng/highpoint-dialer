@@ -1,38 +1,746 @@
 {
-  "source": "Insurance Toolkits quotes run by Anthony, read off screen 2026-10-07. Texas, bank draft/EFT, monthly premium, $10,000 face.",
-  "notes": "Only scenarios whose inputs were confirmed are listed. Transamerica rows were used to confirm the scenario (they match the FE Express rate chart to the cent).",
-  "quotes": [
-    {"age":55,"sex":"M","tobacco":false,"health":"clean","face":10000,"rows":[
-      {"carrier":"American Home Life","plan":"Patriot Series Preferred","monthly":48.72},
-      {"carrier":"Transamerica","plan":"FE Express Select","monthly":53.17},
-      {"carrier":"American Home Life","plan":"GuideStar Level","monthly":54.16}]},
-    {"age":55,"sex":"F","tobacco":false,"health":"clean","face":10000,"rows":[
-      {"carrier":"Corebridge","plan":"SimpliNow Legacy Max","monthly":30.15},
-      {"carrier":"Aetna","plan":"Protection Series Preferred","monthly":32.25},
-      {"carrier":"Foresters","plan":"PlanRight Preferred","monthly":32.47},
-      {"carrier":"Transamerica","plan":"FE Express Premier","monthly":32.86},
-      {"carrier":"American Home Life","plan":"Patriot Series Preferred","monthly":34.04},
-      {"carrier":"Aetna (CVS/Accendo)","plan":"Accendo Preferred","monthly":34.39}]},
-    {"age":55,"sex":"M","tobacco":true,"health":"COPD (treated now)","face":10000,"rows":[
-      {"carrier":"Foresters","plan":"PlanRight Standard","monthly":81.66},
-      {"carrier":"Transamerica","plan":"FE Express Select (smoker)","monthly":88.63}]},
-    {"age":55,"sex":"F","tobacco":true,"health":"COPD + diabetes (no complications)","face":10000,"rows":[
-      {"carrier":"Transamerica","plan":"FE Express Select (smoker)","monthly":75.47},
-      {"carrier":"American Home Life","plan":"GuideStar Graded","monthly":71.93}]}
-  ],
-  "guaranteedIssue": [
-    {"carrier":"Ethos","age":55,"sex":"M","face":10000,"monthly":60.00},
-    {"carrier":"Ethos","age":55,"sex":"F","face":10000,"monthly":49.00},
-    {"carrier":"Corebridge","age":55,"sex":"M","face":10000,"monthly":66.72},
-    {"carrier":"Corebridge","age":55,"sex":"F","face":10000,"monthly":50.61}
-  ],
-  "underwritingRules": [
-    "AIG SIWL: COPD ever treated + tobacco = Decline",
-    "TruStage FE Level: COPD + tobacco, and diabetes + tobacco, each move the client down one tier",
-    "TruStage FE Level: past cancer diagnosed 2-5 years ago = no level rate at $10,000, age 55",
-    "TruStage FE Guaranteed: not offered in TX",
-    "Foresters BrightFuture: past cancer ever treated = Decline",
-    "Aetna Accendo: past cancer treated within 2 years = Decline",
-    "Kidney dialysis (current): only guaranteed-issue plans quoted"
-  ]
+ "source": "Insurance Toolkits quotes run by Anthony, read off screen 2026-10-07. Texas, bank draft/EFT, monthly premium, $10,000 face, level coverage.",
+ "notes": "Only scenarios whose inputs were confirmed are listed. Transamerica rows were used to confirm the scenario (they match the FE Express rate chart to the cent).",
+ "quotes": [
+  {
+   "age": 50,
+   "sex": "M",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Preferred",
+     "monthly": 32.0
+    },
+    {
+     "carrier": "Corebridge",
+     "plan": "SimpliNow Legacy Max",
+     "monthly": 33.43
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Premier",
+     "monthly": 33.94
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 34.39
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 34.6
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Preferred",
+     "monthly": 39.25
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Standard",
+     "monthly": 40.51
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 41.05
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Standard",
+     "monthly": 43.34
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 44.71
+    },
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Standard",
+     "monthly": 45.05
+    }
+   ],
+   "note": "one row between Corebridge and Transamerica not seen"
+  },
+  {
+   "age": 50,
+   "sex": "F",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 27.3
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Preferred",
+     "monthly": 28.84
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Premier",
+     "monthly": 29.03
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 30.0
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 32.29
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 36.23
+    }
+   ],
+   "note": "rows above Accendo not seen"
+  },
+  {
+   "age": 55,
+   "sex": "M",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Premier",
+     "monthly": 39.21
+    },
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Preferred",
+     "monthly": 39.25
+    },
+    {
+     "carrier": "Aetna",
+     "plan": "Protection Series Preferred",
+     "monthly": 41.33
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 42.2
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 44.1
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 48.04
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Standard",
+     "monthly": 48.48
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Preferred",
+     "monthly": 48.72
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Select",
+     "monthly": 53.17
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Standard",
+     "monthly": 53.45
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 54.16
+    },
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Standard",
+     "monthly": 59.17
+    }
+   ]
+  },
+  {
+   "age": 55,
+   "sex": "F",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Corebridge",
+     "plan": "SimpliNow Legacy Max",
+     "monthly": 30.15
+    },
+    {
+     "carrier": "Aetna",
+     "plan": "Protection Series Preferred",
+     "monthly": 32.25
+    },
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Preferred",
+     "monthly": 32.47
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Premier",
+     "monthly": 32.86
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Preferred",
+     "monthly": 34.04
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 34.39
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 36.4
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 37.55
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 41.04
+    }
+   ]
+  },
+  {
+   "age": 60,
+   "sex": "M",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Premier",
+     "monthly": 46.39
+    },
+    {
+     "carrier": "Corebridge",
+     "plan": "SimpliNow Legacy Max",
+     "monthly": 47.82
+    },
+    {
+     "carrier": "Aetna",
+     "plan": "Protection Series Preferred",
+     "monthly": 50.17
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 51.1
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 52.1
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 55.05
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 58.93
+    },
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Standard",
+     "monthly": 73.81
+    }
+   ]
+  },
+  {
+   "age": 60,
+   "sex": "F",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Aetna",
+     "plan": "Protection Series Preferred",
+     "monthly": 39.58
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Preferred",
+     "monthly": 40.16
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 40.51
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 43.8
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 44.05
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 46.99
+    }
+   ],
+   "note": "rows above Aetna not seen"
+  },
+  {
+   "age": 65,
+   "sex": "M",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Preferred",
+     "monthly": 57.84
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 58.19
+    },
+    {
+     "carrier": "Corebridge",
+     "plan": "SimpliNow Legacy Max",
+     "monthly": 61.81
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 65.04
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 67.64
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 68.0
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Select",
+     "monthly": 77.81
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Standard",
+     "monthly": 79.01
+    }
+   ],
+   "note": "rows above AHL Patriot not seen"
+  },
+  {
+   "age": 65,
+   "sex": "F",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Preferred",
+     "monthly": 43.38
+    },
+    {
+     "carrier": "Corebridge",
+     "plan": "SimpliNow Legacy Max",
+     "monthly": 44.79
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Premier",
+     "monthly": 44.9
+    },
+    {
+     "carrier": "Aetna",
+     "plan": "Protection Series Preferred",
+     "monthly": 45.83
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 47.6
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Preferred",
+     "monthly": 48.35
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 53.04
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 54.1
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 56.26
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Select",
+     "monthly": 61.2
+    }
+   ]
+  },
+  {
+   "age": 70,
+   "sex": "M",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 80.55
+    },
+    {
+     "carrier": "Corebridge",
+     "plan": "SimpliNow Legacy Max",
+     "monthly": 81.75
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 87.5
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 92.8
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Select",
+     "monthly": 100.99
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Standard",
+     "monthly": 103.69
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Standard",
+     "monthly": 104.04
+    }
+   ],
+   "note": "cheapest rows not seen"
+  },
+  {
+   "age": 70,
+   "sex": "F",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Preferred",
+     "monthly": 54.63
+    },
+    {
+     "carrier": "Aetna",
+     "plan": "Protection Series Preferred",
+     "monthly": 55.83
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Premier",
+     "monthly": 56.4
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 58.19
+    },
+    {
+     "carrier": "Corebridge",
+     "plan": "SimpliNow Legacy Max",
+     "monthly": 58.24
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Preferred",
+     "monthly": 58.36
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 65.04
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 67.64
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 74.5
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Standard",
+     "monthly": 76.91
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Select",
+     "monthly": 77.07
+    },
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Standard",
+     "monthly": 83.41
+    }
+   ]
+  },
+  {
+   "age": 75,
+   "sex": "M",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 101.41
+    },
+    {
+     "carrier": "Fidelity Life",
+     "plan": "Level",
+     "monthly": 108.05
+    },
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Preferred",
+     "monthly": 109.38
+    },
+    {
+     "carrier": "Corebridge",
+     "plan": "SimpliNow Legacy Max",
+     "monthly": 109.65
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Premier",
+     "monthly": 110.05
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Level",
+     "monthly": 119.26
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 129.3
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Standard",
+     "monthly": 143.41
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Standard",
+     "monthly": 143.76
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Select",
+     "monthly": 155.5
+    }
+   ],
+   "note": "cheapest rows not seen"
+  },
+  {
+   "age": 75,
+   "sex": "F",
+   "tobacco": false,
+   "health": "clean",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Aetna",
+     "plan": "Protection Series Preferred",
+     "monthly": 72.5
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Preferred",
+     "monthly": 75.6
+    },
+    {
+     "carrier": "Aetna (CVS/Accendo)",
+     "plan": "Accendo Preferred",
+     "monthly": 75.86
+    },
+    {
+     "carrier": "Corebridge",
+     "plan": "SimpliNow Legacy Max",
+     "monthly": 79.34
+    },
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Preferred",
+     "monthly": 82.13
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Premier",
+     "monthly": 82.88
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "Patriot Series Standard",
+     "monthly": 99.47
+    },
+    {
+     "carrier": "Ethos",
+     "plan": "Level",
+     "monthly": 100.2
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Select",
+     "monthly": 116.89
+    },
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Standard",
+     "monthly": 126.81
+    }
+   ]
+  },
+  {
+   "age": 55,
+   "sex": "M",
+   "tobacco": true,
+   "health": "COPD (treated now)",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Foresters",
+     "plan": "PlanRight Standard",
+     "monthly": 81.66
+    },
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Select (smoker)",
+     "monthly": 88.63
+    }
+   ]
+  },
+  {
+   "age": 55,
+   "sex": "F",
+   "tobacco": true,
+   "health": "COPD + diabetes (no complications)",
+   "face": 10000,
+   "rows": [
+    {
+     "carrier": "Transamerica",
+     "plan": "FE Express Select (smoker)",
+     "monthly": 75.47
+    },
+    {
+     "carrier": "American Home Life",
+     "plan": "GuideStar Graded",
+     "monthly": 71.93
+    }
+   ]
+  }
+ ],
+ "guaranteedIssue": [
+  {
+   "carrier": "Ethos",
+   "age": 55,
+   "sex": "M",
+   "face": 10000,
+   "monthly": 60.0
+  },
+  {
+   "carrier": "Ethos",
+   "age": 55,
+   "sex": "F",
+   "face": 10000,
+   "monthly": 49.0
+  },
+  {
+   "carrier": "Corebridge",
+   "age": 55,
+   "sex": "M",
+   "face": 10000,
+   "monthly": 66.72
+  },
+  {
+   "carrier": "Corebridge",
+   "age": 55,
+   "sex": "F",
+   "face": 10000,
+   "monthly": 50.61
+  }
+ ],
+ "underwritingRules": [
+  "AIG SIWL: COPD ever treated + tobacco = Decline",
+  "TruStage FE Level: COPD + tobacco, and diabetes + tobacco, each move the client down one tier",
+  "TruStage FE Level: past cancer diagnosed 2-5 years ago = no level rate at $10,000, age 55",
+  "TruStage FE Guaranteed: not offered in TX",
+  "Foresters BrightFuture: past cancer ever treated = Decline",
+  "Aetna Accendo: past cancer treated within 2 years = Decline",
+  "Kidney dialysis (current): only guaranteed-issue plans quoted"
+ ],
+ "observations": [
+  "Every Transamerica price matched the FE Express rate chart to the cent (17 checks).",
+  "Female price equals the male price 5 years younger for Accendo, Fidelity Life and AHL GuideStar (F70 = M65)."
+ ]
 }
