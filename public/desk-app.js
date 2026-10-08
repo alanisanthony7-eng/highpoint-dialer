@@ -527,7 +527,7 @@ function estM10(c,sex,cls,age){const E=window.HP_EST,f=E.fee[c],cv=(s,k)=>E.curv
   return f+Math.exp(Math.log(y0-f)+t*(Math.log(y1-f)-Math.log(y0-f)))}
 function estQuote(c,{age,sex,tob,tier}){const E=window.HP_EST;if(!E?.curves?.[c])return null;const f=E.fee[c];
   const single=!["M","F"].some(s=>E.curves[c][s]?.std);const m=estM10(c,sex,tier===0||single||tier>1?"pref":"std",age);if(m==null)return null;
-  let unit=(m-f)/10;if(tob)unit*=E.tob[c]||1.39;if(tier===2)unit*=1.35;if(tier===3)unit*=1.5;return{unit,fee:f}}
+  let unit=(m-f)/10;if(tob)unit*=E.tob[c]||1.39;if(tier===2)unit*=1.35;if(tier===3)unit*=E.gi?.[c]||1.5;return{unit,fee:f}}
 function taFexBudget(o,budget){const max=o.age<=75?100000:25000;let best=null;
   for(let f=5000;f<=max;f+=1000){const q=taFexQuote({...o,face:f});if(q&&q.m<=budget)best=f}return best}
 function fePer1000(c,tier){const tob=NIC[Q.FE.nic]?.[1];return (feQuote({age:Q.age,sex:Q.sex,tob,face:1000,plan:"level"})-3)*TIER_MULT[tier]*c.f}
