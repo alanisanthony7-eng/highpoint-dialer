@@ -464,3 +464,5 @@ body:has(#v-dialer:not([hidden])) .hpd-phonest{display:none}
 .hpdk-pill svg{width:15px;height:15px;color:#AEB4C2}
 @media (max-width:600px){.hpdk{left:8px!important;right:8px!important;top:auto!important;bottom:calc(76px + env(safe-area-inset-bottom))!important;width:auto;max-height:70vh}.hpdk.min{left:auto!important}}
 @media (prefers-reduced-motion:reduce){.hpdk{animation:none}[data-tone="ring"] i,.hpdk-av[data-tone="ring"]{animation:none}}
+
+.hpdk-consent{margin:0 14px 8px;padding:7px 10px;border-radius:10px;font-size:12px;line-height:1.4;color:#FFD2A6;background:rgba(255,158,61,.1);border:1px solid rgba(255,158,61,.35)}

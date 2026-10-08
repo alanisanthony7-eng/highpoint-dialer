@@ -10,7 +10,7 @@
 //  POST /api/dialer/power/optout  (Twilio)
 import {
   wrap, json, bad, xml, x, requireUser, twilioParams, config as loadConfig, siteUrl, getJ, setJ, tw, store,
-  preflight, pickCallerId, bumpNumber, addAttempt, saveCall, aggregate, patchCallBySid, to10, e164, stateOf, today, later,
+  preflight, pickCallerId, bumpNumber, addAttempt, saveCall, aggregate, patchCallBySid, to10, e164, stateOf, today, later, recordNoticeFor,
 } from "../lib/hp.mjs";
 import { hangup, sess, updSess, sessKey } from "../lib/calls.mjs";
 import { txStart } from "../lib/calls.mjs";
@@ -55,7 +55,7 @@ export default wrap(async (req, ctx) => {
       });
       later(ctx, Promise.all(siblings.map((sid) => hangup(sid, true))));
       return xml(
-        (S.recordNotice ? say("This call may be recorded.") : "") +
+        (recordNoticeFor(S, p.To) ? say("This call may be recorded.") : "") +
         (S.transcribe ? txStart(p.CallSid, "Lead", "Agent") : "") +
         `<Dial><Conference beep="false" startConferenceOnEnter="true" endConferenceOnExit="false">hp-${x(s)}</Conference></Dial>`
       );

@@ -791,7 +791,7 @@
         ${f("hsRamp", "Warm-up days for new numbers", s.rampDays, 'type="number" min="0" max="30"')}
       </div>
       ${c("hsRec", "Record calls (both sides)", s.record)}
-      ${c("hsNotice", "Play “this call may be recorded” before connecting (needed for two-party consent states like FL, CA, PA, WA unless agents say it)", s.recordNotice)}
+      <label class="hpd-sm" style="display:flex;flex-direction:column;gap:6px;margin:6px 0">Recording notice ("This call may be recorded")<select id="hsNoticeMode" style="max-width:420px">${[["auto","Automatic: play it for leads in all-party-consent states (CA, FL, PA, WA, IL, MD, MA and others)"],["always","Always play it"],["never","Never (agents say it themselves)"]].map(([v,l])=>`<option value="${v}" ${(s.recordNotice===true?"always":s.recordNoticeMode||"auto")===v?"selected":""}>${l}</option>`).join("")}</select></label>
       ${c("hsTx", "Live transcription", s.transcribe)}
       ${c("hsLp", "Local presence (match caller ID to the lead's area code)", s.localPresence)}
       ${c("hsPool", "Agents can borrow team numbers for local presence", s.sharedPool)}
@@ -812,7 +812,7 @@
         const mx = rest.match(/max(\d+)/i); if (mx) r.max24h = +mx[1]; if (/nosun/i.test(rest)) r.noSunday = true; const ss = rest.match(/sun(\d+)/i); if (ss) r.sunStart = +ss[1];
         rules[m[1].toUpperCase()] = r;
       }
-      const settings = { company: $("#hsCo").value, callbackNumber: d10($("#hsCb").value), maxLines: +$("#hsLines").value, abandonCap: +$("#hsAb").value, dailyCapPerNumber: +$("#hsCap").value, maxAttempts24h: +$("#hsAtt").value, agentMaxNumbers: +$("#hsBuy").value, rampDays: +$("#hsRamp").value, record: $("#hsRec").checked, recordNotice: $("#hsNotice").checked, transcribe: $("#hsTx").checked, localPresence: $("#hsLp").checked, sharedPool: $("#hsPool").checked, amdAutoSkip: $("#hsAmd").checked, inboundGreeting: $("#hsGreet").value, stateRules: rules };
+      const settings = { company: $("#hsCo").value, callbackNumber: d10($("#hsCb").value), maxLines: +$("#hsLines").value, abandonCap: +$("#hsAb").value, dailyCapPerNumber: +$("#hsCap").value, maxAttempts24h: +$("#hsAtt").value, agentMaxNumbers: +$("#hsBuy").value, rampDays: +$("#hsRamp").value, record: $("#hsRec").checked, recordNotice: false, recordNoticeMode: $("#hsNoticeMode").value, transcribe: $("#hsTx").checked, localPresence: $("#hsLp").checked, sharedPool: $("#hsPool").checked, amdAutoSkip: $("#hsAmd").checked, inboundGreeting: $("#hsGreet").value, stateRules: rules };
       try { const r = await api("/setup", { method: "PUT", body: { settings } }); S.settings = r.settings; toast("Dialer settings saved"); } catch (e) { toast(e.message); }
     };
     $("#hpdDncAdd", el).onclick = async () => { const nums = $("#hpdDncN").value.split(/[\n,;]+/).map(d10).filter((x) => x.length === 10); if (!nums.length) return; await api("/calls/dnc", { method: "POST", body: { numbers: nums } }); toast(`${nums.length} added to Do Not Call`); $("#hpdDncN").value = ""; };
@@ -1010,6 +1010,7 @@
           ${l ? `<small>${esc(l.state || "")}${clock ? ` · ${esc(clock.txt)} local` : ""}${l.product ? ` · ${esc(l.product)}` : ""} · <em class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</em></small>` : ""}</span>
         ${l ? `<button type="button" class="hpdk-ic" id="hpdkOpen" title="Open profile" aria-label="Open profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M10 14L20 4M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></button>` : ""}
       </div>
+      ${l && S.settings?.record && S.provider !== "telnyx" && ["CA","CT","DE","FL","IL","MD","MA","MI","MT","NV","NH","OR","PA","WA"].includes(String(l.state || "").toUpperCase()) ? `<div class="hpdk-consent" role="note">${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Say "this call may be recorded" if the notice is off.</div>` : ""}
       ${multi ? `<div class="hpdk-lines">${tiles.map((t) => `<button type="button" class="hpdk-line" data-s="${esc(t.s)}" data-lead="${esc(t.leadId || "")}"><i></i><b>${esc(t.name || fmt(t.to))}</b><em>${esc(t.label)}</em></button>`).join("")}</div>` : ""}
       <div class="hpdk-ctl">
         ${cell ? "" : `<button type="button" class="hpdk-rb ${S.muted ? "on" : ""}" id="hpdkMute" ${onCall ? "" : "disabled"}>${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button>

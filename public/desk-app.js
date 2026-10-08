@@ -46,14 +46,33 @@ let view=(location.hash||"").slice(1);
 if(!["pipeline","contacts","import","dialer","quoter","iul","assistant","screen","scripts","calendar","crew"].includes(view)) view=ls.get("hp.view","pipeline");
 const CRUMB={crew:"Crew lobby",calendar:"Calendar",quoter:"Quote & compare",iul:"IUL illustrator",pipeline:"My CRM",contacts:"Clients",screen:"Screen a client",assistant:"Highpoint Bot",scripts:"Scripts",dialer:"Highpoint Dialer",import:"Import leads"};
 function syncNav(){ $$(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.view===view?"page":"false")); $("#crumb").textContent=CRUMB[view]||""; }
-function go(v){ if(!document.getElementById("v-"+v))v="pipeline"; view=v; ls.set("hp.view",v); $$("section[data-v]").forEach(s=>s.hidden=s.id!=="v-"+v); syncNav(); renderAll(); if(typeof crewPresence==="function")crewPresence(v); window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
+function go(v){ if(!document.getElementById("v-"+v))v="pipeline"; view=v; {const g=ls.get("hp.gs",{});if(!g[v]){g[v]=Date.now();ls.set("hp.gs",g)}} ls.set("hp.view",v); $$("section[data-v]").forEach(s=>s.hidden=s.id!=="v-"+v); syncNav(); renderAll(); if(typeof crewPresence==="function")crewPresence(v); window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
 $$(".nav").forEach(b=>b.onclick=()=>{if(b.dataset.view)go(b.dataset.view)});
 $$("[data-new]").forEach(b=>b.onclick=()=>openDrawer(null));
 $$("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
 
 /* ---------- pipeline ---------- */
 function filteredLeads(){return [...leads.values()]}
-function renderPipeline(){
+/* getting started: a short checklist for new agents; ticks itself off, hides when done or dismissed */
+function renderStart(){const host=$("#v-pipeline");if(!host)return;let card=$("#gsCard");const g=ls.get("hp.gs",{});
+  if(g._hide){card?.remove();return}
+  const u=window.hpUser||{},hasLeads=leads.size>0,quoted=[...leads.values()].some(l=>(l.quotes||[]).length)||!!g.quoter;
+  const steps=[
+    ["import","Import your leads","Upload a CSV from your lead vendor or add one by hand.",hasLeads],
+    ["screen","Screen a client","Enter health answers and meds to see which plan they likely qualify for.",!!g.screen],
+    ["quoter","Run a quote","Compare carriers side by side and save the quote to the client.",quoted],
+    ["scripts","Open your scripts","The call scripts and rebuttals for FE, MP and IUL.",!!g.scripts],
+    ...(u.access&&!u.access.dialer?[]:[["dialer","Set up the dialer","Get a local number and make your first call from the browser.",!!g.dialer]]),
+    ["assistant","Ask Highpoint Bot","Ask an underwriting or product question, or have it write a follow-up text.",!!g.assistant]];
+  const done=steps.filter(x=>x[3]).length;
+  if(done===steps.length){if(!g._doneAt){g._doneAt=Date.now();ls.set("hp.gs",g)}if(Date.now()-g._doneAt>36e5){card?.remove();return}}
+  if(!card){card=document.createElement("div");card.id="gsCard";card.className="panel gs-card";host.querySelector(".hero")?.after(card)}
+  card.innerHTML=`<div class="gs-top"><div><h3>Get started</h3><p class="muted">${done===steps.length?"You're all set. Nice work.":`${done} of ${steps.length} done. Each step takes a minute or two.`}</p></div><div class="gs-bar" aria-hidden="true"><i style="width:${Math.round(done/steps.length*100)}%"></i></div><button class="wbtn" id="gsHide" aria-label="Hide checklist" title="Hide">✕</button></div>
+    <ol class="gs-list">${steps.map(([v,t,d,ok])=>`<li class="${ok?"ok":""}"><button type="button" data-gs="${v}"><span class="gs-dot" aria-hidden="true">${ok?"✓":""}</span><span><b>${esc(t)}</b><small>${esc(d)}</small></span></button></li>`).join("")}</ol>`;
+  card.querySelectorAll("[data-gs]").forEach(b=>b.onclick=()=>go(b.dataset.gs));
+  $("#gsHide",card).onclick=()=>{const x=ls.get("hp.gs",{});x._hide=1;ls.set("hp.gs",x);card.remove()};
+}
+function renderPipeline(){renderStart();
   const pf=$("#pipeProduct").value; const all=filteredLeads().filter(l=>!pf||l.product===pf);
   const all2=filteredLeads(), mStart=new Date(new Date().getFullYear(),new Date().getMonth(),1).getTime();
   const soldM=all2.filter(l=>l.stage==="sold"&&(l.updatedAt||0)>=mStart).length, closed=all2.filter(l=>l.stage==="sold"||l.stage==="lost").length;

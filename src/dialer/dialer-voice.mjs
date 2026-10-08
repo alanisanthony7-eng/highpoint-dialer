@@ -4,7 +4,7 @@
 //  POST /api/dialer/voice?step=...   follow-up steps
 import {
   wrap, xml, x, twilioParams, config as loadConfig, siteUrl, getJ, setJ, listKeys, preflight, pickCallerId, bumpNumber,
-  addAttempt, saveCall, aggregate, to10, e164, stateOf, later,
+  addAttempt, saveCall, aggregate, to10, e164, stateOf, later, recordNoticeFor,
 } from "../lib/hp.mjs";
 import { txStart } from "../lib/calls.mjs";
 
@@ -78,7 +78,7 @@ export default wrap(async (req, ctx) => {
   later(ctx, Promise.all([bumpNumber(cid.e164, "dials"), addAttempt(leadNum), aggregate(rec, "dial")]));
 
   const recAttr = S.record ? ` record="record-from-answer-dual" recordingStatusCallback="${ev("type=rec")}" recordingStatusCallbackEvent="completed"` : "";
-  const notice = S.recordNotice ? ` url="${x(H() + "/api/dialer/voice?step=notice")}"` : "";
+  const notice = recordNoticeFor(S, p.To) ? ` url="${x(H() + "/api/dialer/voice?step=notice")}"` : "";
   return xml(
     (S.transcribe ? txStart(p.CallSid, "Agent", "Lead") : "") +
     `<Dial answerOnBridge="true" callerId="${x(cid.e164)}" timeout="30" timeLimit="14400" action="${x(H() + "/api/dialer/voice?step=after")}"${recAttr}>` +
