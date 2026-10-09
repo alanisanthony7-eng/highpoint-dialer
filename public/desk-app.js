@@ -72,19 +72,38 @@ function renderStart(){const host=$("#v-pipeline");if(!host)return;let card=$("#
   card.querySelectorAll("[data-gs]").forEach(b=>b.onclick=()=>go(b.dataset.gs));
   $("#gsHide",card).onclick=()=>{const x=ls.get("hp.gs",{});x._hide=1;ls.set("hp.gs",x);card.remove()};
 }
+function renderToday(all){
+  const u=window.hpUser||{}, h=new Date().getHours(), first=(u.name||"").split(" ")[0];
+  $("#heroHi").textContent=`${h<12?"Good morning":h<18?"Good afternoon":"Good evening"}${first?", "+first:""}.`;
+  const now=Date.now(), end=new Date().setHours(23,59,59,999), todayS=new Date().toDateString(), seen=new Set(), items=[];
+  [...appts.values()].filter(a=>!a.done&&sameDay(a.at,todayS)&&a.at>now-36e5).sort((a,b)=>a.at-b.at).forEach(a=>{if(a.leadId)seen.add(a.leadId);items.push({id:a.leadId,name:a.title||a.leadName||"Appointment",tag:hm(a.at),kind:a.type==="Callback"?"Callback":"Appointment",l:a.leadId&&leads.get(a.leadId)})});
+  const cbs=all.filter(l=>l.callbackAt&&l.callbackAt<=end&&!seen.has(l.id)&&l.stage!=="sold"&&l.stage!=="lost").sort((a,b)=>a.callbackAt-b.callbackAt);
+  cbs.forEach(l=>{seen.add(l.id);items.push({id:l.id,name:fullName(l),tag:l.callbackAt<now?"Due now":hm(l.callbackAt),kind:"Callback",l})});
+  const fresh=all.filter(l=>(l.stage||"new")==="new"&&!l.lastCallAt&&!seen.has(l.id)&&normPhone(l.phone)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  fresh.slice(0,6).forEach(l=>items.push({id:l.id,name:fullName(l),tag:"New",kind:"Not called yet",l}));
+  const nA=items.filter(x=>x.kind==="Appointment").length, nC=items.filter(x=>x.kind==="Callback").length;
+  const bits=[nA&&`${nA} appointment${nA>1?"s":""}`,nC&&`${nC} callback${nC>1?"s":""}`,fresh.length&&`${fresh.length.toLocaleString()} new lead${fresh.length>1?"s":""} not called yet`].filter(Boolean);
+  $("#heroDay").textContent=bits.length?`Today: ${bits.join(", ")}.`:(all.length?"Nothing scheduled today. A good day to work your Contacted leads.":"Import your leads or add one to start building your day.");
+  $("#upNext").innerHTML=items.slice(0,4).map(x=>`<li><button type="button" ${x.id?`data-id="${esc(x.id)}"`:"data-goto-cal"}><span class="un-t ${x.tag==="Due now"?"due":x.tag==="New"?"new":""}">${esc(x.tag)}</span><span class="un-n"><b>${esc(x.name)}</b><small>${esc(x.kind)}${x.l?.product?" · "+esc(PROD[x.l.product]||x.l.product):""}${x.l?.state?" · "+esc(x.l.state):""}</small></span><span class="un-go" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button></li>`).join("")||`<li class="un-empty">Nothing waiting. New leads and callbacks show up here.</li>`;
+  $$("#upNext [data-id]").forEach(b=>b.onclick=()=>openDrawer(b.dataset.id));
+  $$("#upNext [data-goto-cal]").forEach(b=>b.onclick=()=>go("calendar"));
+}
 function renderPipeline(){renderStart();
   const pf=$("#pipeProduct").value; const all=filteredLeads().filter(l=>!pf||l.product===pf);
   const all2=filteredLeads(), mStart=new Date(new Date().getFullYear(),new Date().getMonth(),1).getTime();
   const soldM=all2.filter(l=>l.stage==="sold"&&(l.updatedAt||0)>=mStart).length, closed=all2.filter(l=>l.stage==="sold"||l.stage==="lost").length;
-  $("#kpis").innerHTML=`<div><span class="label">Leads in book</span><span class="num" data-count="${all2.length}" data-key="k1" data-fmt="int">${all2.length.toLocaleString()}</span></div><div><span class="label">Appointments</span><span class="num" data-count="${all2.filter(l=>l.stage==="appointment").length}" data-key="k2" data-fmt="int">${all2.filter(l=>l.stage==="appointment").length}</span></div><div><span class="label">Sold this month</span><span class="num gold" data-count="${soldM}" data-key="k3" data-fmt="int">${soldM}</span></div><div><span class="label">Close rate</span><span class="num">${closed?Math.round(all2.filter(l=>l.stage==="sold").length/closed*100)+"%":"—"}</span></div>`;
+  const wk=Date.now()-7*864e5, nApp=all2.filter(l=>l.stage==="appointment").length, newWk=all2.filter(l=>(l.createdAt||0)>=wk).length, soldAll=all2.filter(l=>l.stage==="sold").length;
+  const kpi=(n,lab,sub,key,cls="")=>`<div><span class="num ${cls}" ${key?`data-count="${n}" data-key="${key}" data-fmt="int"`:""}>${typeof n==="number"?n.toLocaleString():n}</span><span class="label">${lab}</span><span class="ksub">${sub}</span></div>`;
+  $("#kpis").innerHTML=kpi(all2.length,"Leads in book",newWk?`${newWk} added this week`:"None added this week","k1")+kpi(nApp,"Appointments",nApp?"Leads in the Appointment stage":"Set one from a call","k2")+kpi(soldM,"Sold this month",`${soldAll} sold all time`,"k3","gold")+kpi(closed?Math.round(soldAll/closed*100)+"%":"—","Close rate",closed?`${soldAll} of ${closed} decided leads`:"Sold vs. not interested");
   setTimeout(()=>countUp($("#kpis")));
+  renderToday(all2);
   $("#strip").innerHTML=STAGES.map(([id,n,c])=>`<div><span class="label"><i style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${c};margin-right:5px"></i>${n}</span><span class="num">${all.filter(l=>(l.stage||"new")===id).length}</span></div>`).join("");
   $("#board").innerHTML=STAGES.map(([id,n,c])=>{
     const items=all.filter(l=>(l.stage||"new")===id).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
     return `<div class="col" data-stage="${id}"><header><h3><i style="background:${c}"></i>${n}</h3><span class="muted num">${items.length}</span></header>
       ${items.slice(0,150).map(l=>`<div class="card" draggable="true" data-id="${esc(l.id)}" tabindex="0"><span class="nm">${esc(fullName(l))}</span><span class="meta"><span class="num">${esc(fmtPhone(l.phone))}</span>${l.age?`<span>${esc(l.age)} yrs</span>`:""}</span><span class="meta">${prodPill(l.product)}<span>${esc(l.state||"")}</span></span></div>`).join("")}
       ${items.length>150?`<div class="empty-col">+${items.length-150} more in Contacts</div>`:""}
-      ${!items.length?`<div class="empty-col">${leads.size?"No leads here":(id==="new"?"Import a CSV or add a lead to start":"—")}</div>`:""}</div>`}).join("");
+      ${!items.length?`<div class="empty-col">${leads.size?"Drag a lead here":(id==="new"?"Import a CSV or add a lead to start":"Empty")}</div>`:""}</div>`}).join("");
   $$("#board .card").forEach(c=>{
     c.onclick=()=>openDrawer(c.dataset.id); c.onkeydown=e=>{if(e.key==="Enter")openDrawer(c.dataset.id)};
     c.ondragstart=e=>{e.dataTransfer.setData("text/plain",c.dataset.id);e.dataTransfer.effectAllowed="move"};
@@ -112,7 +131,7 @@ function renderContacts(){
   const cur=$("#fSource").value; $("#fSource").innerHTML=`<option value="">All sources</option>`+sources.map(s=>`<option ${s===cur?"selected":""}>${esc(s)}</option>`).join("");
   const rows=contactRows();
   $("#contactCount").textContent=`${rows.length} of ${leads.size} leads`;
-  $("#rows").innerHTML=rows.slice(0,500).map(l=>`<tr data-id="${esc(l.id)}" tabindex="0"><td><b>${esc(fullName(l))}</b></td><td class="num">${esc(fmtPhone(l.phone))}</td><td>${prodPill(l.product)}</td><td><span class="stage"><i style="background:${stageColor(l.stage)}"></i>${stageName(l.stage)}</span></td><td>${esc(l.state||"")}</td><td class="num">${esc(l.age||"")}</td><td>${esc(l.source||"")}</td><td class="muted">${ago(l.updatedAt)}</td></tr>`).join("")
+  $("#rows").innerHTML=rows.slice(0,500).map(l=>`<tr data-id="${esc(l.id)}" tabindex="0"><td><b>${esc(fullName(l))}</b></td><td class="num">${esc(fmtPhone(l.phone))}</td><td>${prodPill(l.product)}</td><td><span class="stage"><i style="background:${stageColor(l.stage)}"></i>${stageName(l.stage)}</span></td><td>${esc(l.state||"")}</td><td class="num">${esc(l.age||"")}</td><td${l.source?"":` class="muted"`}>${esc(l.source||"Added by hand")}</td><td class="muted">${ago(l.lastCallAt||l.updatedAt||l.createdAt)}</td></tr>`).join("")
     || `<tr><td colspan="8" class="muted" style="text-align:center;padding:28px">${leads.size?"No leads match these filters.":"No leads yet. Use Import to upload a CSV, or add one with + New lead."}</td></tr>`;
   $$("#rows tr[data-id]").forEach(r=>{r.onclick=()=>openDrawer(r.dataset.id);r.onkeydown=e=>{if(e.key==="Enter")openDrawer(r.dataset.id)}});
 }
@@ -686,6 +705,7 @@ function openCarriers(){const b=openWin("carriers",{title:"Customize carriers",s
 }
 $("#qCarriers").onclick=openCarriers;
 if($("#wavvCopy"))$("#wavvCopy").onclick=()=>copyText("ANT");
+if($("#wavvPromo")){$("#wavvPromo").hidden=!!ls.get("hp.wavvHide",0);$("#wavvHide").onclick=()=>{ls.set("hp.wavvHide",1);$("#wavvPromo").hidden=true}}
 
 function renderQuoter(){
   leadOptions($("#qLead")); const T=Q.tab, cfg=T==="FE"?feCfg():QCFG[T], st=Q[T], K=cfg.amtKey||"amt", B=!!cfg.budget;
@@ -979,7 +999,7 @@ function awardXP(n,why){const before=rankOf(XP.xp);XP.xp+=n;ls.set("hp.xp",XP);i
 
 /* ---------- calendar ---------- */
 const appts=new Map(); let acol=null; const CAL={y:new Date().getFullYear(),m:new Date().getMonth(),sel:new Date().toDateString()};
-async function initAppts(){if(!db)return;acol=db.collection("appts");acol.onSnapshot(s=>{appts.clear();s.docs.forEach(d=>{const v=d.data();if(v)appts.set(d.id,{...v,id:d.id})});if(view==="calendar")renderCalendar()},()=>{})}
+async function initAppts(){if(!db)return;acol=db.collection("appts");acol.onSnapshot(s=>{appts.clear();s.docs.forEach(d=>{const v=d.data();if(v)appts.set(d.id,{...v,id:d.id})});if(view==="calendar")renderCalendar();if(view==="pipeline")renderToday(filteredLeads())},()=>{})}
 async function putAppt(a){const id=a.id||uid();const b={...a};delete b.id;if(acol)await acol.doc(id).set(b);else{appts.set(id,{...b,id});renderCalendar()}return id}
 async function delAppt(id){if(acol)await acol.doc(id).delete();else{appts.delete(id);renderCalendar()}}
 const sameDay=(t,ds)=>new Date(t).toDateString()===ds;

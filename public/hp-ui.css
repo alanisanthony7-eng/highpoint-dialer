@@ -123,3 +123,78 @@ html.hp-pro:not(.gated) .vscene::after{content:"";display:block!important;positi
 
 /* banners in the dialer read as status lights */
 .hpd .hpd-banner.warn{border-color:rgba(255,158,61,.55)!important;box-shadow:0 0 18px -6px rgba(255,158,61,.6)}
+
+/* ===== round 3 ===== */
+/* top bar: one row on wide screens; the page name and search give way first */
+@media (min-width:1321px){
+  html.hp-pro .topbar{flex-wrap:nowrap!important}
+  html.hp-pro .topbar #crumb{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  html.hp-pro .topbar #hpdBar{flex:1 1 auto!important;min-width:0!important;justify-content:flex-end}
+  html.hp-pro .topbar #hpdBar .hpd-srch{flex:1 1 140px!important;min-width:0!important;max-width:320px}
+  html.hp-pro .topbar #hpdBar .hpd-srch input{width:100%;min-width:0}
+}
+
+/* home: the hero is today's work, not a slogan */
+html.hp-pro #v-pipeline .hero{padding:26px clamp(18px,2.6vw,30px) 20px}
+.hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(280px,1fr);gap:clamp(18px,3vw,36px);align-items:stretch}
+.hero-main{display:flex;flex-direction:column;justify-content:center;min-width:0}
+html.hp-pro .hero .hero-hi{margin:0 0 6px!important;font:700 15px/1.3 "Montserrat",system-ui,sans-serif;color:#FFC48A!important;letter-spacing:0;max-width:none}
+html.hp-pro .hero .hero-day{margin:12px 0 0!important;font-size:16px;line-height:1.5;color:rgba(255,255,255,.86)!important;max-width:46ch}
+.hero-cta{margin-top:18px;gap:10px}
+
+.upnext{display:flex;flex-direction:column;min-width:0;padding:14px 12px 10px;border-radius:16px;background:rgba(6,3,12,.55);border:1px solid rgba(255,79,163,.24);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+html.hp-pro .upnext h2{margin:0 6px 8px;font:800 italic 15px/1.2 "Montserrat",system-ui,sans-serif!important;text-transform:none;letter-spacing:0!important;color:#fff;-webkit-text-fill-color:#fff;filter:none;background:none}
+.upnext ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.upnext li button{all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:grid;grid-template-columns:72px minmax(0,1fr) 16px;align-items:center;gap:10px;padding:9px 8px;border-radius:10px;transition:background .15s}
+.upnext li button:hover{background:rgba(255,79,163,.09)}
+.upnext li button:focus-visible{outline:2px solid #FF9CCB;outline-offset:-2px}
+.upnext li+li button{box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.un-t{font:700 12.5px/1.2 "Montserrat",system-ui,sans-serif;color:#FFC48A;font-variant-numeric:tabular-nums;white-space:nowrap}
+.un-t.new{color:rgba(255,255,255,.55)}
+.un-t.due{color:#FF6B9A}
+.un-t.due::before{content:"";display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:#FF2E88;box-shadow:0 0 8px #FF2E88;vertical-align:1px}
+.un-n{display:flex;flex-direction:column;min-width:0}
+.un-n b{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.un-n small{font-size:12px;color:rgba(255,255,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.un-go svg{width:16px;height:16px;color:rgba(255,255,255,.35)}
+.upnext li button:hover .un-go svg{color:#FF9CCB}
+.un-empty{padding:18px 8px;font-size:13.5px;color:rgba(255,255,255,.6)}
+
+/* the four numbers become one quiet rail under the hero */
+html.hp-pro #v-pipeline .kpis{position:relative;z-index:1;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin-top:22px;padding-top:16px;border-top:1px solid rgba(255,255,255,.08)}
+html.hp-pro #v-pipeline .kpis>div{display:flex;flex-direction:column;gap:2px;padding:0 18px!important;background:none!important;border:0!important;border-left:1px solid rgba(255,255,255,.08)!important;border-radius:0!important;box-shadow:none!important;transform:none!important}
+html.hp-pro #v-pipeline .kpis>div:first-child{border-left:0!important;padding-left:2px!important}
+html.hp-pro #v-pipeline .kpis .num{font-size:clamp(24px,2.4vw,32px)!important;line-height:1.1}
+html.hp-pro #v-pipeline .kpis .label{font:700 13.5px/1.3 "Inter",system-ui,sans-serif!important;letter-spacing:0!important;text-transform:none!important;color:#fff!important;text-shadow:none!important;margin-top:2px}
+.ksub{font-size:12px;color:rgba(255,255,255,.5);line-height:1.35}
+
+/* pipeline: an empty stage reads as a drop zone */
+html.hp-pro #board .empty-col{margin:4px 8px 8px;padding:22px 8px;border:1.5px dashed rgba(255,255,255,.14);border-radius:12px;color:rgba(255,255,255,.45)}
+html.hp-pro #board .col.over .empty-col{border-color:rgba(255,79,163,.7);color:#FFD3E8;background:rgba(255,79,163,.06)}
+
+/* dialer: the call-with switch shares the header row */
+html.hp-pro .hph-head{margin-bottom:12px}
+html.hp-pro .hph-head .hph-via{margin:0}
+#wavvPromo{margin:18px 0 0}
+
+/* import: the three steps */
+.imp-steps{list-style:none;counter-reset:st;margin:16px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.imp-steps li{counter-increment:st;position:relative;padding:14px 16px 14px 52px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08)}
+.imp-steps li::before{content:counter(st);position:absolute;left:14px;top:13px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:800 italic 13px/1 "Montserrat",system-ui,sans-serif;color:#fff;background:linear-gradient(135deg,#FF2E88,#FF9E3D);box-shadow:0 0 12px rgba(255,46,136,.5)}
+.imp-steps b{display:block;font-size:14.5px}
+.imp-steps span{display:block;margin-top:3px;font-size:13px;line-height:1.45;color:rgba(255,255,255,.62)}
+.imp-sample{margin:12px 2px 0;font-size:13.5px}
+.imp-sample a{color:#FF9CCB}
+
+@media (max-width:900px){
+  .hero-grid{grid-template-columns:1fr}
+  .imp-steps{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  html.hp-pro #v-pipeline .hero{padding:18px 16px 14px}
+  html.hp-pro .hero .hero-day{font-size:14.5px}
+  .hero-cta .btn{flex:1 1 0;justify-content:center}
+  html.hp-pro #v-pipeline .kpis{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:14px}
+  html.hp-pro #v-pipeline .kpis>div:nth-child(3){border-left:0!important;padding-left:2px!important}
+  .ksub{display:none}
+}

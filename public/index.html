@@ -50,7 +50,10 @@
     <!-- PIPELINE -->
     <section id="v-pipeline" data-v>
       <div class="hero">
-        <div class="row top"><div><span class="eyebrow">Protection · Growth · Opportunity</span><h1>Elevate your <em>future.</em></h1><p>Everything you work in one place: leads, calls, quotes and follow-ups for Final Expense, Mortgage Protection and IUL.</p></div><div class="row"><button class="btn" data-goto="dialer">Start dialing</button><button class="btn primary" data-goto="import">Import leads</button></div></div>
+        <div class="hero-grid">
+          <div class="hero-main"><p class="hero-hi" id="heroHi">Welcome back.</p><h1>Elevate your <em>future.</em></h1><p class="hero-day" id="heroDay">Leads, calls, quotes and follow-ups for Final Expense, Mortgage Protection and IUL.</p><div class="row hero-cta"><button class="btn primary" data-goto="dialer">Start dialing</button><button class="btn" data-goto="import">Import leads</button></div></div>
+          <div class="upnext" aria-labelledby="upNextH"><h2 id="upNextH">Up next</h2><ol id="upNext"></ol></div>
+        </div>
         <div class="kpis" id="kpis"></div>
       </div>
       <div class="head">
@@ -116,6 +119,12 @@
           <div id="impProgress" class="stack" hidden><div class="bar"><i id="impBar"></i></div><span class="muted" id="impProgText"></span></div>
         </div>
         <div class="notice"><b>Column names we recognize automatically:</b> first name, last name, full name, phone / cell / mobile, email, state, zip, age, date of birth, mortgage balance, mortgage payment, lender, product, notes. Anything else can be mapped by hand or skipped.</div>
+        <ol class="imp-steps" aria-label="How importing works">
+          <li><b>Choose your file</b><span>A CSV export from your vendor, Google Sheets or another CRM. Pasted rows work too.</span></li>
+          <li><b>Match the columns</b><span>We guess the common ones. Fix anything we missed, or skip columns you don't need.</span></li>
+          <li><b>Tag and import</b><span>Name the batch so you can filter it later, pick a stage, and duplicates are skipped.</span></li>
+        </ol>
+        <p class="imp-sample muted">Not sure about the format? <a href="data:text/csv;charset=utf-8,first%20name%2Clast%20name%2Cphone%2Cemail%2Cstate%2Cage%2Cproduct%0AMargaret%2CEllis%2C(214)%20555-0110%2Cmargaret%40example.com%2CTX%2C67%2CFinal%20Expense%0A" download="highpoint-sample-leads.csv">Download a sample CSV</a></p>
       </div>
     </section>
 
@@ -128,7 +137,6 @@
           <select id="dqProduct" style="width:auto" aria-label="Queue product"><option value="">All products</option><option value="FE">Final Expense</option><option value="MP">Mortgage Protection</option><option value="IUL">IUL</option></select>
         </div>
       </div>
-      <div class="panel wavvpromo" id="wavvPromo"><div class="wv-t"><b>Want WAVV's multi-line dialer?</b><span class="muted">Sign up at WAVV and use promo code <code>ANT</code> at checkout. Keep using this desk for your CRM, quoter and scripts.</span></div><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="btn sm" id="wavvCopy">Copy code ANT</button><a class="btn sm primary" href="https://www.wavv.com/" target="_blank" rel="noopener">Get WAVV ↗</a></div></div>
       <div class="bigseg" id="dTabs" style="max-width:420px"><button type="button" data-dt="dial" aria-pressed="true">Dialer</button><button type="button" data-dt="hist" aria-pressed="false">Call history</button></div>
       <div id="hPane" hidden>
         <div class="row" style="margin-bottom:12px;gap:8px">
@@ -157,6 +165,7 @@
           </div>
         </div>
       </div>
+      <div class="panel wavvpromo" id="wavvPromo" hidden><div class="wv-t"><b>Want WAVV's multi-line dialer?</b><span class="muted">Sign up at WAVV and use promo code <code>ANT</code> at checkout. Keep using this desk for your CRM, quoter and scripts.</span></div><div class="row" style="gap:8px;flex-wrap:nowrap"><button type="button" class="btn sm" id="wavvCopy">Copy code ANT</button><a class="btn sm" href="https://www.wavv.com/" target="_blank" rel="noopener">Open WAVV</a><button type="button" class="wbtn" id="wavvHide" aria-label="Hide the WAVV offer" title="Hide">✕</button></div></div>
     </section>
 
     <!-- QUOTER -->

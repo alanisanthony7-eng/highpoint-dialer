@@ -1475,10 +1475,9 @@
     const sources = campaigns().filter((c) => c.name !== "No campaign");
     el.innerHTML = `
       <div class="hph-head">
-        <p class="hpd-sm" style="margin:0">Your lines, your leads, Highpoint's own phone.</p>
+        <div class="hph-via" role="group" aria-label="Call with"><span class="hpd-sm">Call with</span><button type="button" data-via="line" aria-pressed="${S.via !== "phone"}">Browser phone line</button><button type="button" data-via="phone" aria-pressed="${S.via === "phone"}">My phone</button></div>
         <button type="button" class="btn" id="hphPick">Campaigns</button>
       </div>
-      <div class="hph-via" role="group" aria-label="Call with"><span class="hpd-sm">Call with</span><button type="button" data-via="line" aria-pressed="${S.via !== "phone"}">Browser phone line</button><button type="button" data-via="phone" aria-pressed="${S.via === "phone"}">My phone</button></div>
       ${S.via === "phone" ? `<div class="hph-setup"><div><b>Calling from your own phone</b><span>Each call opens your computer’s phone app. On this PC that is often Google Chrome / Google Voice, not the Highpoint headset. Switch to <b>Browser phone line</b> to talk in this tab with your Telnyx number.</span></div></div>` : ""}
       ${S.via !== "phone" && !S.demo && !S.ready ? `<div class="hph-setup"><div><b>${S.twilio ? "One step left: connect your phone line" : "Phone line not connected"}</b><span>${S.twilio ? (S.me?.admin ? `Your ${S.provider === "telnyx" ? "Telnyx" : "Twilio"} key is in. Press Connect once and every agent's dialer turns on.` : "Your admin needs to press Connect once.") : "Your admin needs to add the phone keys in Cloudflare first."}</span></div>${S.twilio && S.me?.admin ? `<button type="button" class="btn primary" id="hphSetup">Connect phone line</button>` : ""}</div>` : ""}
       ${S.via !== "phone" && !S.demo && S.ready && !S.numbers.length ? `<div class="hph-setup"><div><b>Get your first phone number</b><span>You need a number to call from. Pick one in your area code; ${S.provider === "telnyx" ? "Telnyx charges about $1 a month" : "Twilio charges about $1.15 a month"}.</span></div><button type="button" class="btn primary" id="hphBuy">Get a number</button></div>` : ""}
