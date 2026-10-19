@@ -35,7 +35,7 @@
       { t: window.hpPop?.isOpen("script") ? "Close the script pop-out" : "Pop out the script", s: "Stays up while you dial · Alt+S", run: () => window.hpPop?.toggle("script"), k: "script pop out float window rebuttal objection" },
       { t: window.hpPop?.isOpen("quote") ? "Close the quote pop-out" : "Pop out the quoter", s: "Quote while you dial · Alt+Q", run: () => window.hpPop?.toggle("quote"), k: "quote quoter pop out float window price" },
       { t: window.hpPop?.isOpen("live") ? "Close the live call pop-out" : "Pop out the live call", s: "Transcript and copilot · Alt+L", run: () => window.hpPop?.toggle("live"), k: "live call transcript copilot pop out float window" },
-      ...(window.hpPop && ["script", "quote", "live"].some((k) => window.hpPop.isOpen(k)) ? [{ t: "Close all pop-outs", s: "Script, quote and live call", run: () => window.hpPop.closeAll(), k: "close pop outs windows" }] : []),
+      ...(window.hpPop && ["script", "quote", "live"].some((k) => window.hpPop.isOpen(k)) ? [{ t: "Tidy up the call tools", s: "Put every window back in line", run: () => window.hpPop.tidy(), k: "tidy arrange line up windows reset layout pop outs" }, { t: "Close all pop-outs", s: "Script, quote and live call", run: () => window.hpPop.closeAll(), k: "close pop outs windows" }] : []),
       { t: "Sign out", s: "End this session", run: () => $(".hp-acct [data-out]")?.click(), k: "logout sign out" },
     ];
     return list;
