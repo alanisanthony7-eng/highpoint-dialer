@@ -1,9 +1,23 @@
 /* ============================================================
-   Highpoint 3D: a synth grid floor, depth on cards, keycap buttons.
-   Scoped to html.hp-pro. Revert: remove the <link> to /hp-3d.css in index.html.
+   Highpoint 3D: the Miami night rebuilt with depth.
+   Glass surfaces with real shadow stacks, a pointer spotlight and tilt
+   (hp-tilt.js), keycap buttons, a neon-edged rail and a synth grid floor.
+   Scoped to html.hp-pro. Revert: remove the <link> and <script> for hp-3d / hp-tilt in index.html.
    ============================================================ */
 
-/* 1) Synth grid floor rising out of the Miami sunset (desktop only) */
+/* ---------- 1. Stage: sunset, scrim, horizon glow, synth grid floor ---------- */
+
+/* Lighter scrim so the sunset reads through; the base stays dark enough for text */
+html.hp-pro .hp-scrim{background:linear-gradient(180deg,rgba(6,4,12,.06) 0,rgba(6,4,12,.24) 240px,rgba(6,4,12,.52) 520px,rgba(6,4,12,.78) 100%)!important}
+
+/* Horizon glow rising behind the grid */
+html.hp-pro body::before{
+  content:"";display:block;position:fixed;left:0;right:0;bottom:0;height:46vh;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 70% 100% at 50% 100%,rgba(255,46,136,.30),rgba(255,158,61,.10) 45%,transparent 72%);
+  mix-blend-mode:screen;
+}
+
+/* Synth grid floor (the inline body:after scanlines are replaced by this) */
 html.hp-pro body::after{
   content:"";display:block!important;position:fixed;top:auto!important;left:-35%;right:-35%;bottom:-8vh;height:52vh;z-index:0;pointer-events:none;
   background:
@@ -12,42 +26,104 @@ html.hp-pro body::after{
   mix-blend-mode:normal;
   transform:perspective(520px) rotateX(64deg);transform-origin:50% 100%;
   -webkit-mask-image:linear-gradient(0deg,#000 8%,transparent 88%);mask-image:linear-gradient(0deg,#000 8%,transparent 88%);
-  opacity:1;
+  opacity:.9;
   animation:hp3dGrid 8s linear infinite;
 }
 @keyframes hp3dGrid{from{background-position:0 0,0 0}to{background-position:0 0,0 72px}}
 @media (max-width:900px){html.hp-pro body::after{display:none}}
 
-/* Lighter scrim so the sunset and grid read through; text areas keep a dark base */
-html.hp-pro .hp-scrim{background:linear-gradient(180deg,rgba(6,7,13,.10) 0,rgba(6,7,13,.30) 260px,rgba(6,7,13,.58) 520px,rgba(6,7,13,.80) 100%)!important}
+/* ---------- 2. Glass surfaces with depth ---------- */
+html.hp-pro :is(.panel,.hero,.kpis>div,.col,.rank-card,.tiles>*,.hpd,.hph-card){
+  background:linear-gradient(165deg,rgba(255,255,255,.085),rgba(255,255,255,.016) 42%,rgba(255,46,136,.035))!important;
+  border:1px solid rgba(255,255,255,.085)!important;
+  border-radius:18px!important;
+  -webkit-backdrop-filter:blur(16px) saturate(150%);backdrop-filter:blur(16px) saturate(150%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 1px 0 rgba(0,0,0,.4),0 34px 64px -30px rgba(0,0,0,.95)!important;
+  transition:transform .45s cubic-bezier(.2,.8,.2,1),box-shadow .45s,border-color .3s,background .3s;
+}
+html.hp-pro .col{border-top:2px solid rgba(255,79,163,.55)!important}
+html.hp-pro .hero{box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 44px 90px -34px rgba(0,0,0,.95),0 0 0 1px rgba(255,79,163,.14)!important}
+
+/* Pointer spotlight + tilt: hp-tilt.js sets --mx/--my/--rx/--ry while the pointer is over a surface */
+html.hp-pro .hp3-hot{
+  background:
+    radial-gradient(380px circle at var(--mx,50%) var(--my,0%),rgba(255,79,163,.20),transparent 62%),
+    linear-gradient(165deg,rgba(255,255,255,.10),rgba(255,255,255,.02) 42%,rgba(255,46,136,.045))!important;
+  border-color:rgba(255,79,163,.36)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 40px 72px -28px rgba(255,46,136,.38),0 0 0 1px rgba(255,79,163,.18)!important;
+}
+html.hp-pro .kpis>div.hp3-hot,html.hp-pro .tiles>.hp3-hot,html.hp-pro .rank-card.hp3-hot{
+  transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(-4px);
+}
+html.hp-pro .kpis{perspective:1100px}
+
+/* KPI numbers pop off the tile */
+html.hp-pro .kpis>div .num,html.hp-pro .kpis>div b{text-shadow:0 2px 0 rgba(0,0,0,.45),0 0 18px rgba(255,46,136,.25)}
 
 /* Hero headline: extruded 3D lettering */
 html.hp-pro .hero h1{text-shadow:0 1px 0 #B0205C,0 2px 0 #8A1447,0 3px 0 #640D33,0 4px 0 #3F0820,0 22px 34px rgba(255,46,136,.45)!important}
 
-/* 2) Cards: real depth, lift and tilt on hover (KPI tiles only, so drag-and-drop stays clean) */
-html.hp-pro .kpis>div{
-  transform-style:preserve-3d;
-  transition:transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s,border-color .2s!important;
-  box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 22px 40px -18px rgba(0,0,0,.9)!important;
+/* ---------- 3. Buttons: keycaps and glass ---------- */
+html.hp-pro .btn:not(.primary){
+  background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.03))!important;
+  border:1px solid rgba(255,255,255,.16)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 8px 18px -10px rgba(0,0,0,.9)!important;
+  transition:transform .18s,box-shadow .25s,border-color .25s,background .25s!important;
 }
-html.hp-pro .kpis>div:hover{
-  transform:perspective(900px) rotateX(5deg) rotateY(-4deg) translateY(-4px)!important;
-  box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 34px 56px -20px rgba(255,46,136,.38),0 0 0 1px rgba(255,79,163,.32)!important;
+html.hp-pro .btn:not(.primary):hover{
+  transform:translateY(-2px);border-color:rgba(255,79,163,.5)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 14px 26px -12px rgba(255,46,136,.5)!important;
 }
-html.hp-pro .hero{box-shadow:0 40px 80px -30px rgba(0,0,0,.9),0 0 0 1px rgba(255,79,163,.12)!important}
-html.hp-pro .col{box-shadow:0 26px 46px -24px rgba(0,0,0,.9)!important}
-
-/* 3) Keycap buttons: the primary action sits on a 3D lip and presses down */
 html.hp-pro .btn.primary{
-  box-shadow:0 5px 0 #7A1140,0 14px 26px -10px rgba(255,46,136,.7)!important;
+  background:linear-gradient(180deg,#FF5AA0 0%,#FF2E88 55%,#E0196F 100%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 5px 0 #7A1140,0 16px 28px -12px rgba(255,46,136,.8)!important;
+  transition:transform .15s,box-shadow .2s!important;
+}
+html.hp-pro .btn.primary:hover{
+  transform:translateY(-2px);filter:none!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 7px 0 #7A1140,0 22px 34px -12px rgba(255,46,136,.9)!important;
 }
 html.hp-pro .btn.primary:active{
   transform:translateY(4px)!important;
-  box-shadow:0 1px 0 #7A1140,0 6px 12px -8px rgba(255,46,136,.6)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 1px 0 #7A1140!important;
 }
 
+/* ---------- 4. Rail, nav and top bar ---------- */
+html.hp-pro .rail{
+  background:linear-gradient(180deg,rgba(14,8,22,.92),rgba(7,4,13,.97))!important;
+  border-right:1px solid rgba(255,79,163,.16)!important;
+  box-shadow:16px 0 44px -26px rgba(255,46,136,.35)!important;
+}
+html.hp-pro .nav{transition:transform .25s cubic-bezier(.2,.8,.2,1),background .2s,color .2s!important}
+html.hp-pro .nav:hover{transform:translateX(4px)}
+html.hp-pro .topbar{
+  background:rgba(10,6,18,.58)!important;
+  box-shadow:0 1px 0 rgba(255,46,136,.38),0 14px 30px -22px rgba(0,0,0,.9)!important;
+}
+
+/* ---------- 5. Inputs, tables, toasts ---------- */
+html.hp-pro input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]),
+html.hp-pro textarea{
+  background:rgba(6,3,12,.55)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:12px!important;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.45)!important;
+}
+html.hp-pro input:focus,html.hp-pro select:focus,html.hp-pro textarea:focus{
+  outline:none;border-color:rgba(255,79,163,.7)!important;
+  box-shadow:0 0 0 3px rgba(255,46,136,.18),inset 0 2px 6px rgba(0,0,0,.45)!important;
+}
+html.hp-pro .tablewrap{
+  background:rgba(8,4,14,.55)!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:18px!important;
+  box-shadow:0 30px 60px -32px rgba(0,0,0,.95)!important;overflow:hidden;
+}
+html.hp-pro table tbody tr:hover{background:linear-gradient(90deg,rgba(255,46,136,.10),rgba(255,158,61,.04) 60%,transparent)!important}
+html.hp-pro .toast{
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  box-shadow:0 22px 44px -18px rgba(0,0,0,.9),0 0 0 1px rgba(255,79,163,.3),inset 0 1px 0 rgba(255,255,255,.14)!important;
+}
+
+/* ---------- 6. Motion preferences ---------- */
 @media (prefers-reduced-motion:reduce){
   html.hp-pro body::after{animation:none}
-  html.hp-pro .kpis>div{transition:none!important}
-  html.hp-pro .kpis>div:hover{transform:translateY(-2px)!important}
+  html.hp-pro .hp3-hot{transform:none!important}
+  html.hp-pro .btn:hover,html.hp-pro .nav:hover{transform:none!important}
 }
