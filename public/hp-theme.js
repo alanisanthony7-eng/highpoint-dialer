@@ -1,9 +1,9 @@
-/* Highpoint looks: "miami" (the default) and "classic" (Highpoint navy and blue).
+/* Highpoint looks: "classic" (Highpoint navy and blue, the default for everyone) and "miami" (pink and orange neon).
    Same desk, same code, same data. The classic look recolors the Miami brand colors as the page loads:
    pinks and magentas become Highpoint blue, purples become navy, oranges become sky blue.
    That covers stylesheets, inline styles and SVG, including anything the desk adds later.
    Left alone: reds and the status colors (good, warning, error), greys, photos and avatars (skin and hair).
-   Choose with ?look=classic or ?look=miami (remembered in this browser), the account menu, or the command palette.
+   Anyone can switch to Miami with ?look=miami (remembered in that browser), the account menu, or the command palette.
    Must load first in <head>, without defer, so nothing paints in the wrong colors. */
 (() => {
   "use strict";
@@ -12,7 +12,7 @@
   const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
   const save = (v) => { try { localStorage.setItem(KEY, v); } catch {} };
   try { const q = new URLSearchParams(location.search).get("look"); if (q === "classic" || q === "miami") save(q); } catch {}
-  const look = read() === "classic" ? "classic" : "miami";
+  const look = read() === "miami" ? "miami" : "classic";
   window.hpTheme = {
     look,
     label: look === "classic" ? "Highpoint Classic" : "Miami",
