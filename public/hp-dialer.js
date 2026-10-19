@@ -562,7 +562,9 @@
     const from = call.customParameters?.get("from") || call.parameters?.From || "";
     const lead = [...(window.hpDesk?.leads.values() || [])].find((l) => d10(l.phone) === d10(from));
     const box = document.createElement("div"); box.className = "hpd-incoming hpd"; box.setAttribute("role", "alertdialog");
-    box.innerHTML = `<div class="hpd-sm">Incoming call</div><b style="font-size:18px">${esc(lead ? window.hpDesk.fullName(lead) : fmt(from))}</b>${lead ? `<span class="hpd-sm">${esc(fmt(from))}</span>` : ""}<div class="row"><button class="btn primary" id="hpdAns" type="button">Answer</button><button class="btn" id="hpdRej" type="button">Decline</button></div>`;
+    const nm = lead ? window.hpDesk.fullName(lead) : fmt(from);
+    const ini = (String(nm).replace(/[^A-Za-z\s]/g, " ").trim().split(/\s+/).filter(Boolean)) .map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "#";
+    box.innerHTML = `<div class="hpd-in-h"><i></i>Incoming call</div><div class="hpd-in-who"><span class="hpd-in-av">${esc(ini)}</span><div><b>${esc(nm)}</b><span class="hpd-sm">${esc(fmt(from))}</span></div></div><div class="hpd-in-acts"><button class="btn hpd-in-ans" id="hpdAns" type="button">Answer</button><button class="btn hpd-in-rej" id="hpdRej" type="button">Decline</button></div>`;
     document.body.append(box);
     const close = () => box.remove();
     $("#hpdAns", box).onclick = () => {
