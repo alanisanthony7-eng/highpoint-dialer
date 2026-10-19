@@ -403,13 +403,13 @@
     ["#hpdTx", "#hpfTx"].forEach((sel) => drawTxIn($(sel), lines, partial));
     // Highpoint Copilot. It waits for the client's consent before it reads anything, and redacts again.
     const lid = S.call ? S.callLead : (S.power?.connectedLead || S.callLead); if (!lid) return;
-    const who = (t) => (t.track === "inbound_track" ? (S.power ? "Lead" : "Agent") : (S.power ? "Agent" : "Lead"));
+    const who = (t) => t.speaker || (t.track === "inbound_track" ? (S.power ? "Lead" : "Agent") : (S.power ? "Agent" : "Lead"));
     window.dispatchEvent(new CustomEvent("hp:tx", { detail: { leadId: lid, lines: lines.map((l) => ({ who: who(l), text: red(l.text), t: l.t })) } }));
   }
   function drawTxIn(box, lines, partial) {
     if (!box) return;
     const near = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-    const who = (t) => (t.track === "inbound_track" ? (S.power ? "Lead" : "Agent") : (S.power ? "Agent" : "Lead"));
+    const who = (t) => t.speaker || (t.track === "inbound_track" ? (S.power ? "Lead" : "Agent") : (S.power ? "Agent" : "Lead"));
     box.innerHTML = lines.map((l) => `<p><span class="who ${who(l)}">${who(l) === "Agent" ? "You" : "Lead"}</span>${esc(red(l.text))}</p>`).join("") + partial.map((l) => `<p class="partial"><span class="who ${who(l)}">${who(l) === "Agent" ? "You" : "Lead"}</span>${esc(red(l.text))}…</p>`).join("");
     if (near) box.scrollTop = box.scrollHeight;
   }
@@ -553,7 +553,7 @@
   }
   function meta(leadId) {
     const sid = S.sidByLead.get(leadId); const tx = S.txByLead.get(leadId) || [];
-    const who = (t) => (t.track === "inbound_track" ? (S.mode === "power" ? "Lead" : "Agent") : (S.mode === "power" ? "Agent" : "Lead"));
+    const who = (t) => t.speaker || (t.track === "inbound_track" ? (S.mode === "power" ? "Lead" : "Agent") : (S.mode === "power" ? "Agent" : "Lead"));
     return sid ? { hpSid: sid, transcript: tx.map((l) => `${who(l)}: ${l.text}`).join("\n") } : {};
   }
 
@@ -733,7 +733,7 @@
       const r = await api("/calls/transcript?sid=" + encodeURIComponent(b.dataset.tx));
       const box = $("#hpdTxView"); box.innerHTML = `<div class="hpd-tx" style="max-height:320px;margin-top:10px"></div>`;
       const ofCall = calls.calls.find((c) => c.sid === b.dataset.tx); const pm = ofCall?.mode === "power";
-      box.firstChild.innerHTML = (r.lines || []).map((l) => { const w = (l.track === "inbound_track") === pm ? "Lead" : "Agent"; return `<p><span class="who ${w}">${w === "Agent" ? "Agent" : "Lead"}</span>${esc(red(l.text))}</p>`; }).join("") || `<p class="hpd-sm">No transcript for this call.</p>`;
+      box.firstChild.innerHTML = (r.lines || []).map((l) => { const w = l.speaker || ((l.track === "inbound_track") === pm ? "Lead" : "Agent"); return `<p><span class="who ${w}">${w === "Agent" ? "Agent" : "Lead"}</span>${esc(red(l.text))}</p>`; }).join("") || `<p class="hpd-sm">No transcript for this call.</p>`;
       box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }));
     $("#hpdCsv").onclick = () => {

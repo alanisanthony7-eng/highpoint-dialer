@@ -2,7 +2,7 @@
 import { tw, signedUrl, siteUrl, x, getJ, updateJ, patchCallBySid } from "./hp.mjs";
 
 export function txStart(callSid, inboundLabel, outboundLabel) {
-  return `<Start><Transcription name="hp-${x(callSid)}" statusCallbackUrl="${x(`${siteUrl()}/api/dialer/events?type=tx&c=${callSid}`)}" track="both_tracks" partialResults="true" inboundTrackLabel="${inboundLabel}" outboundTrackLabel="${outboundLabel}" languageCode="en-US"/></Start>`;
+  return `<Start><Transcription name="hp-${x(callSid)}" statusCallbackUrl="${x(`${siteUrl()}/api/dialer/events?type=tx&c=${callSid}&in=${inboundLabel}&out=${outboundLabel}`)}" track="both_tracks" partialResults="true" inboundTrackLabel="${inboundLabel}" outboundTrackLabel="${outboundLabel}" languageCode="en-US"/></Start>`;
 }
 
 

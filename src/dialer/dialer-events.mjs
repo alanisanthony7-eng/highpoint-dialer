@@ -19,7 +19,9 @@ export default wrap(async (req, ctx) => {
     let d = {}; try { d = JSON.parse(p.TranscriptionData || "{}"); } catch {}
     const text = redact((d.transcript || "").trim()); if (!text) return ok();
     if ((await getJ("txoff", c))) return ok(); // client declined recording: keep nothing
-    const line = { t: Date.now(), track: p.Track, text, conf: d.confidence };
+    // Who is speaking: the label this call's TwiML gave that track (Twilio's track alone doesn't say which side is the agent)
+    const tag = p.Track === "inbound_track" ? q.get("in") : p.Track === "outbound_track" ? q.get("out") : "";
+    const line = { t: Date.now(), track: p.Track, speaker: tag === "Agent" || tag === "Lead" ? tag : "", text, conf: d.confidence };
     if (p.Final === "true") {
       await updateJ("tx", c, (a) => { a.lines = a.lines || []; a.lines.push(line); if (a.lines.length > 800) a.lines.shift(); a.partial = {}; return a; }, {});
     } else {
