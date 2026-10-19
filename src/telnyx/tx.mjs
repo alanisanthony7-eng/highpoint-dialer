@@ -1,6 +1,7 @@
 // Telnyx: REST helper, one-click setup, per-agent browser-phone tokens, numbers
 import crypto from "node:crypto";
-import { env, json, bad, requireUser, wrap, httpErr, getJ, setJ, updateJ, config as loadConfig, to10, AREA } from "../lib/hp.mjs";
+import { env, json, bad, requireUser, wrap, httpErr, getJ, setJ, updateJ, config as loadConfig, to10, AREA, siteUrl } from "../lib/hp.mjs";
+import { redact } from "../lib/redact.mjs";
 
 export const TX_KEY = () => env("TELNYX_API_KEY");
 export const isTelnyx = () => !!TX_KEY();
@@ -28,8 +29,17 @@ export async function txSetup() {
   let conn = null;
   if (t.connId) conn = (await tx(`/v2/credential_connections/${t.connId}`).catch(() => null))?.data || null;
   const body = { connection_name: "Highpoint Dialer", active: true, anchorsite_override: "Latency", outbound: { outbound_voice_profile_id: ovp.id }, inbound: { ani_number_format: "+E.164", dnis_number_format: "+e164", simultaneous_ringing: "enabled" } };
-  if (conn) await tx(`/v2/credential_connections/${conn.id}`, { method: "PATCH", body });
-  else { const c = await tx("/v2/credential_connections", { method: "POST", body: { ...body, user_name: "hpdialer" + rnd(10, "abcdefghijkmnpqrstuvwxyz23456789"), password: rnd(28) } }); t.connId = c.data.id; }
+  // Telnyx posts every call event (and live transcription) for this connection to our webhook.
+  // If the account refuses the webhook fields, save the connection without them so the phone keeps working.
+  const hook = { webhook_event_url: `${siteUrl()}/api/telnyx/events`, webhook_api_version: "2" };
+  const creds = conn ? {} : { user_name: "hpdialer" + rnd(10, "abcdefghijkmnpqrstuvwxyz23456789"), password: rnd(28) };
+  const save = (extra) => (conn
+    ? tx(`/v2/credential_connections/${conn.id}`, { method: "PATCH", body: { ...body, ...extra } })
+    : tx("/v2/credential_connections", { method: "POST", body: { ...body, ...creds, ...extra } }));
+  let saved;
+  try { saved = await save(hook); t.hookErr = null; }
+  catch (e) { t.hookErr = e.message; saved = await save({}); }
+  if (!conn) t.connId = saved.data.id;
   // make sure the outbound profile allows this connection
   await setJ("config", "app", { ...cfg, tx: { ...t, setupAt: Date.now() } });
   // point our numbers at the connection so they can call out and ring the browser
@@ -82,12 +92,160 @@ export async function txBuy(phoneNumber) {
   return { sid: id, orderId: o.data?.id, status: o.data?.status };
 }
 
-// /api/telnyx/*  (admin status + setup, agent token)
+/* ---------- live transcription from Telnyx call events ----------
+   Telnyx signs each webhook with Ed25519 over "<telnyx-timestamp>|<raw body>".
+   The key comes from TELNYX_PUBLIC_KEY (Mission Control → API keys → Public key) or, failing that, the account's public key endpoint.
+   Transcripts are kept per lead phone number: txlive/<10 digits> = { sess, ccid, owner, lines, partial, started, declined, … }.
+   A new call gets a new call_session_id, which resets the record so one call's lines never show up on the next. */
+let PK = null;
+async function telnyxKey() {
+  if (PK) return PK;
+  let b64 = env("TELNYX_PUBLIC_KEY");
+  if (!b64) { const j = await tx("/v2/public_key").catch(() => null); b64 = j?.data?.public_key || j?.public_key || ""; }
+  if (!b64) return null;
+  let raw = Uint8Array.from(atob(String(b64).trim()), (c) => c.charCodeAt(0));
+  if (raw.length === 44) raw = raw.slice(12); // DER/SPKI wrapper around the 32-byte key
+  return raw.length === 32 ? (PK = raw) : null;
+}
+async function verifyTelnyx(raw, sig, ts) {
+  try {
+    if (!sig || !ts || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false; // replay window: 5 minutes
+    const key = await telnyxKey(); if (!key) return false;
+    const pub = await globalThis.crypto.subtle.importKey("raw", key, { name: "Ed25519" }, false, ["verify"]);
+    const s = Uint8Array.from(atob(String(sig)), (c) => c.charCodeAt(0));
+    return await globalThis.crypto.subtle.verify({ name: "Ed25519" }, pub, s, new TextEncoder().encode(`${ts}|${raw}`));
+  } catch { return false; }
+}
+// What the admin log shows: transcript text becomes a length, phone numbers keep only their last four digits.
+const PHONE_KEY = /number|^from$|^to$|caller|destination|^ani$|^dnis$/i;
+function scrub(v, k = "") {
+  if (typeof v === "string") {
+    if (/transcript|text|speech/i.test(k)) return `[${v.length} characters]`;
+    if (PHONE_KEY.test(k) && /\d{7,}/.test(v)) return "…" + v.replace(/\D/g, "").slice(-4);
+    return v;
+  }
+  if (Array.isArray(v)) return v.map((x) => scrub(x, k));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([kk, vv]) => [kk, scrub(vv, kk)]));
+  return v;
+}
+async function logEvent(entry) {
+  await updateJ("txlog", "recent", (a) => [...(Array.isArray(a) ? a : []), { at: Date.now(), ...entry }].slice(-40), []);
+}
+const leadOf = (p) => to10(/out/i.test(p.direction || "") ? p.to : p.from);
+
+async function handleTelnyx(type, p) {
+  const ccid = p.call_control_id || "", sess = p.call_session_id || ccid;
+  if (type === "call.initiated") {
+    const lead = leadOf(p); if (!lead || !ccid) return "no lead number on this call";
+    const out = /out/i.test(p.direction || "");
+    await setJ("txcc", ccid, { lead, sess });
+    await updateJ("txlive", lead, (r) => {
+      if (r.sess !== sess) Object.assign(r, { sess, ccid, out, lines: [], partial: {}, started: false, startErr: null, declined: false, endedAt: null, at: Date.now(), tlog: 0 });
+      return r;
+    }, {});
+    return out ? "outgoing call started" : "incoming call ringing";
+  }
+  if (type === "call.answered") {
+    const m = await getJ("txcc", ccid); if (!m) return "answer for a call we never saw start";
+    const rec = await getJ("txlive", m.lead);
+    if (!rec || rec.sess !== m.sess) return "answer for an earlier call";
+    if (rec.declined) return "not transcribing: the client declined";
+    if (rec.started) return "transcription already running";
+    let err = null;
+    try { await tx(`/v2/calls/${ccid}/actions/transcription_start`, { method: "POST", body: { transcription_engine: "Google", transcription_tracks: "both", language: "en-US", interim_results: true } }); }
+    catch (e) { err = e.message; }
+    await updateJ("txlive", m.lead, (r) => { if (r.sess === m.sess) Object.assign(r, { started: !err, startErr: err, ccid }); return r; }, {});
+    await logEvent({ type: "transcription_start", note: err ? "failed: " + err : "started" });
+    return err ? "transcription failed to start" : "transcription started";
+  }
+  if (type === "call.transcription") {
+    const m = await getJ("txcc", ccid); if (!m) return "transcript for an unknown call";
+    const td = p.transcription_data || p.transcription || p;
+    const text = String(td.transcript ?? p.transcript ?? "").trim();
+    const final = [td.is_final, p.is_final].some((v) => v === true || v === "true");
+    const trk = String(td.track || p.track || "").toLowerCase();
+    const track = trk.includes("out") ? "outbound_track" : trk.includes("in") ? "inbound_track" : "";
+    const speaker = track === "inbound_track" ? "Lead" : track === "outbound_track" ? "Agent" : "";
+    const line = { t: Date.now(), track, speaker, text, conf: td.confidence ?? null };
+    let kept = false, logIt = false;
+    await updateJ("txlive", m.lead, (r) => {
+      if (r.sess !== m.sess || r.declined || !text) return r;
+      kept = true; r.partial = r.partial || {};
+      if (final) { r.lines = [...(r.lines || []), line].slice(-800); if (track) r.partial[track] = null; }
+      else if (track) r.partial[track] = line;
+      r.tlog = (r.tlog || 0) + 1; logIt = r.tlog <= 4; // the admin log keeps the first few payloads per call, enough to confirm the shape
+      return r;
+    }, {});
+    if (logIt) await logEvent({ type, note: kept ? (final ? "final line kept" : "partial line kept") : "line dropped", body: scrub({ ...p, _track: track }) });
+    return kept ? "line stored" : "line dropped";
+  }
+  if (type === "call.hangup") {
+    const m = await getJ("txcc", ccid); if (!m) return "hangup for an unknown call";
+    await updateJ("txlive", m.lead, (r) => { if (r.sess === m.sess) Object.assign(r, { endedAt: Date.now(), partial: {} }); return r; }, {});
+    return "call ended";
+  }
+  return "";
+}
+
+// POST /api/telnyx/events — Telnyx calls this. Unsigned or stale requests get a 401; everything else gets a quick 200.
+export async function telnyxEvents(req) {
+  const raw = await req.text();
+  if (!(await verifyTelnyx(raw, req.headers.get("telnyx-signature-ed25519"), req.headers.get("telnyx-timestamp")))) {
+    await logEvent({ type: "rejected", note: "signature didn't verify (check TELNYX_PUBLIC_KEY)" }).catch(() => {});
+    return new Response("bad signature", { status: 401 });
+  }
+  let body = {}; try { body = JSON.parse(raw); } catch {}
+  const data = body.data || {}, type = data.event_type || "", p = data.payload || {};
+  let note = ""; try { note = await handleTelnyx(type, p); } catch (e) { note = "error: " + e.message; }
+  if (type !== "call.transcription") await logEvent({ type, note, body: scrub(data) }).catch(() => {});
+  return new Response(null, { status: 200 });
+}
+
+// /api/telnyx/*  (events from Telnyx; the agent's live transcript; admin status + setup)
 export const telnyxRoute = wrap(async (req, action) => {
+  if (action === "events" && req.method === "POST") return telnyxEvents(req);
   const user = await requireUser(req);
   if (action === "token") return json({ ...(await txToken(user)), expires: Date.now() + 23 * 36e5 });
+  if (action === "transcript") { // the agent who placed or answered the call reads its live lines
+    const n = to10(new URL(req.url).searchParams.get("n")); if (!n) return bad("No number", 400);
+    const rec = await getJ("txlive", n);
+    if (!rec || (rec.owner !== user.identity && !user.admin)) return bad("Not found", 404);
+    const fresh = (l) => l && l.t > Date.now() - 8000;
+    const clean = (l) => ({ ...l, text: redact(l.text) });
+    return json({
+      transcript: (rec.lines || []).map(clean),
+      partial: Object.values(rec.partial || {}).filter(fresh).map(clean),
+      status: rec.declined ? "declined" : rec.endedAt ? "ended" : rec.started ? "live" : rec.startErr ? "error" : "waiting",
+      startErr: rec.startErr || null,
+    });
+  }
+  if (action === "claim" && req.method === "POST") { // the desk tells us which agent is on this number's call
+    const b = await req.json().catch(() => ({})); const n = to10(b.n); if (!n) return bad("No number", 400);
+    // another agent's live call can't be taken over (that would expose its transcript); a call with no hangup after 2 hours counts as over
+    const cur = await getJ("txlive", n);
+    const busy = !!cur && !!cur.owner && cur.owner !== user.identity && !cur.endedAt && Date.now() - (cur.claimedAt || cur.at || 0) < 2 * 36e5;
+    if (busy && !user.admin) return bad("Another agent is on this lead's call.", 409);
+    await updateJ("txlive", n, (r) => { Object.assign(r, { owner: user.identity, claimedAt: Date.now(), lines: [], partial: {}, endedAt: null }); return r; }, {});
+    return json({ ok: true });
+  }
+  if (action === "privacy" && req.method === "POST") { // consent answer: "declined" stops transcription and erases what was captured
+    const b = await req.json().catch(() => ({})); const n = to10(b.n);
+    const rec = n && (await getJ("txlive", n));
+    if (!rec || (rec.owner !== user.identity && !user.admin)) return bad("Not your call", 403);
+    const declined = !!b.declined;
+    await updateJ("txlive", n, (r) => { if (declined) Object.assign(r, { declined: true, lines: [], partial: {} }); else r.consent = { at: Date.now(), by: user.identity }; return r; }, {});
+    if (declined && rec.started && rec.ccid) {
+      try { await tx(`/v2/calls/${rec.ccid}/actions/transcription_stop`, { method: "POST", body: {} }); await logEvent({ type: "transcription_stop", note: "stopped at the client's request" }); }
+      catch (e) { await logEvent({ type: "transcription_stop", note: "failed: " + e.message }); }
+    }
+    return json({ ok: true, declined });
+  }
   if (!user.admin) return bad("Admins only", 403);
   if (action === "setup" && req.method === "POST") return json({ ok: true, ...(await txSetup()) });
+  if (action === "log") { // admin: the last webhook events, with transcript text and numbers masked
+    const cfg = await loadConfig();
+    return json({ webhook: `${siteUrl()}/api/telnyx/events`, publicKey: (await telnyxKey().catch(() => null)) ? "ok" : "missing (set TELNYX_PUBLIC_KEY)", connection: cfg.tx?.connId || null, hookErr: cfg.tx?.hookErr || null, events: (await getJ("txlog", "recent")) || [] });
+  }
   if (action === "get") { // admin read-only look at the Telnyx account (diagnostics)
     const path = new URL(req.url).searchParams.get("p") || "";
     if (!/^\/v2\/[a-z_\/0-9-]+(\?[^#]*)?$/i.test(path) || /token|secret|key/i.test(path)) return bad("Not allowed", 400);

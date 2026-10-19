@@ -211,9 +211,9 @@
     const h = {}; let ended = false, live = false;
     const fire = (e, ...a) => (h[e] || []).forEach((f) => { try { f(...a); } catch (er) { console.warn(er); } });
     const w = {
-      raw: c, sid: c.id, parameters: { CallSid: c.id, From: inbound ? (c.options?.remoteCallerNumber || "") : "" }, customParameters: new Map([["from", inbound ? (c.options?.remoteCallerNumber || "") : ""]]),
+      raw: c, sid: c.id, leadNum: inbound ? d10(c.options?.remoteCallerNumber || "") : "", parameters: { CallSid: c.id, From: inbound ? (c.options?.remoteCallerNumber || "") : "" }, customParameters: new Map([["from", inbound ? (c.options?.remoteCallerNumber || "") : ""]]),
       on(e, f) { (h[e] = h[e] || []).push(f); return w; },
-      disconnect() { try { c.hangup(); } catch {} }, reject() { try { c.hangup(); } catch {} }, accept() { try { c.answer(); } catch {} },
+      disconnect() { try { c.hangup(); } catch {} }, reject() { try { c.hangup(); } catch {} }, accept() { claimTx(w.leadNum); try { c.answer(); } catch {} },
       mute(m) { try { m ? c.muteAudio() : c.unmuteAudio(); } catch {} }, sendDigits(k) { try { c.dtmf(String(k)); } catch {} },
       _state(st) {
         if (ended) return;
@@ -223,6 +223,20 @@
       },
     };
     return w;
+  }
+  // Tell the server which agent is on this lead's call, so only they can read its live transcript
+  function claimTx(num) {
+    if (num) fetch("/api/telnyx/claim", { method: "POST", headers: { ...authHeader(), "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ n: num }) }).catch(() => {});
+  }
+  // Live lines for a Telnyx call come from the server, keyed by the lead's number
+  async function pullTelnyx(num, leadId) {
+    try {
+      const r = await fetch("/api/telnyx/transcript?n=" + encodeURIComponent(num), { headers: authHeader(), credentials: "include" });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (j.transcript) S.txByLead.set(leadId, j.transcript);
+      drawTx(j.transcript || [], j.partial || []);
+    } catch {}
   }
   async function startTelnyx() {
     await new Promise((res, rej) => { if (window.TelnyxWebRTC?.TelnyxRTC) return res(); const s = document.createElement("script"); s.src = TX_SDK; s.onload = res; s.onerror = () => rej(new Error("Couldn't load the phone library")); document.head.append(s); });
@@ -251,7 +265,7 @@
         const pick = mine.find((n) => n.e164 === params.CallerId) || mine.find((n) => n.areaCode === d10(params.To).slice(0, 3)) || mine.find((n) => n.mine) || mine[0];
         if (!pick) throw new Error("Get a phone number first (Number groups tab)");
         const c = client.newCall({ destinationNumber: to, callerNumber: pick.e164, callerName: S.settings.company || "Highpoint Financial", remoteElement: "hpdRemote" });
-        const w = txCall(c, false); calls.set(c.id, w); return w;
+        const w = txCall(c, false); w.leadNum = d10(params.To); claimTx(w.leadNum); calls.set(c.id, w); return w;
       },
       on() {}, updateToken() {}, audio: null,
     };
@@ -385,8 +399,10 @@
   /* live transcript + machine detection while a click-to-call is up */
   async function livePoll() {
     clearTimeout(S.liveTimer);
-    if (!(S.call || S.phoneLead) || !S.callSid) return;
-    await pullLive(S.callSid, S.callLead);
+    if (!(S.call || S.phoneLead)) return;
+    if (S.provider === "telnyx" && !S.demo) { if (S.call?.leadNum) await pullTelnyx(S.call.leadNum, S.callLead); }
+    else if (S.callSid) await pullLive(S.callSid, S.callLead);
+    else return;
     S.liveTimer = setTimeout(livePoll, 1200);
   }
   async function pullLive(sid, leadId, final) {
@@ -1040,7 +1056,7 @@
           ${l ? `<small>${esc(l.state || "")}${clock ? ` · ${esc(clock.txt)} local` : ""}${l.product ? ` · ${esc(l.product)}` : ""} · <em class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</em></small>` : ""}</span>
         ${l ? `<button type="button" class="hpdk-ic" id="hpdkOpen" title="Open profile" aria-label="Open profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M10 14L20 4M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></button>` : ""}
       </div>
-      ${l && S.settings?.record && S.provider !== "telnyx" && ["CA","CT","DE","FL","IL","MD","MA","MI","MT","NV","NH","OR","PA","WA"].includes(String(l.state || "").toUpperCase()) ? `<div class="hpdk-consent" role="note">${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Say "this call may be recorded" if the notice is off.</div>` : ""}
+      ${l && S.settings?.record && ["CA","CT","DE","FL","IL","MD","MA","MI","MT","NV","NH","OR","PA","WA"].includes(String(l.state || "").toUpperCase()) ? `<div class="hpdk-consent" role="note">${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Say "this call may be recorded" if the notice is off.</div>` : ""}
       ${multi ? `<div class="hpdk-lines">${tiles.map((t) => `<button type="button" class="hpdk-line" data-s="${esc(t.s)}" data-lead="${esc(t.leadId || "")}"><i></i><b>${esc(t.name || fmt(t.to))}</b><em>${esc(t.label)}</em></button>`).join("")}</div>` : ""}
       <div class="hpdk-ctl">
         ${cell ? "" : `<button type="button" class="hpdk-rb ${S.muted ? "on" : ""}" id="hpdkMute" ${onCall ? "" : "disabled"}>${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button>
@@ -1692,7 +1708,13 @@
     // Recording consent: "agreed" is logged on the call. "declined" also stops recording and erases what was captured.
   async function recordConsent(decision) {
     if (!S.callSid) return false;
-    try { await api(decision === "declined" ? "/calls/privacy" : "/calls/consent", { method: "POST", body: { sid: S.callSid } }); return true; }
+    try {
+      if (S.provider === "telnyx") { // Telnyx calls are keyed by the lead's number, not a Twilio sid
+        const r = await fetch("/api/telnyx/privacy", { method: "POST", headers: { ...authHeader(), "content-type": "application/json" }, credentials: "include", body: JSON.stringify({ n: S.call?.leadNum || "", declined: decision === "declined" }) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Couldn't save that answer");
+      } else await api(decision === "declined" ? "/calls/privacy" : "/calls/consent", { method: "POST", body: { sid: S.callSid } });
+      return true;
+    }
     catch (e) { toast(e.message); return false; }
   }
   window.hpDialer = { recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
