@@ -42,3 +42,11 @@
   Cache-Control: no-cache
 /hp-theme.js
   Cache-Control: no-cache
+/hp-pop.js
+  Cache-Control: no-cache
+/hp-pop.css
+  Cache-Control: no-cache
+/hp-copilot.js
+  Cache-Control: no-cache
+/hp-copilot.css
+  Cache-Control: no-cache

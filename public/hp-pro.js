@@ -32,6 +32,10 @@
       { t: "Buy a local number", s: "Number groups", run: () => { D?.go("dialer"); setTimeout(() => $('[data-hpd="numbers"]')?.click(), 300); }, k: "number buy phone caller id" },
       { t: window.hpSpotify?.playing ? "Pause music" : "Play music", s: "Spotify", run: () => window.hpSpotify?.togglePlay(), k: "music spotify play pause" },
       { t: window.hpTheme?.look === "classic" ? "Switch to the Miami look" : "Switch to Highpoint Classic colors", s: window.hpTheme?.look === "classic" ? "Pink and orange neon" : "Navy and blue", run: () => window.hpTheme?.toggle(), k: "look theme colors classic miami navy blue" },
+      { t: window.hpPop?.isOpen("script") ? "Close the script pop-out" : "Pop out the script", s: "Stays up while you dial · Alt+S", run: () => window.hpPop?.toggle("script"), k: "script pop out float window rebuttal objection" },
+      { t: window.hpPop?.isOpen("quote") ? "Close the quote pop-out" : "Pop out the quoter", s: "Quote while you dial · Alt+Q", run: () => window.hpPop?.toggle("quote"), k: "quote quoter pop out float window price" },
+      { t: window.hpPop?.isOpen("live") ? "Close the live call pop-out" : "Pop out the live call", s: "Transcript and copilot · Alt+L", run: () => window.hpPop?.toggle("live"), k: "live call transcript copilot pop out float window" },
+      ...(window.hpPop && ["script", "quote", "live"].some((k) => window.hpPop.isOpen(k)) ? [{ t: "Close all pop-outs", s: "Script, quote and live call", run: () => window.hpPop.closeAll(), k: "close pop outs windows" }] : []),
       { t: "Sign out", s: "End this session", run: () => $(".hp-acct [data-out]")?.click(), k: "logout sign out" },
     ];
     return list;

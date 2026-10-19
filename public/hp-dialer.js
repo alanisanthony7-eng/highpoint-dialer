@@ -423,7 +423,7 @@
     // Highpoint Copilot. It waits for the client's consent before it reads anything, and redacts again.
     const lid = S.call ? S.callLead : (S.power?.connectedLead || S.callLead); if (!lid) return;
     const who = (t) => t.speaker || (t.track === "inbound_track" ? (S.power ? "Lead" : "Agent") : (S.power ? "Agent" : "Lead"));
-    window.dispatchEvent(new CustomEvent("hp:tx", { detail: { leadId: lid, lines: lines.map((l) => ({ who: who(l), text: red(l.text), t: l.t })) } }));
+    window.dispatchEvent(new CustomEvent("hp:tx", { detail: { leadId: lid, lines: lines.map((l) => ({ who: who(l), text: red(l.text), t: l.t })), partial: partial.map((l) => ({ who: who(l), text: red(l.text) })) } }));
   }
   function drawTxIn(box, lines, partial) {
     if (!box) return;
@@ -1268,6 +1268,7 @@
           ${l ? `<small>${esc(l.state || "")}${clock ? ` · ${esc(clock.txt)} local` : ""}${l.product ? ` · ${esc(l.product)}` : ""} · <em class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</em></small>` : ""}</span>
         ${l ? `<button type="button" class="hpdk-ic" id="hpdkOpen" title="Open profile" aria-label="Open profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 4h6v6M10 14L20 4M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></button>` : ""}
       </div>
+      ${window.hpPop ? window.hpPop.dockRow() : ""}
       ${l && S.settings?.record && ["CA","CT","DE","FL","IL","MD","MA","MI","MT","NV","NH","OR","PA","WA"].includes(String(l.state || "").toUpperCase()) ? `<div class="hpdk-consent" role="note">${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Say "this call may be recorded" if the notice is off.</div>` : ""}
       ${multi ? `<div class="hpdk-lines">${tiles.map((t) => `<button type="button" class="hpdk-line" data-s="${esc(t.s)}" data-lead="${esc(t.leadId || "")}"><i></i><b>${esc(t.name || fmt(t.to))}</b><em>${esc(t.label)}</em></button>`).join("")}</div>` : ""}
       <div class="hpdk-ctl">
@@ -1364,7 +1365,7 @@
           <div id="hpfLeft"></div>
         </aside>
         <section class="hpf-mid">
-          <div class="hpf-midhead"><b>Conversations</b><button type="button" class="hpd-sm hpf-link" id="hpfScriptBtn">Script</button></div>
+          <div class="hpf-midhead"><b>Conversations</b><span class="hpf-pops">${window.hpPop ? window.hpPop.launchers("hpf") : `<button type="button" class="hpd-sm hpf-link" id="hpfScriptBtn">Script</button>`}</span></div>
           <div class="hpf-script" id="hpfScript" hidden></div>
           <div class="hpf-tl" id="hpfTl"></div>
           <div class="hpc-slot" id="hpfCopilot"></div>
@@ -1400,7 +1401,7 @@
     $$("[data-pft]", el).forEach((b) => (b.onclick = () => { PF.tab = b.dataset.pft; $$("[data-pft]", el).forEach((x) => x.setAttribute("aria-selected", x === b)); drawLeft(); }));
     $$("[data-pfc]", el).forEach((b) => (b.onclick = () => { PF.compose = b.dataset.pfc; renderProfile(); $("#hpfMsg").focus(); }));
     $$("[data-pdtmf]", el).forEach((b) => (b.onclick = () => dtmf(b.dataset.pdtmf)));
-    $("#hpfScriptBtn").onclick = () => { const sc = $("#hpfScript"); sc.hidden = !sc.hidden; if (!sc.hidden) sc.innerHTML = scriptFor(l); };
+    $("#hpfScriptBtn")?.addEventListener("click", () => { const sc = $("#hpfScript"); sc.hidden = !sc.hidden; if (!sc.hidden) sc.innerHTML = scriptFor(l); });
     $("#hpfSend").onclick = () => sendCompose(l);
     $("#hpfMsg").onkeydown = (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendCompose(l); };
     $("#hpfStage").onchange = (e) => D.patchLead(l.id, { stage: e.target.value }).then(() => toast("Stage updated"));

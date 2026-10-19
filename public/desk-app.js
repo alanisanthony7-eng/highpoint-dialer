@@ -420,7 +420,7 @@ async function copyText(t){try{await navigator.clipboard.writeText(t);toast("Cop
 /* ---------- Quote & compare ---------- */
 const Q=ls.get("hp.q",{tab:"FE",age:65,sex:"M",tob:"0",state:"CA",cls:"1",FE:{amt:15000,plan:"level"},TERM:{amt:250000,term:20},IUL:{amt:250000,focus:"protection"},sort:null});
 if(!Q.FE)Q.FE={amt:15000,plan:"level"}; if(!Q.TERM)Q.TERM={amt:250000,term:20}; if(!Q.IUL)Q.IUL={amt:250000,focus:"protection"};
-const saveQ=()=>ls.set("hp.q",Q);
+const saveQ=()=>{ls.set("hp.q",Q);window.dispatchEvent(new Event("hp:quote"))};
 const QCFG={
  FE:{min:5000,max:50000,step:5000,base:[5000,10000,15000,20000,25000,30000,40000,50000],quick:[[10000,"$10K"],[15000,"$15K"],[25000,"$25K"]],
    plans:Object.entries(FE_PLANS).map(([k,v])=>[k,v[0].replace(" benefit","")]),cur:()=>Q.FE.plan,setPlan:v=>Q.FE.plan=v,desc:()=>FE_PLANS[Q.FE.plan][2],
@@ -747,6 +747,22 @@ function renderQuoter(){
 $$("#qTabs button").forEach(b=>b.onclick=()=>{Q.tab=b.dataset.q;Q.sort=null;saveQ();renderQuoter()});
 [["#qAge","age",v=>Math.min(90,Math.max(18,+v||18))],["#qSex","sex"],["#qTob","tob"],["#qState","state"],["#qClass","cls"]].forEach(([s,k,f])=>$(s).addEventListener("change",()=>{Q[k]=f?f($(s).value):$(s).value;saveQ();renderQuoter()}));
 $("#qLead").addEventListener("change",()=>{const l=leads.get($("#qLead").value);if(!l)return;if(l.age)Q.age=+l.age;if(l.state&&STATES.includes(l.state))Q.state=l.state;if(l.product==="MP")Q.tab="TERM";else if(l.product==="FE"||l.product==="IUL")Q.tab=l.product;if(Q.tab==="TERM"&&l.mortgageBalance)Q.TERM.amt=Math.round(l.mortgageBalance/5000)*5000;saveQ();renderQuoter()});
+/* quoter API for the pop-out quoter (public/hp-pop.js): same state (Q) and engines as this page */
+window.hpQuoter={
+  get Q(){return Q},COND,MEDS,NIC,TIERS,TIER_CLS,STATES,
+  uw:()=>feUW(),age:()=>feAge(),
+  changed(){saveQ();if(view==="quoter"){cancelAnimationFrame(this._raf);this._raf=requestAnimationFrame(()=>renderQuoter())}}, // the big page redraws a frame later so the pop-out stays snappy
+  cfg(){return Q.tab==="FE"?feCfg():QCFG[Q.tab]},
+  result(){const T=Q.tab,cfg=this.cfg(),K=cfg.amtKey||"amt",B=!!cfg.budget,amt=Q[T][K];
+    const rows=cfg.rows().map(r=>({n:r.n,sub:r.sub||"",why:r.why||"",exact:!!r.exact,checked:!!r.checked,tier:r.tier,price:r.why?null:r.price(amt),at:a=>r.why?null:r.price(a)}));
+    const v=r=>r.price==null?(B?-1:1e12):r.price;rows.sort((a,b)=>B?v(b)-v(a):v(a)-v(b));
+    return{T,B,K,amt,min:cfg.min,max:cfg.max,step:cfg.step,quick:cfg.quick,plans:cfg.plans,plan:cfg.cur(),summary:cfg.summary(),rows}},
+  setPlan(v){this.cfg().setPlan(v);this.changed()},
+  priceAt(name,face){const was=Q.FE.mode;Q.FE.mode="face";try{const r=this.cfg().rows().find(x=>x.n===name);return r&&!r.why?r.price(face):null}finally{Q.FE.mode=was}},
+  setLead(id){const sel=$("#qLead");if(!sel)return;leadOptions(sel);if([...sel.options].some(o=>o.value===id))sel.value=id},
+  attach:(leadId,q)=>attachQuote(leadId,q),
+  open(){go("quoter")}
+};
 
 /* ---------- IUL illustrator ---------- */
 const IL=Object.assign({carrier:"ta",age:35,sex:"M",state:"CA",risk:"1",focus:"cash",mode:"premium",prem:300,cov:250000,inc:false,incStart:65,incEnd:90,rate:5.5,payTo:"100",dbo:"A"},ls.get("hp.il",{}));
@@ -894,6 +910,7 @@ const SCRIPT_LIB={
   close:"The illustration at {premium} a month gives you {face} of protection and builds cash value toward your retirement goal. Shall we start the application so the carrier can confirm your rate?"}
 };
 let scTab="FE";
+window.HP_SCRIPTS=SCRIPT_LIB;
 function renderScripts(){
   if(scTab==="FE"&&window.HP_FEX){
     $$("#scTabs .tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.sc===scTab));
@@ -1105,7 +1122,7 @@ function openBJ(){const b=openWin("bj",{title:"Blackjack",w:400,h:680,chips:`<sp
 
 $("#calAdd").onclick=()=>apptForm();
 $("#navGames").onclick=openGames;
-function floatScript(tab){const s=SCRIPT_LIB[tab];const b=openWin("script",{title:"Script",sub:{FE:"Final Expense",MP:"Mortgage Protection",IUL:"IUL"}[tab],w:380,h:540});
+function floatScript(tab){if(window.hpPop)return window.hpPop.open("script",{tab});const s=SCRIPT_LIB[tab];const b=openWin("script",{title:"Script",sub:{FE:"Final Expense",MP:"Mortgage Protection",IUL:"IUL"}[tab],w:380,h:540});
   const hl=t=>esc(t).replace(/\{(\w+)\}/g,'<b style="color:var(--sky)">[$1]</b>');
   b.innerHTML=`<div><span class="label">Opener</span><p style="margin:4px 0 0;line-height:1.6">${hl(s.open)}</p></div><div><span class="label">Fact finder</span><ul style="margin:4px 0 0;padding-left:18px;line-height:1.6">${s.facts.map(f=>`<li>${esc(f)}</li>`).join("")}</ul></div><div><span class="label">Objections</span>${s.obj.map(([q,a])=>`<p style="margin:6px 0 0"><b>"${esc(q)}"</b><br><span class="muted">${esc(a)}</span></p>`).join("")}</div><div><span class="label">Close</span><p style="margin:4px 0 0;line-height:1.6">${hl(s.close)}</p></div>`}
 $("#scFloat").onclick=()=>floatScript(scTab);

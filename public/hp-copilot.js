@@ -359,6 +359,7 @@ Never include Social Security, bank, card or account numbers. Transcript:
   function schedule(f) { force = force || !!f; if (raf) return; raf = requestAnimationFrame(() => { raf = 0; const ff = force; force = false; render(ff); }); }
   function render(f) {
     renderSlot(f); renderPill();
+    window.dispatchEvent(new Event("hp:copilot"));
     if (CP.modal) { const s = CP.pending.find((x) => x.id === CP.modal); const box = $("#hpcModal .hpc"); if (s && box && (f || !box.contains(document.activeElement))) { box.innerHTML = reviewHTML(s, true); wireReview(box, s); } }
   }
   function renderSlot(f) {
@@ -536,6 +537,17 @@ Never include Social Security, bank, card or account numbers. Transcript:
   }
   function escClose(e) { if (e.key === "Escape") closeModal(); }
   function closeModal() { $("#hpcModal")?.remove(); CP.modal = null; document.removeEventListener("keydown", escClose); schedule(); }
+
+  /* for the pop-outs (public/hp-pop.js): what the copilot has heard, and the same consent buttons as the profile */
+  window.hpCopilot = {
+    session(leadId) {
+      if (CP.cur && (!leadId || CP.cur.leadId === leadId)) return CP.cur;
+      return leadId ? CP.pending.filter((x) => x.leadId === leadId).slice(-1)[0] || null : null;
+    },
+    agree() { if (CP.cur) agree(CP.cur); },
+    decline() { if (CP.cur) decline(CP.cur); },
+    FIELDS, OBJ, CHECK,
+  };
 
   // restore unreviewed calls from earlier
   CP.pending.forEach((s) => { if (s.state !== "review") s.state = "review"; s.later = true; });

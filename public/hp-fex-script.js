@@ -187,6 +187,7 @@ window.HP_FEX = {
       next: nx ? { text: nx.text, stage: nx.si } : null,
       done: items.length > 0 && ptr >= items.length - 1,
       pct: items.length ? Math.round(((ptr + 1) / items.length) * 100) : 0,
+      at: ptr, // index of the last line read, counting only "say" lines in script order
     };
   }
   window.HP_FEX_TRACK = { track };

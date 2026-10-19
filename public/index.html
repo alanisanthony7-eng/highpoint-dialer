@@ -152,7 +152,7 @@
         <div class="panel stack" style="gap:14px" id="dCur"></div>
         <div class="stack side" style="gap:12px">
           <div class="panel stack">
-            <button class="btn" id="dScript">Float script for this lead</button>
+            <button class="btn" id="dScript">Pop out the script</button>
             <button class="btn" id="wavvCsv">Download this queue (CSV)</button>
           </div>
           <div class="panel stack">
@@ -167,7 +167,7 @@
     <section id="v-quoter" data-v hidden>
       <div class="head">
         <div><h1>Quote &amp; Compare</h1><p>Slide or tap the amount to type it. Every carrier is priced at your amount plus four comparison amounts. Tap any amount to sort by it.</p></div>
-        <div class="row" style="align-items:flex-end;gap:8px"><button class="btn" type="button" id="qCarriers">Customize carriers</button><label class="field forlead"><span>Quoting for</span><select id="qLead"></select></label></div>
+        <div class="row" style="align-items:flex-end;gap:8px"><button class="btn" type="button" data-pop="quote" title="A small quoter that stays up while you dial (Alt+Q)">Pop out</button><button class="btn" type="button" id="qCarriers">Customize carriers</button><label class="field forlead"><span>Quoting for</span><select id="qLead"></select></label></div>
       </div>
       <div class="bigseg" role="tablist" id="qTabs"><button type="button" data-q="FE">Final expense</button><button type="button" data-q="TERM">Term</button><button type="button" data-q="IUL">IUL</button></div>
       <div class="qinputs">
@@ -300,7 +300,7 @@
 
     <!-- SCRIPTS -->
     <section id="v-scripts" data-v hidden>
-      <div class="head"><div><h1>Scripts</h1><p>Openers, fact-finders and rebuttals for each product line. Float one over the dialer while you call.</p></div><button class="btn primary" id="scFloat">Float this script</button></div>
+      <div class="head"><div><h1>Scripts</h1><p>Openers, fact-finders and rebuttals for each product line. Pop one out over the dialer while you call.</p></div><button class="btn primary" id="scFloat">Pop out this script</button></div>
       <div class="tabs" role="tablist" id="scTabs">
         <button class="tab" role="tab" data-sc="FE" aria-selected="true">Final Expense</button>
         <button class="tab" role="tab" data-sc="MP" aria-selected="false">Mortgage Protection</button>
