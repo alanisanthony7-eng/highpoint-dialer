@@ -77,6 +77,8 @@ await call("boss", "/api/auth/signup", { method: "POST", body: { email: "boss@hp
 const outgoing = { direction: "outgoing", from: "+13055550999", to: "+13055550001", call_control_id: "v3:x1", call_session_id: "sA" };
 ok(await sendEvent("call.initiated", outgoing, { ts: Math.floor(Date.now() / 1000) - 900 }) === 401, "an event older than five minutes is refused");
 ok(await sendEvent("call.initiated", outgoing, { key: rogue.privateKey }) === 401, "an event signed with another key is refused");
+const unsigned = await onRequest({ request: new Request("https://desk.example.com/api/telnyx/events", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), env, waitUntil: () => {} });
+ok(unsigned.status === 401, "an unsigned POST to the events URL gets 401");
 ok(await sendEvent("call.initiated", outgoing, { sendBody: '{"data":{"event_type":"call.initiated","payload":{"to":"+13055550123"}}}' }) === 401, "a changed body is refused");
 ok(await sendEvent("call.initiated", outgoing) === 200, "a correctly signed event is accepted");
 
@@ -148,5 +150,7 @@ ok(L.events.some((e) => e.type === "call.transcription" && e.body?.transcription
 
 // ---- 8. a bad signature is recorded so a wrong TELNYX_PUBLIC_KEY is visible ----
 ok(L.events.some((e) => e.type === "rejected"), "rejected deliveries are recorded in the log");
+ok(L.events.some((e) => e.type === "rejected" && /no telnyx-signature/.test(e.note)), "an unsigned delivery says why it was refused");
+ok(L.events.some((e) => e.type === "rejected" && /doesn't match/.test(e.note)), "a wrong signature says why it was refused");
 
 console.log("done");

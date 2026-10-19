@@ -1,5 +1,6 @@
 // Telnyx: REST helper, one-click setup, per-agent browser-phone tokens, numbers
 import crypto from "node:crypto";
+import { Buffer } from "node:buffer";
 import { env, json, bad, requireUser, wrap, httpErr, getJ, setJ, updateJ, config as loadConfig, to10, AREA, siteUrl } from "../lib/hp.mjs";
 import { redact } from "../lib/redact.mjs";
 
@@ -107,14 +108,23 @@ async function telnyxKey() {
   if (raw.length === 44) raw = raw.slice(12); // DER/SPKI wrapper around the 32-byte key
   return raw.length === 32 ? (PK = raw) : null;
 }
+// Returns "" when the signature is good, otherwise the reason (shown in the admin log).
 async function verifyTelnyx(raw, sig, ts) {
-  try {
-    if (!sig || !ts || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false; // replay window: 5 minutes
-    const key = await telnyxKey(); if (!key) return false;
+  if (!sig || !ts) return "the request has no telnyx-signature-ed25519 or telnyx-timestamp header";
+  if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return "the timestamp is more than five minutes off";
+  const key = await telnyxKey(); if (!key) return "no public key: add TELNYX_PUBLIC_KEY in Cloudflare settings";
+  const msg = new TextEncoder().encode(`${ts}|${raw}`);
+  let s; try { s = Uint8Array.from(atob(String(sig)), (c) => c.charCodeAt(0)); } catch { return "the signature isn't valid base64"; }
+  let web = "";
+  try { // Web Crypto: Cloudflare Workers and recent Node
     const pub = await globalThis.crypto.subtle.importKey("raw", key, { name: "Ed25519" }, false, ["verify"]);
-    const s = Uint8Array.from(atob(String(sig)), (c) => c.charCodeAt(0));
-    return await globalThis.crypto.subtle.verify({ name: "Ed25519" }, pub, s, new TextEncoder().encode(`${ts}|${raw}`));
-  } catch { return false; }
+    return (await globalThis.crypto.subtle.verify({ name: "Ed25519" }, pub, s, msg)) ? "" : "the signature doesn't match TELNYX_PUBLIC_KEY";
+  } catch (e) { web = e.message; }
+  try { // fallback: node:crypto, if this runtime has Ed25519 there instead
+    const spki = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), Buffer.from(key)]);
+    const k = crypto.createPublicKey({ key: spki, format: "der", type: "spki" });
+    return crypto.verify(null, msg, k, Buffer.from(s)) ? "" : "the signature doesn't match TELNYX_PUBLIC_KEY";
+  } catch (e) { return "this runtime can't check Ed25519 signatures (" + web + "; " + e.message + ")"; }
 }
 // What the admin log shows: transcript text becomes a length, phone numbers keep only their last four digits.
 const PHONE_KEY = /number|^from$|^to$|caller|destination|^ani$|^dnis$/i;
@@ -190,8 +200,9 @@ async function handleTelnyx(type, p) {
 // POST /api/telnyx/events — Telnyx calls this. Unsigned or stale requests get a 401; everything else gets a quick 200.
 export async function telnyxEvents(req) {
   const raw = await req.text();
-  if (!(await verifyTelnyx(raw, req.headers.get("telnyx-signature-ed25519"), req.headers.get("telnyx-timestamp")))) {
-    await logEvent({ type: "rejected", note: "signature didn't verify (check TELNYX_PUBLIC_KEY)" }).catch(() => {});
+  const why = await verifyTelnyx(raw, req.headers.get("telnyx-signature-ed25519"), req.headers.get("telnyx-timestamp"));
+  if (why) {
+    await logEvent({ type: "rejected", note: why }).catch(() => {});
     return new Response("bad signature", { status: 401 });
   }
   let body = {}; try { body = JSON.parse(raw); } catch {}
