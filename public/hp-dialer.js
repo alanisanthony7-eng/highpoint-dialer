@@ -75,6 +75,9 @@
     }
     S.lines = Math.min(S.lines, S.settings.maxLines || 3);
     if (S.ready || S.demo) document.body.classList.add("hpd-on");
+    // Trust Hub: admins on Telnyx (Twilio accounts keep their checklist in Number groups)
+    const tt = $("#hpdTrustTab");
+    if (tt) { tt.hidden = !(S.me?.admin && S.provider === "telnyx" && !S.demo); const tabs = $("#dTabs"); if (tabs) tabs.style.gridTemplateColumns = `repeat(${$$("button:not([hidden])", tabs).length},auto)`; }
     if (Array.isArray(S.prefs.camps) && S.prefs.camps.length > (S.camps?.length || 0)) { S.camps = S.prefs.camps; lsSet("hpd.camps", S.camps); }
     buildHome(); renderPhone();
     if (S.ready) startDevice();
@@ -94,12 +97,12 @@
     const tabs = $("#dTabs");
     if (tabs) {
       tabs.style.maxWidth = "none"; tabs.style.gridTemplateColumns = "repeat(7,auto)";
-      tabs.insertAdjacentHTML("beforeend", `<button type="button" data-hpd="recs" aria-pressed="false">Recordings</button><button type="button" data-hpd="numbers" aria-pressed="false">Number groups</button><button type="button" data-hpd="stats" aria-pressed="false">Analytics</button><button type="button" data-hpd="inbox" aria-pressed="false">Inbox &amp; settings <span class="hpd-pill" id="hpdInboxN" hidden></span></button><button type="button" data-hpd="dnc" aria-pressed="false">Do not call</button>`);
+      tabs.insertAdjacentHTML("beforeend", `<button type="button" data-hpd="recs" aria-pressed="false">Recordings</button><button type="button" data-hpd="numbers" aria-pressed="false">Number groups</button><button type="button" data-hpd="stats" aria-pressed="false">Analytics</button><button type="button" data-hpd="inbox" aria-pressed="false">Inbox &amp; settings <span class="hpd-pill" id="hpdInboxN" hidden></span></button><button type="button" data-hpd="dnc" aria-pressed="false">Do not call</button><button type="button" data-hpd="trust" aria-pressed="false" id="hpdTrustTab" hidden>Trust Hub</button>`);
       $$("[data-dt]", tabs).forEach((b) => b.addEventListener("click", () => { S.tab = null; $$(".hpd-pane").forEach((x) => (x.hidden = true)); $$("[data-hpd]", tabs).forEach((x) => x.setAttribute("aria-pressed", "false")); }));
       $$("[data-hpd]", tabs).forEach((b) => (b.onclick = () => openTab(b.dataset.hpd)));
     }
     const host = $("#dPane").parentNode;
-    host.insertAdjacentHTML("beforeend", `<div class="hpd-pane" id="hpdRecs" hidden></div><div class="hpd-pane" id="hpdDnc" hidden></div><div class="hpd-pane" id="hpdNumbers" hidden></div><div class="hpd-pane" id="hpdStats" hidden></div><div class="hpd-pane" id="hpdInbox" hidden></div>`);
+    host.insertAdjacentHTML("beforeend", `<div class="hpd-pane" id="hpdRecs" hidden></div><div class="hpd-pane" id="hpdDnc" hidden></div><div class="hpd-pane" id="hpdNumbers" hidden></div><div class="hpd-pane" id="hpdStats" hidden></div><div class="hpd-pane" id="hpdInbox" hidden></div><div class="hpd-pane" id="hpdTrust" hidden></div>`);
 
     // phone panel replaces the WAVV launcher (kept hidden for the CSV export)
     const wavv = $("#wavvUrl")?.closest(".panel");
@@ -115,7 +118,7 @@
     $("#dPane").hidden = true; $("#hPane").hidden = true;
     $$(".hpd-pane").forEach((x) => (x.hidden = x.id !== "hpd" + t[0].toUpperCase() + t.slice(1)));
     if ($("#hpdHome")) $("#hpdHome").hidden = $("#hphMusic").hidden = true;
-    ({ numbers: renderNumbers, stats: renderStats, inbox: renderInbox, recs: renderRecs, dnc: renderDnc })[t]?.();
+    ({ numbers: renderNumbers, stats: renderStats, inbox: renderInbox, recs: renderRecs, dnc: renderDnc, trust: renderTrust })[t]?.();
   }
   const setChip = (s, t) => { const c = $("#hpdState"); if (c) { c.dataset.s = s; c.innerHTML = `<i></i>${esc(t)}`; } };
   const note = (html, cls = "") => { const n = $("#hpdNote"); if (n) { n.className = "hpd-banner " + cls; n.innerHTML = html; n.hidden = !html; } };
@@ -624,7 +627,7 @@
           ${S.me?.admin ? `<label class="field" style="max-width:280px"><span>Assign new numbers to</span><select id="hpdOwner"><option value="__me">Me</option>${agentOpts("")}</select></label>` : `<span class="hpd-sm">You have ${mine} of ${S.settings.agentMaxNumbers ?? 5} numbers.</span>`}
           <div class="hpd-results" id="hpdRes"></div>
         </div>
-        <div class="panel stack" style="gap:10px">
+        ${S.provider === "telnyx" ? telnyxTrustCard() : `<div class="panel stack" style="gap:10px">
           <h2>Keep numbers off “Spam Likely”</h2>
           <ul class="hpd-check">
             <li class="${T.profile ? "done" : ""}"><span><b>Verify your business</b> in Twilio Trust Hub (Customer Profile). Unlocks <b>A-level STIR/SHAKEN</b>, the strongest “this caller is real” signal carriers get.  <a href="https://console.twilio.com/us1/account/trust-hub/customer-profiles" target="_blank" rel="noopener">Open Trust Hub</a></span></li>
@@ -635,7 +638,7 @@
             <li class="done"><span><b>Built in:</b> daily caps per number, 14-day warm-up for new numbers, local presence rotation, calling-hour and per-lead attempt limits, opt-out on press 9.</span></li>
           </ul>
           ${S.me?.admin ? `<div class="hpd-flex hpd-sm">Mark done: ${["profile", "shaken", "cnam", "voiceIntegrity", "fcr"].map((k) => `<label style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-trust="${k}" ${T[k] ? "checked" : ""}>${{ profile: "Profile", shaken: "SHAKEN", cnam: "CNAM", voiceIntegrity: "Voice Integrity", fcr: "Registry" }[k]}</label>`).join("")}</div>` : ""}
-        </div>
+        </div>`}
       </div>
       <div class="panel stack" style="gap:10px">
         <div class="row" style="justify-content:space-between"><h2>${S.me?.admin ? "All numbers" : "Your numbers"}</h2>${S.me?.admin ? `<button class="btn" id="hpdImport" type="button">Add numbers already in ${S.provider === "telnyx" ? "Telnyx" : "Twilio"}</button>` : ""}</div>
@@ -643,7 +646,7 @@
         ${S.numbers.map((n) => {
           const h = n.health || {}; const status = n.paused ? "paused" : h.status;
           return `<tr><td><b class="num">${esc(fmt(n.e164))}</b><br><span class="hpd-sm">${esc(n.state || "")}${n.label ? " · " + esc(n.label) : ""}</span></td>
-          <td><span class="hpd-h ${status}" title="${esc((h.why || []).join("; "))}">${{ healthy: "Healthy", watch: "Watch", flagged: "Flagged", paused: "Paused" }[status] || "—"}</span>${h.why?.length ? `<br><span class="hpd-sm">${esc(h.why[0])}</span>` : ""}</td>
+          <td><span class="hpd-h ${status}" title="${esc((h.why || []).join("; "))}">${{ healthy: "Healthy", watch: "Watch", flagged: "Flagged", paused: "Paused" }[status] || "—"}</span>${h.why?.length ? `<br><span class="hpd-sm">${esc(h.why[0])}</span>` : ""}${h.reputation?.risk === "low" ? `<br><span class="hpd-sm">carriers rate it low risk</span>` : ""}</td>
           <td><span class="num">${h.todayDials || 0}</span><span class="hpd-sm"> / ${h.cap || "—"}</span><div class="hpd-meter"><i style="width:${Math.min(100, ((h.todayDials || 0) / (h.cap || 1)) * 100)}%;${(h.todayDials || 0) >= (h.cap || 1) ? "background:var(--hp-warn)" : ""}"></i></div></td>
           <td class="hide-sm num">${h.week?.dials ? pct(h.week.answered, h.week.dials) + "%" : "—"}<br><span class="hpd-sm">${h.week?.dials || 0} dials</span></td>
           <td>${S.me?.admin ? `<select data-own="${esc(n.e164)}" style="width:auto">${agentOpts(n.owner)}</select>` : esc(n.mine ? "You" : n.ownerName)}</td>
@@ -686,7 +689,195 @@
       try { await api("/numbers/release", { method: "POST", body: { e164: b.dataset.rel } }); toast("Number released"); renderNumbers(); } catch (e) { toast(e.message); }
     }));
     $("#hpdImport")?.addEventListener("click", async () => { try { const r = await api("/numbers/import", { method: "POST", body: {} }); toast(`${r.added} number${r.added === 1 ? "" : "s"} added`); renderNumbers(); } catch (e) { toast(e.message); } });
+    $("#hpdOpenTrust", el)?.addEventListener("click", () => openTab("trust"));
     $$("[data-trust]", el).forEach((c) => (c.onchange = async () => { S.trust[c.dataset.trust] = c.checked; try { await api("/setup", { method: "PUT", body: { settings: {}, trust: S.trust } }); } catch {} renderNumbers(); }));
+  }
+
+  /* ================= Trust Hub (Telnyx; admins) ================= */
+  async function tapi(p, { method = "GET", body } = {}) {
+    const headers = { ...authHeader() }; if (body !== undefined) headers["content-type"] = "application/json";
+    const r = await fetch("/api/telnyx/" + p, { method, headers, credentials: "include", body: body !== undefined ? JSON.stringify(body) : undefined });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(j.error || "Something went wrong. Try again."), { data: j });
+    return j;
+  }
+  const cnamSuggest = (s) => { let t = String(s || "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").replace(/\s+/g, " ").trim(); if (t.length > 15) { t = t.slice(0, 15); const sp = t.lastIndexOf(" "); if (sp > 8) t = t.slice(0, sp); } return t.trim(); };
+  const tday = (t) => (t ? new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "");
+  function telnyxTrustCard() {
+    return `<div class="panel stack" style="gap:10px">
+      <h2>Keep numbers off “Spam Likely”</h2>
+      <ul class="hpd-check">
+        <li class="done"><span><b>A-level STIR/SHAKEN</b> on every number you own through Telnyx, the strongest “this caller is real” signal carriers get.</span></li>
+        <li><span><b>Register your business, set your caller name and see each number's carrier rating</b> in the Trust Hub.</span></li>
+        <li class="done"><span><b>Built in:</b> daily caps per number, 14-day warm-up for new numbers, local presence rotation, calling-hour and per-lead attempt limits, opt-out on press 9.</span></li>
+      </ul>
+      ${S.me?.admin ? `<div><button class="btn primary" id="hpdOpenTrust" type="button">Open Trust Hub</button></div>` : `<span class="hpd-sm">Your admin manages this in the Trust Hub.</span>`}
+    </div>`;
+  }
+  async function renderTrust() {
+    const el = $("#hpdTrust");
+    el.innerHTML = `<div class="panel">Loading the Trust Hub…</div>`;
+    let T;
+    try { T = await tapi("trust"); } catch (e) { el.innerHTML = `<div class="panel">${esc(e.message)}</div>`; return; }
+    const P = T.profile || {}, R = T.repLive, rep = T.rep || {};
+    const approved = R?.status === "approved" && R?.loa_status === "approved";
+    const rejected = R?.status === "rejected" || R?.loa_status === "rejected";
+    const steps = [["Business registered", !!T.enterpriseId], ["A-level STIR/SHAKEN", T.stir.owned > 0], ["Caller name", !!T.cnam?.name], ["Carrier registry", !!T.fcrAt], ["Spam monitoring", approved]];
+    const done = steps.filter((x) => x[1]).length;
+    const v = (k) => esc(P[k] || "");
+    const field = (k, label, extra = "") => `<label class="field"><span>${label}</span><input name="${k}" value="${v(k)}" ${extra}></label>`;
+    const opt = (k, list, def) => list.map(([val, label]) => `<option value="${esc(val)}" ${(P[k] || def) === val ? "selected" : ""}>${esc(label)}</option>`).join("");
+    const pill = (cls, t) => `<span class="hpd-h ${cls}">${esc(t)}</span>`;
+    const monitor = !T.enterpriseId ? "Register first" : !R ? "Off" : approved ? "On" : rejected ? "Rejected" : "Waiting for approval";
+    const nums = T.numbers || [];
+    const rows = nums.map((n) => {
+      const d = n.rep || {}, risk = d.spam_risk;
+      return `<tr><td><b class="num">${esc(fmt(n.e164))}</b><br><span class="hpd-sm">${esc(n.state || "")}${n.label ? " · " + esc(n.label) : ""}</span></td>
+        <td>${risk ? pill(risk === "high" ? "flagged" : risk === "medium" ? "watch" : "healthy", risk[0].toUpperCase() + risk.slice(1) + " risk") + (d.spam_category ? `<br><span class="hpd-sm">${esc(d.spam_category)}</span>` : "") : `<span class="hpd-sm">${d.monitored ? "No rating yet" : "Not monitored"}</span>`}</td>
+        ${["maturity_score", "connection_score", "engagement_score", "sentiment_score"].map((k) => `<td class="num hide-sm">${d[k] ?? "—"}</td>`).join("")}
+        <td class="hide-sm hpd-sm">${esc(tday(d.last_refreshed_at))}</td></tr>`;
+    }).join("") || `<tr><td colspan="7" class="muted">No Telnyx numbers yet.</td></tr>`;
+    el.innerHTML = `
+      <div class="panel hpd-trust-head">
+        <div><h2>Trust Hub</h2><p class="muted">Register your business so AT&amp;T, Verizon and T-Mobile trust your calls, and see how carriers rate every number.</p></div>
+        <div class="hpd-trust-score"><b>${done}<small>/${steps.length}</small></b><span>steps done</span></div>
+        <ol class="hpd-trust-steps">${steps.map(([t, ok], i) => `<li class="${ok ? "done" : ""}"><i>${ok ? "✓" : i + 1}</i><span>${esc(t)}</span></li>`).join("")}</ol>
+      </div>
+      <div class="hpd-grid2">
+        <form class="panel stack" id="hptProfile" style="gap:12px" novalidate>
+          <div class="hpd-trow"><h2>1. Business profile</h2>${T.enterpriseId ? pill("healthy", "Registered with Telnyx") : pill("watch", "Not registered")}</div>
+          <p class="hpd-sm" style="margin:0">Carriers vet this before they trust your numbers, so it has to match your IRS records. Registering is free.</p>
+          <div class="hpd-tform">
+            ${field("legalName", "Legal business name", 'maxlength="64" autocomplete="organization"')}
+            ${field("dba", "Doing business as (optional)")}
+            ${field("ein", "EIN", 'inputmode="numeric" placeholder="12-3456789" maxlength="10"')}
+            ${field("website", "Website", 'inputmode="url" placeholder="https://"')}
+            <label class="field"><span>Business type</span><select name="legalType">${opt("legalType", [["llc", "LLC"], ["corporation", "Corporation"], ["partnership", "Partnership"], ["nonprofit", "Nonprofit"], ["other", "Other"]], "llc")}</select></label>
+            <label class="field"><span>Organization</span><select name="orgType">${opt("orgType", [["commercial", "Business"], ["non_profit", "Nonprofit"], ["government", "Government"]], "commercial")}</select></label>
+            <label class="field"><span>Industry</span><select name="industry">${opt("industry", [["insurance", "Insurance"], ["financial", "Financial services"], ["sales", "Sales"], ["marketing", "Marketing"], ["customer service", "Customer service"]], "insurance")}</select></label>
+            <label class="field"><span>Employees</span><select name="employees">${opt("employees", ["1-10", "11-50", "51-200", "201-500", "501-2000", "2001-10000", "10001+"].map((x) => [x, x]), "1-10")}</select></label>
+            ${field("incState", "State of incorporation", 'placeholder="Florida"')}
+          </div>
+          <h3 class="hpd-tsub">Business address</h3>
+          <div class="hpd-tform">
+            ${field("street", "Street", 'autocomplete="address-line1"')}
+            ${field("suite", "Suite (optional)", 'autocomplete="address-line2"')}
+            ${field("city", "City", 'autocomplete="address-level2"')}
+            ${field("state", "State", 'maxlength="2" placeholder="FL" autocomplete="address-level1"')}
+            ${field("zip", "ZIP", 'inputmode="numeric" maxlength="10" autocomplete="postal-code"')}
+          </div>
+          <h3 class="hpd-tsub">Contact</h3>
+          <div class="hpd-tform">
+            ${field("first", "First name", 'autocomplete="given-name"')}
+            ${field("last", "Last name", 'autocomplete="family-name"')}
+            ${field("title", "Job title", 'placeholder="Owner"')}
+            ${field("email", "Email", 'type="email" autocomplete="email"')}
+            ${field("phone", "Phone", 'inputmode="tel" autocomplete="tel"')}
+          </div>
+          <p class="hpd-sm hpd-trust-msg" id="hptProfileMsg" ${T.enterpriseErr ? "" : "hidden"}>${T.enterpriseErr ? esc("Saved here, but Telnyx said: " + T.enterpriseErr) : ""}</p>
+          <div class="hpd-flex"><button class="btn primary" type="submit">${T.enterpriseId ? "Save changes" : "Save and register"}</button>${T.enterpriseAt ? `<span class="hpd-sm">Registered ${esc(tday(T.enterpriseAt))}</span>` : ""}</div>
+        </form>
+        <div class="stack" style="gap:14px">
+          <div class="panel stack" style="gap:8px">
+            <div class="hpd-trow"><h2>2. STIR/SHAKEN</h2>${T.stir.owned ? pill("healthy", "A-level") : pill("watch", "No numbers yet")}</div>
+            <p class="hpd-sm" style="margin:0">Telnyx signs calls from numbers you own with A-level attestation, the strongest “this caller is real” signal carriers get. ${T.stir.owned ? `All ${T.stir.owned} of your numbers are Telnyx numbers, so this is already on.` : "Buy a number to turn it on."}</p>
+          </div>
+          <div class="panel stack" style="gap:10px">
+            <div class="hpd-trow"><h2>3. Caller name</h2>${T.cnam?.name ? pill("healthy", T.cnam.name) : pill("watch", "Not set")}</div>
+            <p class="hpd-sm" style="margin:0">Shown on phones that look up caller names, instead of only your number. Up to 15 letters, numbers or spaces. Phones pick up a new name over the following days, not instantly.</p>
+            <div class="hpd-flex"><input id="hptCnam" maxlength="15" value="${esc(T.cnam?.name || cnamSuggest(P.dba || P.legalName || S.settings?.company || "Highpoint Financial"))}" style="width:200px;text-transform:uppercase" aria-label="Caller name"><button class="btn" id="hptCnamGo" type="button" ${nums.length ? "" : "disabled"}>Apply to all numbers</button></div>
+            ${T.cnam?.failed && Object.keys(T.cnam.failed).length ? `<p class="hpd-sm hpd-trust-msg">Couldn't set it on ${Object.entries(T.cnam.failed).map(([e, m]) => `${esc(fmt(e))} (${esc(m)})`).join(", ")}</p>` : T.cnam?.at ? `<span class="hpd-sm">Set on ${T.cnam.ok} number${T.cnam.ok === 1 ? "" : "s"}, ${esc(tday(T.cnam.at))}. Apply again after buying new numbers.</span>` : ""}
+          </div>
+          <div class="panel stack" style="gap:10px">
+            <div class="hpd-trow"><h2>4. Carrier registry</h2>${T.fcrAt ? pill("healthy", "Submitted") : pill("watch", "Not yet")}</div>
+            <p class="hpd-sm" style="margin:0">The Free Caller Registry is run by the analytics companies behind AT&amp;T (Hiya), Verizon (TNS) and T-Mobile (First Orion). It's free, but it's a web form that can't be filled in for you, so copy your details from here and paste them in.</p>
+            <div class="hpd-flex"><a class="btn primary" href="https://www.freecallerregistry.com/fcr/" target="_blank" rel="noopener">Open the registry</a><button class="btn" id="hptCopyBiz" type="button">Copy business details</button><button class="btn" id="hptCopyNums" type="button" ${nums.length ? "" : "disabled"}>Copy ${nums.length} number${nums.length === 1 ? "" : "s"}</button></div>
+            <label class="hpd-sm hpd-tcheck"><input type="checkbox" id="hptFcr" ${T.fcrAt ? "checked" : ""}>I've submitted my numbers${T.fcrAt ? ` (${esc(tday(T.fcrAt))})` : ""}. Register new numbers there too.</label>
+          </div>
+        </div>
+      </div>
+      <div class="panel stack" style="gap:12px">
+        <div class="hpd-trow"><h2>5. Spam monitoring</h2>${pill(approved ? "healthy" : rejected ? "flagged" : "watch", monitor)}</div>
+        <p class="hpd-sm" style="margin:0">Telnyx Number Reputation reads each number's rating from the analytics engines US carriers use: spam risk, plus scores for how established the number is (maturity), how often people answer (connection), stay on the line (engagement) and complain or block (sentiment). High-risk numbers come out of caller-ID rotation automatically, and ratings show on Number groups.</p>
+        <p class="hpd-sm" style="margin:0"><b>Cost:</b> Telnyx lists monitoring at $100 a month plus $0.10 per check. Reading the latest saved ratings is free.</p>
+        <ol class="hpd-trust-flow">
+          <li class="${T.enterpriseId ? "done" : ""}"><b>Register your business</b> (step 1).</li>
+          <li class="${T.tosOk ? "done" : ""}"><b>Accept Telnyx's Number Reputation terms.</b> ${T.tosOk ? "" : `<button class="btn" id="hptTos" type="button" ${T.enterpriseId ? "" : "disabled"}>Accept terms</button>`}</li>
+          <li class="${rep.loaDocId ? "done" : ""}"><b>Download the letter of authorization</b> and sign it. Telnyx fills it in from your profile. <button class="btn" id="hptLoa" type="button" ${T.enterpriseId ? "" : "disabled"}>Download letter (PDF)</button></li>
+          <li class="${R ? "done" : ""}"><b>Upload the signed letter</b> to turn monitoring on.<div class="hpd-flex" style="margin-top:6px"><input type="file" id="hptLoaFile" accept="application/pdf,.pdf" aria-label="Signed letter (PDF)" ${T.enterpriseId && T.tosOk ? "" : "disabled"}><button class="btn primary" id="hptEnable" type="button" disabled>${R ? "Upload a new letter" : "Upload and turn on"}</button></div></li>
+          <li class="${approved ? "done" : ""}"><b>Telnyx approves</b> the business and the letter.${R && !approved ? ` Now: ${esc(R.status)}, letter ${esc(R.loa_status)}.` : ""}${R?.rejection_reasons ? ` <span class="hpd-trust-msg">${esc([].concat(R.rejection_reasons).map((x) => (typeof x === "string" ? x : x?.reason || x?.detail || JSON.stringify(x))).join("; "))}</span>` : ""}</li>
+          <li class="${rep.numbersAt ? "done" : ""}"><b>Add your numbers.</b> <button class="btn" id="hptAdd" type="button" ${approved ? "" : "disabled"}>Add all numbers</button></li>
+        </ol>
+        ${rep.err ? `<p class="hpd-sm hpd-trust-msg">Telnyx said: ${esc(rep.err)}</p>` : ""}
+        <div class="hpd-trow"><h3 class="hpd-tsub" style="margin:0">Carrier ratings</h3><div class="hpd-flex"><span class="hpd-sm">${T.repSyncAt ? "Updated " + esc(new Date(T.repSyncAt).toLocaleString()) : ""}</span><button class="btn" id="hptSync" type="button" ${approved ? "" : "disabled"}>Refresh ratings</button></div></div>
+        <div class="tablewrap" style="overflow-x:auto"><table class="hpd-tbl"><thead><tr><th>Number</th><th>Spam risk</th><th class="hide-sm">Maturity</th><th class="hide-sm">Connection</th><th class="hide-sm">Engagement</th><th class="hide-sm">Sentiment</th><th class="hide-sm">Checked</th></tr></thead><tbody>${rows}</tbody></table></div>
+      </div>`;
+
+    // business profile
+    const form = $("#hptProfile", el);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const b = $("button[type=submit]", form), msg = $("#hptProfileMsg", el), label = b.textContent;
+      b.disabled = true; b.textContent = "Saving…"; msg.hidden = true;
+      try { await tapi("trust-profile", { method: "POST", body: Object.fromEntries(new FormData(form).entries()) }); toast("Business profile saved and registered with Telnyx"); renderTrust(); }
+      catch (er) { msg.hidden = false; msg.textContent = er.data?.saved ? "Saved here, but Telnyx said: " + er.message : er.message; b.disabled = false; b.textContent = label; }
+    };
+    // caller name
+    $("#hptCnamGo", el).onclick = async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Applying…";
+      try { const r = await tapi("trust-cnam", { method: "POST", body: { name: $("#hptCnam", el).value } }); toast(`Caller name set on ${r.set} number${r.set === 1 ? "" : "s"}`); renderTrust(); }
+      catch (er) { toast(er.message); b.disabled = false; b.textContent = "Apply to all numbers"; }
+    };
+    // carrier registry helpers
+    const copy = async (text, what) => { try { await navigator.clipboard.writeText(text); toast(what + " copied"); } catch { toast("Couldn't copy. Select the text and copy it by hand."); } };
+    $("#hptCopyBiz", el).onclick = () => {
+      if (!P.legalName) { toast("Fill in the business profile first"); return; }
+      copy([`Legal name: ${P.legalName}`, P.dba && `Doing business as: ${P.dba}`, `EIN: ${P.ein}`, P.website && `Website: ${P.website}`,
+        `Address: ${[P.street, P.suite].filter(Boolean).join(", ")}, ${P.city}, ${P.state} ${P.zip}`, `Contact: ${P.first} ${P.last}, ${P.title}`, `Email: ${P.email}`, `Phone: ${fmt(P.phone)}`].filter(Boolean).join("\n"), "Business details");
+    };
+    $("#hptCopyNums", el).onclick = () => copy(nums.map((n) => n.e164.replace(/^\+1/, "")).join("\n"), `${nums.length} number${nums.length === 1 ? "" : "s"}`);
+    $("#hptFcr", el).onchange = async (e) => { try { await tapi("trust-fcr", { method: "POST", body: { done: e.target.checked } }); renderTrust(); } catch (er) { toast(er.message); } };
+    // spam monitoring
+    $("#hptTos", el)?.addEventListener("click", async (e) => {
+      const b = e.currentTarget;
+      if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Tap again to accept Telnyx's terms"; return; }
+      b.disabled = true;
+      try { await tapi("trust-tos", { method: "POST" }); toast("Terms accepted"); renderTrust(); } catch (er) { toast(er.message); b.disabled = false; b.dataset.armed = ""; b.textContent = "Accept terms"; }
+    });
+    $("#hptLoa", el).onclick = async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Preparing…";
+      try {
+        const r = await fetch("/api/telnyx/trust-loa", { headers: authHeader(), credentials: "include" });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Couldn't get the letter");
+        const url = URL.createObjectURL(await r.blob());
+        const a = document.createElement("a"); a.href = url; a.download = "telnyx-letter-of-authorization.pdf"; document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (er) { toast(er.message); }
+      b.disabled = false; b.textContent = "Download letter (PDF)";
+    };
+    const file = $("#hptLoaFile", el), en = $("#hptEnable", el), enLabel = en.textContent;
+    file.onchange = () => { en.disabled = !file.files?.length; en.dataset.armed = ""; en.textContent = enLabel; };
+    en.onclick = async () => {
+      const f = file.files?.[0]; if (!f) return;
+      if (!R && en.dataset.armed !== "1") { en.dataset.armed = "1"; en.textContent = "Turn on for $100/month? Tap again"; return; } // the paid step needs a second, deliberate tap
+      en.disabled = true; en.textContent = "Uploading…";
+      try {
+        const r = await fetch("/api/telnyx/trust-enable", { method: "POST", headers: { ...authHeader(), "content-type": "application/pdf" }, credentials: "include", body: f });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || "Upload failed");
+        toast("Letter sent. Telnyx will review it, and this page shows when it's approved."); renderTrust();
+      } catch (er) { toast(er.message); en.disabled = false; en.dataset.armed = ""; en.textContent = enLabel; }
+    };
+    $("#hptAdd", el).onclick = async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Adding…";
+      try { const r = await tapi("trust-numbers", { method: "POST" }); toast(r.added ? `${r.added} number${r.added === 1 ? "" : "s"} added to monitoring` : "All your numbers are already monitored"); renderTrust(); }
+      catch (er) { toast(er.message); b.disabled = false; b.textContent = "Add all numbers"; }
+    };
+    $("#hptSync", el).onclick = async (e) => {
+      const b = e.currentTarget; b.disabled = true; b.textContent = "Refreshing…";
+      try { await tapi("trust-sync", { method: "POST" }); toast("Ratings updated"); renderTrust(); }
+      catch (er) { toast(er.message); b.disabled = false; b.textContent = "Refresh ratings"; }
+    };
   }
 
   /* ================= analytics tab ================= */

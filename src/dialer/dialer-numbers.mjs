@@ -8,7 +8,7 @@
 import { isTelnyx, txSearch, txBuy } from "../telnyx/tx.mjs";
 import { wrap, json, bad, requireUser, config as loadConfig, getJ, updateJ, tw, siteUrl, numberHooks, numberCap, today, AREA, to10, listKeys } from "../lib/hp.mjs";
 
-function health(n, settings) {
+function health(n, settings, rep) {
   // last 7 days of usage for this number
   let dials = 0, answered = 0, short = 0;
   for (let i = 0; i < 7; i++) {
@@ -19,12 +19,17 @@ function health(n, settings) {
   const shortRate = answered ? short / answered : 0;
   let status = "healthy", why = [];
   if (n.spamReports?.length) { status = "flagged"; why.push(`${n.spamReports.length} spam-label report${n.spamReports.length > 1 ? "s" : ""}`); }
+  // Telnyx Number Reputation: the spam-risk rating carriers' analytics engines give this number (Trust Hub)
+  const cat = rep?.spam_category ? ` as ${String(rep.spam_category).toLowerCase()}` : "";
+  if (rep?.spam_risk === "high") { status = "flagged"; why.unshift(`carriers rate it high spam risk${cat}`); }
+  else if (rep?.spam_risk === "medium") { if (status !== "flagged") status = "watch"; why.push(`carriers rate it medium spam risk${cat}`); }
   if (dials >= 60 && rate < 0.06) { status = status === "flagged" ? status : "watch"; why.push(`only ${(rate * 100).toFixed(1)}% of calls answered this week`); }
   if (answered >= 20 && shortRate > 0.45) { status = status === "flagged" ? status : "watch"; why.push(`${Math.round(shortRate * 100)}% of answers hang up within 10s`); }
   const age = (Date.now() - (n.boughtAt || 0)) / 864e5;
   if (age < settings.rampDays) why.push(`warming up (day ${Math.floor(age) + 1} of ${settings.rampDays})`);
   const td = n.days?.[today()] || {};
-  return { status, why, week: { dials, answered, short, answerRate: rate }, todayDials: td.dials || 0, cap: numberCap(n, settings) };
+  const reputation = rep ? { risk: rep.spam_risk || null, category: rep.spam_category || null, scores: { maturity: rep.maturity_score ?? null, connection: rep.connection_score ?? null, engagement: rep.engagement_score ?? null, sentiment: rep.sentiment_score ?? null }, at: rep.last_refreshed_at || null } : null;
+  return { status, why, week: { dials, answered, short, answerRate: rate }, todayDials: td.dials || 0, cap: numberCap(n, settings), reputation };
 }
 
 export default wrap(async (req) => {
@@ -38,8 +43,9 @@ export default wrap(async (req) => {
   if (req.method === "GET" && action === "numbers") {
     const agents = {};
     if (user.admin) for (const k of await listKeys("agents", "")) { const a = await getJ("agents", k); if (a) agents[k] = a.name || a.email; }
+    const rep = (await getJ("trust", "rep")) || {}; // spam-risk scores from the Trust Hub, when monitoring is on
     const list = Object.values(all).filter((n) => !n.released && (user.admin || n.owner === user.identity || n.shared || !n.owner))
-      .map((n) => ({ ...n, days: undefined, mine: n.owner === user.identity, ownerName: agents[n.owner] || (n.owner === user.identity ? user.name : n.owner ? "Agent" : "Team"), health: health(n, S) }))
+      .map((n) => ({ ...n, days: undefined, mine: n.owner === user.identity, ownerName: agents[n.owner] || (n.owner === user.identity ? user.name : n.owner ? "Agent" : "Team"), health: health(n, S, rep[n.e164]) }))
       .sort((a, b) => (b.mine - a.mine) || a.e164.localeCompare(b.e164));
     return json({ numbers: list, agents: user.admin ? agents : undefined, settings: { agentMaxNumbers: S.agentMaxNumbers, dailyCapPerNumber: S.dailyCapPerNumber } });
   }

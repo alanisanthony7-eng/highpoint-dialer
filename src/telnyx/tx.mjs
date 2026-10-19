@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
 import { env, json, bad, requireUser, wrap, httpErr, getJ, setJ, updateJ, listKeys, config as loadConfig, to10, AREA, siteUrl, saveCall, patchCallBySid, aggregate } from "../lib/hp.mjs";
 import { redact } from "../lib/redact.mjs";
+import { trustRoute } from "./trust.mjs";
 
 export const TX_KEY = () => env("TELNYX_API_KEY");
 export const isTelnyx = () => !!TX_KEY();
@@ -383,6 +384,7 @@ export const telnyxRoute = wrap(async (req, action) => {
     return json({ ok: true, declined });
   }
   if (!user.admin) return bad("Admins only", 403);
+  if (String(action || "").startsWith("trust")) return trustRoute(req, action);
   if (action === "setup" && req.method === "POST") return json({ ok: true, ...(await txSetup()) });
   if (action === "log") { // admin: the last webhook events, with transcript text and numbers masked
     const cfg = await loadConfig();
