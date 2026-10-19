@@ -180,3 +180,38 @@ html.hp-pro .hpd-incoming .btn.hpd-in-rej{
 html.hp-pro .hpd-incoming .btn.hpd-in-rej:hover{transform:translateY(-2px);border-color:rgba(255,94,122,.85)!important}
 html.hp-pro .hpd-incoming .btn.hpd-in-rej:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(90,10,30,.6)!important}
 @media (prefers-reduced-motion:reduce){html.hp-pro .hpd-in-h i{animation:none}}
+
+/* ---------- 10. Call dock (the popup while dialing): glass, the Highpoint mark, keycap call controls ---------- */
+html.hp-pro .hpdk{
+  background:radial-gradient(300px circle at 100% 0%,rgba(255,79,163,.2),transparent 70%),linear-gradient(165deg,rgba(44,18,60,.97),rgba(12,5,20,.98));
+  -webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);
+  border:1px solid rgba(255,79,163,.36);border-radius:24px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 34px 80px -20px rgba(0,0,0,.92),0 0 0 6px rgba(255,46,136,.07),0 0 46px -10px rgba(255,46,136,.5);
+}
+html.hp-pro .hpdk.min{border-radius:999px;background:linear-gradient(165deg,rgba(44,18,60,.97),rgba(12,5,20,.98))}
+html.hp-pro .hpdk-head{padding:14px 14px 12px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
+html.hp-pro .hpdk-mk{display:inline-flex;align-items:center;gap:9px;padding:6px 11px 6px 8px;border-radius:14px;background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 6px 14px -8px rgba(0,0,0,.8)}
+html.hp-pro .hpdk-mk svg{width:30px;height:22px;flex:none;filter:drop-shadow(0 0 10px rgba(255,46,136,.45))}
+html.hp-pro .hpdk-mk b{font:800 10px/1 var(--f-ui,system-ui);letter-spacing:.2em;text-transform:uppercase;color:#FF9CC8}
+html.hp-pro .hpdk-state{padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);font-size:12px;letter-spacing:.02em}
+html.hp-pro .hpdk-av{width:52px;height:52px;border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 8px 22px -6px rgba(255,46,136,.7)}
+html.hp-pro .hpdk-av[data-tone="live"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 3px rgba(59,211,139,.3),0 0 22px -2px rgba(59,211,139,.6)}
+html.hp-pro .hpdk-id b{font-size:18px}
+html.hp-pro .hpdk .hpdk-rb svg{background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 8px 16px -8px rgba(0,0,0,.9)}
+html.hp-pro .hpdk .hpdk-rb:hover svg{border-color:rgba(255,79,163,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 10px 22px -8px rgba(255,46,136,.6);transform:translateY(-2px)}
+html.hp-pro .hpdk .hpdk-rb.on svg{background:linear-gradient(180deg,#FFFFFF,#E9E4F2);color:#14101F;border-color:#fff;box-shadow:0 0 18px rgba(255,255,255,.35)}
+html.hp-pro .hpdk .hpdk-end,html.hp-pro .hpdk .hpdk-call{border-radius:16px;padding:14px;font-size:15px;transition:transform .15s,box-shadow .2s}
+html.hp-pro .hpdk .hpdk-end{background:linear-gradient(180deg,#FF5A6A 0%,#D92B45 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 5px 0 #7A0F22,0 16px 28px -12px rgba(255,60,90,.8)}
+html.hp-pro .hpdk .hpdk-call{background:linear-gradient(180deg,#4BE593 0%,#1FBF6A 100%);color:#04150B;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 5px 0 #0E7A41,0 16px 28px -12px rgba(31,191,106,.8)}
+html.hp-pro .hpdk .hpdk-end:hover,html.hp-pro .hpdk .hpdk-call:hover{transform:translateY(-2px);filter:none}
+html.hp-pro .hpdk .hpdk-end:active,html.hp-pro .hpdk .hpdk-call:active{transform:translateY(4px);filter:none}
+html.hp-pro .hpdk .hpdk-chip{border-radius:12px;background:linear-gradient(160deg,rgba(255,255,255,.1),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 4px 0 rgba(0,0,0,.45);transition:transform .12s,box-shadow .15s}
+html.hp-pro .hpdk .hpdk-chip:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.45)}
+html.hp-pro .hpdk .hpdk-chip.k-appt{background:linear-gradient(180deg,#FF5AA0,#FF2E88);border-color:transparent;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 4px 0 #7A1140}
+html.hp-pro .hpdk .hpdk-chip.k-sold{background:linear-gradient(180deg,#4BE593,#1FBF6A);border-color:transparent;color:#04150B;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 4px 0 #0E7A41}
+html.hp-pro .hpdk .hpdk-chip.k-dnc,html.hp-pro .hpdk .hpdk-chip.k-bad{color:#FF9AAA}
+@media (prefers-reduced-motion:reduce){html.hp-pro .hpdk .hpdk-rb:hover svg,html.hp-pro .hpdk .hpdk-end:hover,html.hp-pro .hpdk .hpdk-call:hover{transform:none}}
+html.hp-pro .hpdk-state{white-space:nowrap}
+html.hp-pro .hpdk-prog{max-width:96px}
+html.hp-pro .hpdk-head{flex-wrap:wrap;row-gap:8px}
+html.hp-pro .hpdk-prog{order:9;flex:0 0 100%;max-width:none;margin:0;padding:0 0 0 2px;background:none;color:#9AA1B2;font-size:11.5px;white-space:normal;overflow:visible}

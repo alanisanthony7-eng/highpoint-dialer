@@ -1029,7 +1029,7 @@
     } else {
       f.innerHTML = `
       <div class="hpdk-head" id="hpdkDrag">
-        <span class="hpdk-brand">HP<em>Dialer</em></span>
+        <span class="hpdk-mk" role="img" aria-label="Highpoint Dialer"><svg viewBox="0 0 132 96" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="#FFFFFF"/><path d="M104 22 L128 12 L118 30 L113 24 Z" fill="#FFFFFF"/><path d="M113 24 L118 30 L112 31Z" fill="#9CC3F0"/></svg><b>Dialer</b></span>
         <span class="hpdk-state" data-tone="${tone}"><i></i>${esc(state)}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>
         ${prog ? `<span class="hpdk-prog">${prog}</span>` : ""}
         <button type="button" class="hpdk-ic" id="hpdkMin" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
