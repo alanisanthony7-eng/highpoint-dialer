@@ -5,7 +5,7 @@
   try {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (!matchMedia("(pointer: fine)").matches) return;
-    const SEL = ".panel, .hero, .kpis > div, .col, .rank-card, .tiles > *, .hpd, .hph-card";
+    const SEL = ".panel, .hero, .kpis > div, .col, .rank-card, .tiles > *, .hph-card";
     const TILT = ".kpis > div, .tiles > *, .rank-card";
     let cur = null, raf = 0, pending = null;
 
@@ -33,7 +33,8 @@
 
     document.addEventListener("pointermove", (e) => {
       const t = e.target;
-      const el = t && t.closest ? t.closest(SEL) : null;
+      let el = t && t.closest ? t.closest(SEL) : null;
+      if (el === document.body || el === document.documentElement) el = null;
       const ok = el && !el.closest(".board");
       if (cur && cur !== (ok ? el : null)) reset(cur);
       cur = ok ? el : null;

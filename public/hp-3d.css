@@ -33,7 +33,7 @@ html.hp-pro body::after{
 @media (max-width:900px){html.hp-pro body::after{display:none}}
 
 /* ---------- 2. Glass surfaces with depth ---------- */
-html.hp-pro :is(.panel,.hero,.kpis>div,.col,.rank-card,.tiles>*,.hpd,.hph-card){
+html.hp-pro :is(.panel,.hero,.kpis>div,.col,.rank-card,.tiles>*,.hph-card){
   background:linear-gradient(165deg,rgba(255,255,255,.085),rgba(255,255,255,.016) 42%,rgba(255,46,136,.035))!important;
   border:1px solid rgba(255,255,255,.085)!important;
   border-radius:18px!important;
@@ -127,3 +127,9 @@ html.hp-pro .toast{
   html.hp-pro .hp3-hot{transform:none!important}
   html.hp-pro .btn:hover,html.hp-pro .nav:hover{transform:none!important}
 }
+
+/* ---------- 7. In-call lead profile: columns stay inside the viewport and scroll inside ---------- */
+html.hp-pro .hpd-profile{overflow:hidden}
+html.hp-pro .hpd-profile .hpf-cols{grid-template-rows:minmax(0,1fr);min-height:0;overflow:hidden}
+html.hp-pro .hpd-profile .hpf-left,html.hp-pro .hpd-profile .hpf-right{min-height:0;overflow-y:auto;overscroll-behavior:contain}
+@media (max-width:900px){html.hp-pro .hpd-profile .hpf-cols{overflow-y:auto;grid-template-rows:auto}}
