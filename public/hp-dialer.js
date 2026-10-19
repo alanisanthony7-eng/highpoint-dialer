@@ -219,7 +219,7 @@
         if (ended) return;
         if (["ringing", "trying", "early", "requesting", "recovering"].includes(st) && !live) fire("ringing");
         if (st === "active" && !live) { live = true; fire("accept", w); }
-        if (st === "hangup" || st === "destroy" || st === "purge") { ended = true; fire(live ? "disconnect" : "cancel", w); fire("disconnect", w); }
+        if (["hangup", "destroy", "destroyed", "purge"].includes(st)) { ended = true; fire(live ? "disconnect" : "cancel", w); fire("disconnect", w); }
       },
     };
     return w;
@@ -240,7 +240,7 @@
       if (!w && c.direction === "inbound" && c.state === "ringing") { w = txCall(c, true); calls.set(c.id, w); incoming(w); }
       if (!w) return;
       w._state(c.state);
-      if (["hangup", "destroy", "purge"].includes(c.state)) calls.delete(c.id);
+      if (["hangup", "destroy", "destroyed", "purge"].includes(c.state)) calls.delete(c.id);
     });
     // refresh the login token before it expires (they last 24h)
     setInterval(async () => { try { const t2 = await txToken(); client.login_token = t2.token; } catch {} }, 20 * 36e5);
