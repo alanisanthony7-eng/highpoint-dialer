@@ -1716,8 +1716,14 @@
     const sub = $("#v-dialer .head p"); if (sub) sub.textContent = dialSubtitle();
     const headset = S.via === "phone" ? (S.phoneLead ? "live" : "on") : S.call || S.power?.connected ? "live" : S.power ? "dial" : (S.deviceReady || S.demo) ? "on" : "off";
     const t = usage?.today || {}, m = usage?.month || {};
-    const estMin = (x) => Math.round(((x.talkSec || 0) + (x.dials || 0) * 25) / 60); // talk + ~25s ringing per dial, both legs billed per minute
-    const cost = (min) => "$" + (min * 0.018).toFixed(2);
+    /* Twilio: talk + ~25s ringing per dial, both legs billed per minute, ~$0.018/min.
+       Telnyx (list prices, Oct 2026): billing starts at answer and rounds each call up to a whole minute, so
+       ~half a minute extra per answered call; $0.005 US outbound + $0.002 browser calling per minute, plus
+       Google live transcription at $0.017 per talk minute when it's on. */
+    const tx = S.provider === "telnyx";
+    const estMin = (x) => Math.round(tx ? (x.talkSec || 0) / 60 + (x.answered || 0) * 0.5 : ((x.talkSec || 0) + (x.dials || 0) * 25) / 60);
+    const costOf = (x) => tx ? estMin(x) * 0.007 + (S.settings.transcribe === false ? 0 : ((x.talkSec || 0) / 60) * 0.017) : estMin(x) * 0.018;
+    const cost = (x) => "$" + costOf(x).toFixed(2);
     const soldToday = [...D.leads.values()].filter((l) => l.stage === "sold" && (l.updatedAt || 0) >= new Date().setHours(0, 0, 0, 0)).length;
     const outside = applyFilter(sourceLeads(), S.filter === "ready" ? "everyone" : S.filter).filter((l) => !leadClock(l).ok).length;
     const base = sourceLeads(); const fCount = Object.fromEntries(FILTERS.map(([k]) => [k, applyFilter(base, k).length]));
@@ -1742,8 +1748,8 @@
         <button type="button" class="btn" id="hphTest">Test ding</button>
       </div>
       <div class="hph-usage">
-        <div><b class="num">${usage ? estMin(t) : "—"}</b> min today<span>${usage ? cost(estMin(t)) + " est." : ""}</span></div>
-        <div><b class="num">${usage ? estMin(m) : "—"}</b> min this month<span>${usage ? cost(estMin(m)) + " est." : ""}</span></div>
+        <div><b class="num">${usage ? estMin(t) : "—"}</b> min today<span>${usage ? cost(t) + " est." : ""}</span></div>
+        <div><b class="num">${usage ? estMin(m) : "—"}</b> min this month<span>${usage ? cost(m) + " est." : ""}</span></div>
         <div><b class="num">${usage ? Math.round((t.talkSec || 0) / 60) : "—"}</b> talk min<span>${usage ? `${t.dials || 0} dials · ${t.answered || 0} answered` : ""}</span></div>
       </div>
       <div class="hph-ready">
