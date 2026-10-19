@@ -728,7 +728,10 @@
     const field = (k, label, extra = "") => `<label class="field"><span>${label}</span><input name="${k}" value="${v(k)}" ${extra}></label>`;
     const opt = (k, list, def) => list.map(([val, label]) => `<option value="${esc(val)}" ${(P[k] || def) === val ? "selected" : ""}>${esc(label)}</option>`).join("");
     const pill = (cls, t) => `<span class="hpd-h ${cls}">${esc(t)}</span>`;
-    const monitor = !T.enterpriseId ? "Register first" : !R ? "Off" : approved ? "On" : rejected ? "Rejected" : "Waiting for approval";
+    // Telnyx error 10038 on registering: their account level doesn't allow business registration yet
+    const gated = !T.enterpriseId && /10038|not permitted at this account level/i.test(T.enterpriseErr || "");
+    const monitor = gated ? "Needs Telnyx to enable it" : !T.enterpriseId ? "Register first" : !R ? "Off" : approved ? "On" : rejected ? "Rejected" : "Waiting for approval";
+    const askTelnyx = `Hi Telnyx team, my account has passed KYC and the AI agent evaluation (Verified).${P.legalName ? ` Business: ${P.legalName}.` : ""} When I register my business for Number Reputation (POST /v2/enterprises), the API returns error 10038: "This feature is not permitted at this account level." Can you enable the Enterprises API and Number Reputation for my account, or tell me which level or plan I need and what it costs? Thank you.`;
     const nums = T.numbers || [];
     const rows = nums.map((n) => {
       const d = n.rep || {}, risk = d.spam_risk;
@@ -745,7 +748,7 @@
       </div>
       <div class="hpd-grid2">
         <form class="panel stack" id="hptProfile" style="gap:12px" novalidate>
-          <div class="hpd-trow"><h2>1. Business profile</h2>${T.enterpriseId ? pill("healthy", "Registered with Telnyx") : pill("watch", "Not registered")}</div>
+          <div class="hpd-trow"><h2>1. Business profile</h2>${T.enterpriseId ? pill("healthy", "Registered with Telnyx") : gated ? pill("watch", "Saved, waiting on Telnyx") : pill("watch", "Not registered")}</div>
           <p class="hpd-sm" style="margin:0">Carriers vet this before they trust your numbers, so it has to match your IRS records. Registering is free.</p>
           ${!T.enterpriseId && T.existing?.length ? `<div class="hpd-trust-found">
             <b>Already registered in Telnyx</b>
@@ -779,8 +782,14 @@
             ${field("email", "Email", 'type="email" autocomplete="email"')}
             ${field("phone", "Phone", 'inputmode="tel" autocomplete="tel"')}
           </div>
-          <p class="hpd-sm hpd-trust-msg" id="hptProfileMsg" ${T.enterpriseErr ? "" : "hidden"}>${T.enterpriseErr ? esc("Saved here, but Telnyx said: " + T.enterpriseErr) : ""}</p>
-          <div class="hpd-flex"><button class="btn primary" type="submit">${T.enterpriseId ? "Save changes" : "Save and register"}</button>${T.enterpriseAt ? `<span class="hpd-sm">Registered ${esc(tday(T.enterpriseAt))}</span>` : ""}</div>
+          ${gated ? `<div class="hpd-trust-gate">
+            <b>Telnyx needs to switch this on for your account</b>
+            <span class="hpd-sm">Telnyx doesn't allow business registration at your account level yet, and spam monitoring (step 5) depends on it. Your profile is saved here. Caller name and the carrier registry don't need it, so you can do those now.</span>
+            <span class="hpd-sm">Ask Telnyx to enable business registration (their Enterprises API, used by Number Reputation and Branded Calling) on your verified account.</span>
+            <div class="hpd-flex"><a class="btn primary" href="https://telnyx.com/contact-us" target="_blank" rel="noopener">Contact Telnyx</a><button class="btn" type="button" id="hptCopyAsk">Copy a message for Telnyx</button></div>
+          </div>` : ""}
+          <p class="hpd-sm hpd-trust-msg" id="hptProfileMsg" ${T.enterpriseErr && !gated ? "" : "hidden"}>${T.enterpriseErr && !gated ? esc("Saved here, but Telnyx said: " + T.enterpriseErr) : ""}</p>
+          <div class="hpd-flex"><button class="btn primary" type="submit">${T.enterpriseId ? "Save changes" : gated ? "Save and try again" : "Save and register"}</button>${T.enterpriseAt ? `<span class="hpd-sm">Registered ${esc(tday(T.enterpriseAt))}</span>` : ""}</div>
         </form>
         <div class="stack" style="gap:14px">
           <div class="panel stack" style="gap:8px">
@@ -805,6 +814,7 @@
         <div class="hpd-trow"><h2>5. Spam monitoring</h2>${pill(approved ? "healthy" : rejected ? "flagged" : "watch", monitor)}</div>
         <p class="hpd-sm" style="margin:0">Telnyx Number Reputation reads each number's rating from the analytics engines US carriers use: spam risk, plus scores for how established the number is (maturity), how often people answer (connection), stay on the line (engagement) and complain or block (sentiment). High-risk numbers come out of caller-ID rotation automatically, and ratings show on Number groups.</p>
         <p class="hpd-sm" style="margin:0"><b>Cost:</b> Telnyx lists monitoring at $100 a month plus $0.10 per check. Reading the latest saved ratings is free.</p>
+        ${gated ? `<p class="hpd-sm hpd-trust-warn">On hold until Telnyx enables business registration for your account (see step 1). Until then, each number's health on Number groups still tracks answer rates, quick hang-ups and spam-label reports from your agents.</p>` : ""}
         <ol class="hpd-trust-flow">
           <li class="${T.enterpriseId ? "done" : ""}"><b>Register your business</b> (step 1).</li>
           <li class="${T.tosOk ? "done" : ""}"><b>Accept Telnyx's Number Reputation terms.</b> ${T.tosOk ? "" : `<button class="btn" id="hptTos" type="button" ${T.enterpriseId ? "" : "disabled"}>Accept terms</button>`}</li>
@@ -846,6 +856,7 @@
         `Address: ${[P.street, P.suite].filter(Boolean).join(", ")}, ${P.city}, ${P.state} ${P.zip}`, `Contact: ${P.first} ${P.last}, ${P.title}`, `Email: ${P.email}`, `Phone: ${fmt(P.phone)}`].filter(Boolean).join("\n"), "Business details");
     };
     $("#hptCopyNums", el).onclick = () => copy(nums.map((n) => n.e164.replace(/^\+1/, "")).join("\n"), `${nums.length} number${nums.length === 1 ? "" : "s"}`);
+    $("#hptCopyAsk", el)?.addEventListener("click", () => copy(askTelnyx, "Message for Telnyx"));
     $("#hptFcr", el).onchange = async (e) => { try { await tapi("trust-fcr", { method: "POST", body: { done: e.target.checked } }); renderTrust(); } catch (er) { toast(er.message); } };
     // spam monitoring
     $("#hptTos", el)?.addEventListener("click", async (e) => {
