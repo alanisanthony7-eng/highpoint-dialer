@@ -17,7 +17,7 @@ Twilio carries the calls.
 | `src/desk.mjs` | Leads, appointments and call logs (private per login); crew cards and settings (shared); lobby presence; Highpoint Bot |
 | `src/dialer/*` | The Twilio dialer: browser phone, 1–3 line power dial, local numbers, voicemail drop, recordings, live transcripts, analytics, texting, DNC |
 | `src/lib/store.mjs` | Key/value storage with safe concurrent writes, on D1 |
-| `test/cf-sim.mjs` | 30 end-to-end checks run locally (`npm test`) |
+| `test/cf-sim.mjs` | 54 end-to-end checks run locally (`npm test`) |
 
 ## One-time setup (about 10 minutes, free)
 
@@ -68,3 +68,10 @@ Leads saved in the old Netlify site can't be read while that account is paused. 
 ## Compliance notes (not legal advice)
 - Only call leads who gave consent, and scrub against the National DNC.
 - Florida and several other states require all-party consent to record. Turn on the recording notice in dialer settings, or have agents say it.
+- Recording consent: the Highpoint Copilot does nothing with a call until the agent taps **Client agreed** after the disclosure. Each agreement is logged on the call. **Client declined** (or *withdrew consent* during the call) stops recording at Twilio, deletes what was captured, and sets the call to no transcript.
+- Sensitive numbers (SSN, bank routing and account, card, Medicare ID, numbers spoken as words) are hidden in transcripts, call notes and anything sent to Highpoint Bot. The same rules run on the server (`src/lib/redact.mjs`) and in the browser (`public/hp-copilot.js`).
+- Browser-line calls and "My phone" calls run the same Do Not Call, calling-hours and 24-hour attempt checks as the voice webhook (`/calls/check`). If the check can't run, the call doesn't go through.
+- Copilot flags phrases for the agent to double-check before saving: government affiliation, guarantees, pressure, guaranteed returns, free/no-cost claims, replacing a policy, and requests for SSN or bank numbers. Flags never block a call.
+- A value already on file is never replaced by a guess. Every change Copilot saves is written to the client's audit trail with its source.
+- Not solved in code: whether the disclosure wording and all-party-consent handling are right for each state (get legal review), recording terms in your carrier and phone contracts, data-retention agreements with the transcription and AI vendors, and HIPAA/GLBA obligations for health and financial details.
+- Calls to your own cell: save your cell number in Phone settings. The desk rings your cell first, and when you answer it connects the lead inside the same recorded call, with the same recording notice and transcription as browser calls. Cell calls work on Twilio numbers only for now; on Telnyx, "My phone" opens your computer's phone app and the call isn't recorded. Without a saved number, "My phone" opens your computer's phone app, and the dialer says that call isn't recorded. Calls not placed through the desk can't be recorded.

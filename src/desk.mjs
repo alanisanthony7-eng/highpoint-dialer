@@ -2,6 +2,7 @@
 // names, lobby presence, and the Highpoint Bot.
 import { D1, ensureSchema } from "./lib/store.mjs";
 import { requireUser } from "./lib/auth.mjs";
+import { redact } from "./lib/redact.mjs";
 
 const env = (k, d = "") => globalThis.__ENV?.[k] ?? d;
 const json = (b, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -109,7 +110,7 @@ export async function aiRoute(req) {
   const key = env("ANTHROPIC_API_KEY");
   if (!key) return json({ error: "The assistant isn't turned on yet. Your admin adds ANTHROPIC_API_KEY in Cloudflare.", code: "unavailable" }, 503);
   const b = await req.json().catch(() => ({}));
-  const messages = (b.messages || []).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, content: typeof m.content === "string" ? m.content.slice(0, 40000) : m.content })).slice(-30);
+  const messages = (b.messages || []).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, content: typeof m.content === "string" ? redact(m.content.slice(0, 40000)) : redact(JSON.stringify(m.content)).slice(0, 40000) })).slice(-30);
   if (!messages.length) return json({ error: "Nothing to send" }, 400);
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

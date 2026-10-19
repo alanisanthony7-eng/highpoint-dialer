@@ -14,6 +14,7 @@
   const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
   const toast = (m) => (window.hpDesk?.toast || console.log)(m);
+  const red = (t) => (window.hpRedact ? window.hpRedact(t) : t);
   const dialSubtitle = () => S.via === "phone"
     ? "Call from your own phone. Outcomes, notes and callbacks still log to the lead."
     : S.provider === "telnyx"
@@ -133,7 +134,7 @@
         <button type="button" data-mode="power" aria-pressed="${S.mode === "power"}" ${live ? "disabled" : ""}>Power dial</button>
       </div>
       ${S.mode === "power" ? `<div class="hpd-linesel">Lines ${[1, 2, 3].map((n) => `<button type="button" data-lines="${n}" aria-pressed="${S.lines === n}" ${n > maxL || live ? "disabled" : ""}>${n}</button>`).join("")}<span style="margin-left:auto" class="hpd-sm">${S.lines > 1 ? "First to say hello connects" : "One at a time"}</span></div>` : ""}
-      <label class="field"><span>Caller ID</span><select id="hpdCid" ${live ? "disabled" : ""}><option value="">Auto: local number for each lead</option>${myNums.map((n) => `<option value="${esc(n.e164)}" ${S.prefs.defaultCallerId === n.e164 ? "selected" : ""}>${esc(fmt(n.e164))}${n.label ? " · " + esc(n.label) : ""}${n.health?.status === "flagged" ? " (flagged)" : ""}</option>`).join("")}</select></label>
+      <label class="field"><span>Your cell number</span><input id="hpdCell" value="${S.prefs.cellPhone ? esc(fmt(S.prefs.cellPhone)) : ""}" placeholder="(305) 555-0123" inputmode="tel"></label><label class="field"><span>Caller ID</span><select id="hpdCid" ${live ? "disabled" : ""}><option value="">Auto: local number for each lead</option>${myNums.map((n) => `<option value="${esc(n.e164)}" ${S.prefs.defaultCallerId === n.e164 ? "selected" : ""}>${esc(fmt(n.e164))}${n.label ? " · " + esc(n.label) : ""}${n.health?.status === "flagged" ? " (flagged)" : ""}</option>`).join("")}</select></label>
       <div class="hpd-actions" id="hpdActs"></div>
       <div id="hpdLive" class="stack" style="gap:10px" hidden>
         <div class="hpd-tiles" id="hpdTiles"></div>
@@ -151,6 +152,7 @@
     $$("[data-mode]", el).forEach((b) => (b.onclick = () => { S.mode = b.dataset.mode; lsSet("hpd.mode", S.mode); renderPhone(); }));
     $$("[data-lines]", el).forEach((b) => (b.onclick = () => { S.lines = +b.dataset.lines; lsSet("hpd.lines", S.lines); savePrefs({ lines: S.lines }); renderPhone(); }));
     $("#hpdCid").onchange = (e) => savePrefs({ defaultCallerId: e.target.value });
+    $("#hpdCell").onchange = (e) => savePrefs({ cellPhone: e.target.value });
     $("#hpdMute").onclick = toggleMute;
     $("#hpdPadBtn").onclick = () => { S.padOpen = !S.padOpen; $("#hpdPad").hidden = !S.padOpen; $("#hpdPadBtn").setAttribute("aria-pressed", S.padOpen); };
     $$("[data-dtmf]", el).forEach((b) => (b.onclick = () => dtmf(b.dataset.dtmf)));
@@ -288,12 +290,23 @@
   function phoneCall(lead) {
     if (!lead?.phone) { toast("This lead has no phone number"); return; }
     if (S.via !== "phone") { S.phoneLead = lead.id; phoneCard(); dialLead(lead, true).then((ok) => { if (ok === false && S.ps) phoneEnd(); }); return; }
+    // "My phone" calls skip the voice webhook, so the same checks run here before the phone rings
+    preCheck(lead).then((ok) => { if (ok) phoneCallGo(lead); else if (S.ps) phoneNext(); });
+  }
+  async function phoneCallGo(lead) {
+    const cell = S.prefs.cellPhone && S.provider !== "telnyx"; let sid = null;
+    if (cell) { // recorded: the desk rings your cell first, then the lead joins the same recorded call
+      try { sid = (await api("/calls/cell", { method: "POST", body: { to: d10(lead.phone), leadId: lead.id, leadName: window.hpDesk.fullName(lead), leadState: lead.state || "" } })).sid; }
+      catch (e) { toast(e.message || "Couldn't ring your cell"); if (S.ps) phoneNext(); return; }
+    }
     window.hpDesk.callStop();
-    S.phoneLead = lead.id; S.callLead = lead.id;
+    S.phoneLead = lead.id; S.callLead = lead.id; S.callSid = sid;
     window.hpDesk.callStart(lead.id);
     openProfile(lead.id, { keepList: PF.id != null });
-    ringMyPhone(lead);
+    if (cell) toast("Ringing your cell. Answer it to connect the lead.");
+    else { toast(S.provider === "telnyx" && S.prefs.cellPhone ? "Not recorded. Cell calls are only available on Twilio numbers for now." : "Not recorded. Save your cell number in Phone settings to record these calls."); ringMyPhone(lead); }
     phoneCard();
+    if (sid) livePoll();
   }
   function phoneCard() { dock(); }
   function startPhoneSession() {
@@ -316,6 +329,14 @@
   }
 
   /* ================= click-to-call ================= */
+  // Do Not Call, calling hours and the 24-hour attempt cap: the same rules the voice webhook applies. Fails closed.
+  async function preCheck(lead) {
+    try {
+      const r = await api("/calls/check", { method: "POST", body: { to: d10(lead.phone), leadState: lead.state || "" } });
+      if (r.ok) return true;
+      toast(r.why || "This number can't be called right now"); return false;
+    } catch (e) { toast("Couldn't check this number, so the call didn't go through" + (e.message ? ": " + e.message : "")); return false; }
+  }
   async function dialLead(lead, fromSession) {
     if (S.via === "phone") { if (!S.ps) phoneCall(lead); return; }
     if (S.ps && !fromSession) return;
@@ -323,6 +344,7 @@
     if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Get a number in the <b>Number groups</b> tab (about $1 a month), or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast(S.ready ? "Phone is still connecting…" : "The dialer isn't set up yet"); return; }
     if (!(await micCheck())) return false;
+    if (!(await preCheck(lead))) return false;
     note("");
     const params = { To: d10(lead.phone), LeadId: lead.id, LeadName: window.hpDesk.fullName(lead), LeadState: lead.state || "", CallerId: S.prefs.defaultCallerId || "" };
     try {
@@ -363,7 +385,7 @@
   /* live transcript + machine detection while a click-to-call is up */
   async function livePoll() {
     clearTimeout(S.liveTimer);
-    if (!S.call || !S.callSid) return;
+    if (!(S.call || S.phoneLead) || !S.callSid) return;
     await pullLive(S.callSid, S.callLead);
     S.liveTimer = setTimeout(livePoll, 1200);
   }
@@ -377,12 +399,18 @@
       if (r.call?.vmDropped && S.call) { toast("Voicemail dropping. You're free for the next call."); }
     } catch {}
   }
-  function drawTx(lines, partial = []) { ["#hpdTx", "#hpfTx"].forEach((sel) => drawTxIn($(sel), lines, partial)); }
+  function drawTx(lines, partial = []) {
+    ["#hpdTx", "#hpfTx"].forEach((sel) => drawTxIn($(sel), lines, partial));
+    // Highpoint Copilot. It waits for the client's consent before it reads anything, and redacts again.
+    const lid = S.call ? S.callLead : (S.power?.connectedLead || S.callLead); if (!lid) return;
+    const who = (t) => (t.track === "inbound_track" ? (S.power ? "Lead" : "Agent") : (S.power ? "Agent" : "Lead"));
+    window.dispatchEvent(new CustomEvent("hp:tx", { detail: { leadId: lid, lines: lines.map((l) => ({ who: who(l), text: red(l.text), t: l.t })) } }));
+  }
   function drawTxIn(box, lines, partial) {
     if (!box) return;
     const near = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
     const who = (t) => (t.track === "inbound_track" ? (S.power ? "Lead" : "Agent") : (S.power ? "Agent" : "Lead"));
-    box.innerHTML = lines.map((l) => `<p><span class="who ${who(l)}">${who(l) === "Agent" ? "You" : "Lead"}</span>${esc(l.text)}</p>`).join("") + partial.map((l) => `<p class="partial"><span class="who ${who(l)}">${who(l) === "Agent" ? "You" : "Lead"}</span>${esc(l.text)}…</p>`).join("");
+    box.innerHTML = lines.map((l) => `<p><span class="who ${who(l)}">${who(l) === "Agent" ? "You" : "Lead"}</span>${esc(red(l.text))}</p>`).join("") + partial.map((l) => `<p class="partial"><span class="who ${who(l)}">${who(l) === "Agent" ? "You" : "Lead"}</span>${esc(red(l.text))}…</p>`).join("");
     if (near) box.scrollTop = box.scrollHeight;
   }
   function tiles(list) {
@@ -705,7 +733,7 @@
       const r = await api("/calls/transcript?sid=" + encodeURIComponent(b.dataset.tx));
       const box = $("#hpdTxView"); box.innerHTML = `<div class="hpd-tx" style="max-height:320px;margin-top:10px"></div>`;
       const ofCall = calls.calls.find((c) => c.sid === b.dataset.tx); const pm = ofCall?.mode === "power";
-      box.firstChild.innerHTML = (r.lines || []).map((l) => { const w = (l.track === "inbound_track") === pm ? "Lead" : "Agent"; return `<p><span class="who ${w}">${w === "Agent" ? "Agent" : "Lead"}</span>${esc(l.text)}</p>`; }).join("") || `<p class="hpd-sm">No transcript for this call.</p>`;
+      box.firstChild.innerHTML = (r.lines || []).map((l) => { const w = (l.track === "inbound_track") === pm ? "Lead" : "Agent"; return `<p><span class="who ${w}">${w === "Agent" ? "Agent" : "Lead"}</span>${esc(red(l.text))}</p>`; }).join("") || `<p class="hpd-sm">No transcript for this call.</p>`;
       box.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }));
     $("#hpdCsv").onclick = () => {
@@ -791,7 +819,7 @@
         ${f("hsRamp", "Warm-up days for new numbers", s.rampDays, 'type="number" min="0" max="30"')}
       </div>
       ${c("hsRec", "Record calls (both sides)", s.record)}
-      <label class="hpd-sm" style="display:flex;flex-direction:column;gap:6px;margin:6px 0">Recording notice ("This call may be recorded")<select id="hsNoticeMode" style="max-width:420px">${[["auto","Automatic: play it for leads in all-party-consent states (CA, FL, PA, WA, IL, MD, MA and others)"],["always","Always play it"],["never","Never (agents say it themselves)"]].map(([v,l])=>`<option value="${v}" ${(s.recordNotice===true?"always":s.recordNoticeMode||"auto")===v?"selected":""}>${l}</option>`).join("")}</select></label>
+      <p class="hpd-sm" style="margin:6px 0">Recording notice: when a call is recorded, the lead hears "This call may be recorded" first. This is always on.</p>
       ${c("hsTx", "Live transcription", s.transcribe)}
       ${c("hsLp", "Local presence (match caller ID to the lead's area code)", s.localPresence)}
       ${c("hsPool", "Agents can borrow team numbers for local presence", s.sharedPool)}
@@ -812,7 +840,7 @@
         const mx = rest.match(/max(\d+)/i); if (mx) r.max24h = +mx[1]; if (/nosun/i.test(rest)) r.noSunday = true; const ss = rest.match(/sun(\d+)/i); if (ss) r.sunStart = +ss[1];
         rules[m[1].toUpperCase()] = r;
       }
-      const settings = { company: $("#hsCo").value, callbackNumber: d10($("#hsCb").value), maxLines: +$("#hsLines").value, abandonCap: +$("#hsAb").value, dailyCapPerNumber: +$("#hsCap").value, maxAttempts24h: +$("#hsAtt").value, agentMaxNumbers: +$("#hsBuy").value, rampDays: +$("#hsRamp").value, record: $("#hsRec").checked, recordNotice: false, recordNoticeMode: $("#hsNoticeMode").value, transcribe: $("#hsTx").checked, localPresence: $("#hsLp").checked, sharedPool: $("#hsPool").checked, amdAutoSkip: $("#hsAmd").checked, inboundGreeting: $("#hsGreet").value, stateRules: rules };
+      const settings = { company: $("#hsCo").value, callbackNumber: d10($("#hsCb").value), maxLines: +$("#hsLines").value, abandonCap: +$("#hsAb").value, dailyCapPerNumber: +$("#hsCap").value, maxAttempts24h: +$("#hsAtt").value, agentMaxNumbers: +$("#hsBuy").value, rampDays: +$("#hsRamp").value, record: $("#hsRec").checked, recordNotice: false, recordNoticeMode: "always", transcribe: $("#hsTx").checked, localPresence: $("#hsLp").checked, sharedPool: $("#hsPool").checked, amdAutoSkip: $("#hsAmd").checked, inboundGreeting: $("#hsGreet").value, stateRules: rules };
       try { const r = await api("/setup", { method: "PUT", body: { settings } }); S.settings = r.settings; toast("Dialer settings saved"); } catch (e) { toast(e.message); }
     };
     $("#hpdDncAdd", el).onclick = async () => { const nums = $("#hpdDncN").value.split(/[\n,;]+/).map(d10).filter((x) => x.length === 10); if (!nums.length) return; await api("/calls/dnc", { method: "POST", body: { numbers: nums } }); toast(`${nums.length} added to Do Not Call`); $("#hpdDncN").value = ""; };
@@ -1088,6 +1116,7 @@
 
   function renderProfile() {
     const D = window.hpDesk, l = D.leads.get(PF.id); const el = $("#hpdProfile"); if (!l || !el) return;
+    window.dispatchEvent(new Event("hp:profile"));
     const idx = PF.list.indexOf(l.id), n = PF.list.length;
     const live = (S.call && S.callLead === l.id) || (S.power?.connectedLead === l.id && S.power?.connected);
     const onAnother = (S.call || S.power?.connected) && !live;
@@ -1108,6 +1137,7 @@
           <div class="hpf-midhead"><b>Conversations</b><button type="button" class="hpd-sm hpf-link" id="hpfScriptBtn">Script</button></div>
           <div class="hpf-script" id="hpfScript" hidden></div>
           <div class="hpf-tl" id="hpfTl"></div>
+          <div class="hpc-slot" id="hpfCopilot"></div>
           <div class="hpf-live" id="hpfLiveWrap" ${live ? "" : "hidden"}><div class="hpd-sm" style="margin-bottom:6px">Live transcript</div><div class="hpd-tx" id="hpfTx"></div>
             <div class="hpd-pad" id="hpfPad" ${S.padOpen ? "" : "hidden"} style="margin-top:8px">${"123456789*0#".split("").map((k) => `<button type="button" data-pdtmf="${k}">${k}</button>`).join("")}</div></div>
           <div class="hpf-compose">
@@ -1468,7 +1498,7 @@
         <button type="button" class="btn" id="hphPick">Campaigns</button>
       </div>
       <div class="hph-via" role="group" aria-label="Call with"><span class="hpd-sm">Call with</span><button type="button" data-via="line" aria-pressed="${S.via !== "phone"}">Browser phone line</button><button type="button" data-via="phone" aria-pressed="${S.via === "phone"}">My phone</button></div>
-      ${S.via === "phone" ? `<div class="hph-setup"><div><b>Calling from your own phone</b><span>Each call opens your computer’s phone app. On this PC that is often Google Chrome / Google Voice, not the Highpoint headset. Switch to <b>Browser phone line</b> to talk in this tab with your Telnyx number.</span></div></div>` : ""}
+      ${S.via === "phone" ? `<div class="hph-setup"><div><b>Calling from your own phone</b><span>${S.prefs.cellPhone && S.provider !== "telnyx" ? "Calls ring your cell first, and the lead joins the same recorded call." : S.provider === "telnyx" && S.prefs.cellPhone ? "<b>Not recorded.</b> Cell calls are only available on Twilio numbers for now." : "<b>Not recorded yet.</b> Save your cell number in Phone settings. Calls will then ring your cell and be recorded. Without it, each call opens your computer’s phone app."} Or switch to <b>Browser phone line</b> to talk in this tab.</span></div></div>` : ""}
       ${S.via !== "phone" && !S.demo && !S.ready ? `<div class="hph-setup"><div><b>${S.twilio ? "One step left: connect your phone line" : "Phone line not connected"}</b><span>${S.twilio ? (S.me?.admin ? `Your ${S.provider === "telnyx" ? "Telnyx" : "Twilio"} key is in. Press Connect once and every agent's dialer turns on.` : "Your admin needs to press Connect once.") : "Your admin needs to add the phone keys in Cloudflare first."}</span></div>${S.twilio && S.me?.admin ? `<button type="button" class="btn primary" id="hphSetup">Connect phone line</button>` : ""}</div>` : ""}
       ${S.via !== "phone" && !S.demo && S.ready && !S.numbers.length ? `<div class="hph-setup"><div><b>Get your first phone number</b><span>You need a number to call from. Pick one in your area code; ${S.provider === "telnyx" ? "Telnyx charges about $1 a month" : "Twilio charges about $1.15 a month"}.</span></div><button type="button" class="btn primary" id="hphBuy">Get a number</button></div>` : ""}
       <div class="hph-bar" data-h="${headset}"><span class="hph-dot"></span><b>${S.via === "phone" ? (S.phoneLead ? "Calling on your phone" : "Your phone is ready") : headset === "live" ? "On a call" : headset === "dial" ? "Headset on · dialing" : headset === "on" ? "Headset on" : "Headset off"}</b>
@@ -1639,7 +1669,7 @@
       <div style="overflow-x:auto"><table class="hpd-tbl"><thead><tr><th>Lead</th><th>When</th><th>Result</th><th>Length</th><th></th></tr></thead><tbody id="hprRows"></tbody></table></div><div id="hpdTxView"></div></div>`;
     const draw = () => { const q = $("#hprQ").value.trim().toLowerCase(); $("#hprRows").innerHTML = calls.filter((c) => !q || `${c.leadName} ${c.to}`.toLowerCase().includes(q)).slice(0, 200).map((c) => `<tr><td><b>${esc(c.leadName || fmt(c.to))}</b><br><span class="hpd-sm">${esc(fmt(c.to))}</span></td><td class="hpd-sm">${new Date(c.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</td><td><span class="hpd-pill">${esc(c.disposition || (c.human ? "Talked" : "—"))}</span></td><td class="num">${dur(c.recordingSec || c.talkSec)}</td><td><button class="btn" data-play="${esc(c.sid)}" type="button">Play</button> <button class="btn" data-tx="${esc(c.sid)}" type="button">Transcript</button>${c.leadId ? ` <button class="btn" data-open="${esc(c.leadId)}" type="button">Profile</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="5" class="hpd-sm">No recordings yet. Every connected call is recorded automatically.</td></tr>`;
       $$("[data-play]", el).forEach((b) => (b.onclick = async () => { if (S.demo) return toast("Recordings play here once real calls are made"); const r = await fetch(API + "/calls/recording?sid=" + encodeURIComponent(b.dataset.play), { headers: authHeader(), credentials: "same-origin" }); if (!r.ok) return toast("Recording isn't ready yet"); const au = document.createElement("audio"); au.controls = true; au.autoplay = true; au.style.height = "32px"; au.src = URL.createObjectURL(await r.blob()); b.replaceWith(au); }));
-      $$("[data-tx]", el).forEach((b) => (b.onclick = async () => { const r = await api("/calls/transcript?sid=" + encodeURIComponent(b.dataset.tx)); const c = calls.find((x) => x.sid === b.dataset.tx); const pm = c?.mode === "power"; $("#hpdTxView").innerHTML = `<div class="hpd-tx" style="max-height:320px;margin-top:10px">${(r.lines || []).map((l) => { const w = (l.track === "inbound_track") === pm ? "Lead" : "Agent"; return `<p><span class="who ${w}">${w}</span>${esc(l.text)}</p>`; }).join("") || `<p class="hpd-sm">No transcript for this call.</p>`}</div>`; }));
+      $$("[data-tx]", el).forEach((b) => (b.onclick = async () => { const r = await api("/calls/transcript?sid=" + encodeURIComponent(b.dataset.tx)); const c = calls.find((x) => x.sid === b.dataset.tx); const pm = c?.mode === "power"; $("#hpdTxView").innerHTML = `<div class="hpd-tx" style="max-height:320px;margin-top:10px">${(r.lines || []).map((l) => { const w = (l.track === "inbound_track") === pm ? "Lead" : "Agent"; return `<p><span class="who ${w}">${w}</span>${esc(red(l.text))}</p>`; }).join("") || `<p class="hpd-sm">No transcript for this call.</p>`}</div>`; }));
       $$("[data-open]", el).forEach((b) => (b.onclick = () => openProfile(b.dataset.open)));
     };
     $("#hprQ").oninput = draw; draw();
@@ -1657,7 +1687,20 @@
     $("#hpdDncDel2")?.addEventListener("click", async () => { const n = nums(); if (!n.length) return; await api("/calls/dnc", { method: "DELETE", body: { numbers: n } }); toast(`${n.length} removed`); renderDnc(); });
   }
 
-  window.hpDialer = { openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
+    // Recording consent: "agreed" is logged on the call. "declined" also stops recording and erases what was captured.
+  async function recordConsent(decision) {
+    if (!S.callSid) return false;
+    try { await api(decision === "declined" ? "/calls/privacy" : "/calls/consent", { method: "POST", body: { sid: S.callSid } }); return true; }
+    catch (e) { toast(e.message); return false; }
+  }
+  window.hpDialer = { recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
   window.addEventListener("hp:leadchange", () => { if (!S.call && !S.power) renderActions(); if (!$("#hpdHome")?.hidden) renderHome(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+})();
+
+// Highpoint Copilot: loads with the dialer. Consent gate, redaction, compliance flags, paste-a-transcript.
+(function loadCopilot() {
+  if (document.querySelector('script[src="/hp-copilot.js"]')) return;
+  const css = document.createElement("link"); css.rel = "stylesheet"; css.href = "/hp-copilot.css"; document.head.append(css);
+  const js = document.createElement("script"); js.src = "/hp-copilot.js"; document.body.append(js);
 })();

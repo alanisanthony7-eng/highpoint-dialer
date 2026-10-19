@@ -1,6 +1,8 @@
 // Twilio status callbacks: call progress, answering-machine detection, recordings, live transcription
 import { wrap, json, twilioParams, getJ, setJ, updateJ, aggregate, patchCallBySid, to10, later, config as loadConfig } from "../lib/hp.mjs";
 import { dropVoicemail, hangup, updSess, isMachine } from "../lib/calls.mjs";
+import { redact } from "../lib/redact.mjs";
+import { tw } from "../lib/hp.mjs";
 
 const ok = () => new Response(null, { status: 204 });
 const DONE = ["completed", "busy", "no-answer", "failed", "canceled"];
@@ -15,7 +17,8 @@ export default wrap(async (req, ctx) => {
     const c = q.get("c");
     if (p.TranscriptionEvent !== "transcription-content") return ok();
     let d = {}; try { d = JSON.parse(p.TranscriptionData || "{}"); } catch {}
-    const text = (d.transcript || "").trim(); if (!text) return ok();
+    const text = redact((d.transcript || "").trim()); if (!text) return ok();
+    if ((await getJ("txoff", c))) return ok(); // client declined recording: keep nothing
     const line = { t: Date.now(), track: p.Track, text, conf: d.confidence };
     if (p.Final === "true") {
       await updateJ("tx", c, (a) => { a.lines = a.lines || []; a.lines.push(line); if (a.lines.length > 800) a.lines.shift(); a.partial = {}; return a; }, {});
@@ -128,6 +131,10 @@ export default wrap(async (req, ctx) => {
   /* recordings */
   if (type === "rec") {
     if (p.RecordingStatus !== "completed") return ok();
+    if ((await getJ("txoff", p.CallSid))) { // client declined recording: delete it at Twilio, keep no link
+      later(ctx, tw(`/Accounts/{SID}/Recordings/${p.RecordingSid}.json`, { method: "DELETE" }).catch(() => null));
+      return ok();
+    }
     await patchCallBySid(p.CallSid, (c) => { c.recordingSid = p.RecordingSid; c.recordingSec = +p.RecordingDuration || 0; return c; });
     return ok();
   }

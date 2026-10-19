@@ -125,8 +125,8 @@ export const DEFAULT_SETTINGS = {
   dailyCapPerNumber: 75,       // outbound dials per number per day
   rampDays: 14,                // new numbers ramp up over this many days
   record: true,
-  recordNotice: false,         // legacy: true = always play the notice
-  recordNoticeMode: "auto",    // auto = play "this call may be recorded" when the lead is in an all-party-consent state; always; never
+  recordNotice: false,         // legacy setting: the notice now always plays while a call is recorded (see recordNoticeFor)
+  recordNoticeMode: "auto",    // legacy setting: no longer changes anything
   transcribe: true,
   localPresence: true,
   sharedPool: true,            // agents may borrow team numbers for local presence
@@ -183,14 +183,12 @@ const SPLIT = { 850: [ET, CT], 448: [ET, CT], 219: [CT], 812: [ET, CT], 930: [ET
 export const AREA = {};
 for (const [st, codes] of Object.entries(AC)) for (const c of codes.split(" ")) AREA[c] = st;
 export const stateOf = (num) => AREA[to10(num).slice(0, 3)] || "";
-// States that require every party's consent to record a phone call
+// States that require every party's consent to record a phone call (kept for reference)
 export const ALL_PARTY = new Set(["CA", "CT", "DE", "FL", "IL", "MD", "MA", "MI", "MT", "NV", "NH", "OR", "PA", "WA"]);
+// Decided for the whole product: whenever a call is recorded, the lead hears "this call may be recorded" first, in every
+// state. This overrides the old "never" option, so the notice can't be switched off by mistake.
 export function recordNoticeFor(S, num, leadState) {
-  if (!S.record) return false;
-  const mode = S.recordNotice === true ? "always" : S.recordNoticeMode || "auto";
-  if (mode === "always") return true;
-  if (mode === "never") return false;
-  return ALL_PARTY.has(String(leadState || stateOf(num) || "").toUpperCase());
+  return !!S.record;
 }
 export const zonesOf = (num, leadState) => {
   const ac = to10(num).slice(0, 3);

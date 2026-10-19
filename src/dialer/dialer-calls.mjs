@@ -7,7 +7,9 @@
 //  GET/POST/DELETE /api/dialer/calls/dnc
 //  GET  /api/dialer/calls/inbox   POST /api/dialer/calls/inbox {key, done}
 import { Buffer } from "node:buffer";
-import { wrap, json, bad, requireUser, getJ, setJ, updateJ, store, listKeys, aggregate, patchCallBySid, tw, to10, today, SID, TOKEN } from "../lib/hp.mjs";
+import { wrap, json, bad, requireUser, getJ, setJ, updateJ, store, listKeys, aggregate, patchCallBySid, tw, to10, today, SID, TOKEN, preflight, addAttempt, config as loadConfig, siteUrl, pickCallerId, bumpNumber, saveCall, e164, stateOf } from "../lib/hp.mjs";
+import { redact } from "../lib/redact.mjs";
+import { isTelnyx } from "../telnyx/tx.mjs";
 
 const days = (n) => Array.from({ length: n }, (_, i) => today("America/New_York", Date.now() - i * 864e5));
 
@@ -30,19 +32,90 @@ export default wrap(async (req) => {
     return json({ calls: out.slice(0, 1500) });
   }
 
+  // Telnyx browser calls and "My phone" calls don't pass through the voice webhook, so the browser asks here first:
+  // Do Not Call, state calling hours and the 24-hour attempt cap all apply the same way.
+  if (action === "check" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const cfg = await loadConfig();
+    const r = await preflight(user, b.to, cfg.settings, b.leadState || "");
+    if (r.ok) await addAttempt(b.to);
+    return json(r);
+  }
+
+  // Client declined recording: stop recording + transcription and erase what was captured.
+  if (action === "privacy" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const sid = String(b.sid || ""); const ix = sid && (await getJ("callidx", sid));
+    if (ix && ix.agent !== user.identity && !user.admin) return bad("Not your call", 403);
+    if (!sid) return json({ ok: true, stopped: false });
+    await setJ("txoff", sid, { at: Date.now(), by: user.identity });
+    await setJ("tx", sid, { lines: [], declined: true });
+    if (ix) await patchCallBySid(sid, (c) => { c.declined = true; c.recordingSid = null; return c; });
+    if (SID() && TOKEN()) {
+      await tw(`/Accounts/{SID}/Calls/${sid}/Recordings/Twilio.CURRENT.json`, { method: "POST", form: { Status: "stopped" } }).catch(() => null);
+      await tw(`/Accounts/{SID}/Calls/${sid}/Transcriptions/hp-${sid}.json`, { method: "POST", form: { Status: "stopped" } }).catch(() => null);
+    }
+    return json({ ok: true, stopped: true });
+  }
+
+  // Calls to the agent's own cell go through the desk, so they're recorded and transcribed like browser calls.
+  // Twilio rings the agent first; when they answer, the lead is dialed inside the same recorded <Dial> (voice step=cell).
+  if (action === "cell" && req.method === "POST") {
+    if (isTelnyx()) return bad("Calls to your cell are only available on Twilio numbers for now.", 400);
+    const b = await req.json().catch(() => ({}));
+    const prefs = (await getJ("prefs", user.identity)) || {};
+    const cell = to10(prefs.cellPhone || "");
+    if (!cell) return bad("Save your cell number in Phone settings first.", 400);
+    const leadNum = to10(b.to);
+    const cfg = await loadConfig(); const S = cfg.settings;
+    const check = await preflight(user, leadNum, S, b.leadState || "");
+    if (!check.ok) return bad(check.why, 403);
+    const cid = await pickCallerId(user, leadNum, { ...S, localPresence: prefs.localPresence ?? S.localPresence }, prefs.defaultCallerId);
+    if (!cid) return bad("You don't have a caller ID number yet. Buy or claim a number in the Numbers tab.", 400);
+    const token = crypto.randomUUID().replace(/-/g, "");
+    const bridge = { agent: user.identity, agentName: user.name || "", leadId: String(b.leadId || ""), leadName: String(b.leadName || "").slice(0, 80), to: leadNum, from: cid.e164, state: stateOf(leadNum), at: Date.now() };
+    await setJ("cellbridge", token, bridge);
+    let c;
+    try {
+      c = await tw("/Accounts/{SID}/Calls.json", {
+        method: "POST",
+        form: { To: e164(cell), From: cid.e164, Timeout: 25, Url: `${siteUrl()}/api/dialer/voice?step=cell&t=${token}`, Method: "POST" },
+      });
+    } catch (e) { return bad("Couldn't ring your cell: " + (e.message || "Twilio error"), 503); }
+    const sid = c.sid;
+    await setJ("cellbridge", token, { ...bridge, sid });
+    const rec = { id: sid, sid, agent: user.identity, agentName: bridge.agentName, leadId: bridge.leadId, leadName: bridge.leadName, to: leadNum, from: cid.e164, dir: "out", mode: "cell", at: Date.now(), status: "dialing", state: bridge.state };
+    await saveCall(rec);
+    await Promise.all([bumpNumber(cid.e164, "dials"), addAttempt(leadNum), aggregate(rec, "dial")]);
+    return json({ ok: true, sid, cell });
+  }
+
+  // The agent recorded that the client agreed after the disclosure. Kept on the call as evidence.
+  if (action === "consent" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const sid = String(b.sid || "");
+    if (!sid) return bad("No call to attach consent to", 400);
+    const ix = await getJ("callidx", sid);
+    if (ix && ix.agent !== user.identity && !user.admin) return bad("Not your call", 403);
+    if (await getJ("txoff", sid)) return json({ ok: true, recorded: false });
+    if (ix) await patchCallBySid(sid, (c) => { c.consent = { at: Date.now(), by: user.identity }; return c; });
+    return json({ ok: true, recorded: !!ix });
+  }
+
   if (action === "live") {
     const sid = q.get("sid"); const ix = await getJ("callidx", sid);
     if (!ix) return json({ call: null });
     if (ix.agent !== user.identity && !user.admin) return bad("Not your call", 403);
     const [call, tx, p1, p2] = await Promise.all([getJ("calls", `${ix.agent}/${ix.id}`), getJ("tx", sid), getJ("txp", `${sid}/inbound_track`), getJ("txp", `${sid}/outbound_track`)]);
-    return json({ call, transcript: tx?.lines || [], partial: [p1, p2].filter((p) => p && p.t > Date.now() - 8000) });
+    const clean = (l) => ({ ...l, text: redact(l.text) });
+    return json({ call, transcript: (tx?.lines || []).map(clean), partial: [p1, p2].filter((p) => p && p.t > Date.now() - 8000).map(clean) });
   }
 
   if (action === "dispo") {
     const b = await req.json();
     const rec = await patchCallBySid(b.sid, (c) => {
       if (c.agent !== user.identity && !user.admin) return undefined;
-      c.disposition = String(b.disposition || "").slice(0, 60); c.note = String(b.note || "").slice(0, 2000);
+      c.disposition = String(b.disposition || "").slice(0, 60); c.note = redact(String(b.note || "").slice(0, 2000));
       if (b.leadId) c.leadId = b.leadId; c.dispoAt = Date.now(); return c;
     });
     if (!rec) return bad("Call not found", 404);
@@ -63,6 +136,7 @@ export default wrap(async (req) => {
     const rec = ix && (await getJ("calls", `${ix.agent}/${ix.id}`));
     if (!rec?.recordingSid) return bad("No recording for this call", 404);
     if (rec.agent !== user.identity && !user.admin) return bad("Not your call", 403);
+    if (rec.declined) return bad("The client declined recording, so this call has no recording.", 404);
     const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${SID()}/Recordings/${rec.recordingSid}.mp3`, { headers: { authorization: "Basic " + Buffer.from(SID() + ":" + TOKEN()).toString("base64") } });
     if (!r.ok) return bad("Recording isn't ready yet", 404);
     return new Response(r.body, { headers: { "content-type": "audio/mpeg", "cache-control": "private, max-age=600" } });
@@ -71,7 +145,7 @@ export default wrap(async (req) => {
   if (action === "transcript") {
     const sid = q.get("sid"); const ix = await getJ("callidx", sid);
     if (!ix || (ix.agent !== user.identity && !user.admin)) return bad("Not found", 404);
-    return json({ lines: ((await getJ("tx", sid)) || {}).lines || [] });
+    return json({ lines: (((await getJ("tx", sid)) || {}).lines || []).map((l) => ({ ...l, text: redact(l.text) })) });
   }
 
   if (action === "analytics") {

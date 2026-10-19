@@ -2,7 +2,7 @@
 // POST /api/dialer/setup     -> (admin) one-click: create API key + TwiML app, point numbers at this site
 // PUT  /api/dialer/setup     -> (admin) save dialer settings
 import { isTelnyx, txSetup } from "../telnyx/tx.mjs";
-import { wrap, json, bad, requireUser, config as loadConfig, setJ, getJ, tw, siteUrl, SID, TOKEN, DEFAULT_SETTINGS, updateJ, numberHooks } from "../lib/hp.mjs";
+import { wrap, json, bad, requireUser, config as loadConfig, setJ, getJ, tw, siteUrl, SID, TOKEN, DEFAULT_SETTINGS, updateJ, numberHooks, to10 } from "../lib/hp.mjs";
 
 export default wrap(async (req) => {
   const user = await requireUser(req);
@@ -27,7 +27,8 @@ export default wrap(async (req) => {
 
   if (req.method === "PATCH") { // agent's own preferences
     const body = await req.json();
-    const allowed = ["lines", "autoVm", "vmGreeting", "defaultCallerId", "ringMode", "localPresence", "camps"];
+    const allowed = ["lines", "autoVm", "vmGreeting", "defaultCallerId", "ringMode", "localPresence", "camps", "cellPhone"];
+    if ("cellPhone" in body) body.cellPhone = to10(body.cellPhone) || "";
     if (body.camps && JSON.stringify(body.camps).length > 400_000) return bad("Too many campaigns saved. Delete a few old ones.");
     const next = await updateJ("prefs", user.identity, (p) => { for (const k of allowed) if (k in body) p[k] = body[k]; return p; }, {});
     return json({ prefs: next });

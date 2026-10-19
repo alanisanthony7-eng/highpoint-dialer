@@ -20,6 +20,20 @@ export default wrap(async (req, ctx) => {
 
   /* ---------- follow-up steps ---------- */
   if (step === "after") return xml("<Hangup/>");
+  if (step === "cell") { // the agent's cell picked up: one-time link, must be this same call, and it expires after 3 minutes
+    const t = String(u.searchParams.get("t") || "").replace(/[^a-f0-9]/g, "");
+    const br = t ? await getJ("cellbridge", t) : null;
+    if (!br || br.used || Date.now() - br.at > 180000 || (br.sid && br.sid !== p.CallSid)) return xml(say("Sorry, this call can't be connected.") + "<Hangup/>");
+    await setJ("cellbridge", t, { ...br, used: true, answeredAt: Date.now() });
+    const recAttr = S.record ? ` record="record-from-answer-dual" recordingStatusCallback="${ev("type=rec")}" recordingStatusCallbackEvent="completed"` : "";
+    const notice = recordNoticeFor(S, br.to) ? ` url="${x(H() + "/api/dialer/voice?step=notice")}"` : ""; // never record without telling the lead
+    const first = String(br.leadName || "your lead").split(" ")[0];
+    return xml(
+      (S.transcribe ? txStart(p.CallSid, "Agent", "Lead") : "") + say(`Connecting you to ${first}.`) +
+      `<Dial answerOnBridge="true" callerId="${x(br.from)}" timeout="30" timeLimit="14400" action="${x(H() + "/api/dialer/voice?step=after")}"${recAttr}>` +
+      `<Number${notice} machineDetection="DetectMessageEnd" amdStatusCallback="${ev("type=amd&p=" + p.CallSid)}" amdStatusCallbackMethod="POST" statusCallback="${ev("type=child&p=" + p.CallSid)}" statusCallbackEvent="initiated ringing answered completed">${x(e164(br.to))}</Number></Dial>`
+    );
+  }
   if (step === "notice") return xml(say("This call may be recorded for quality."));
   if (step === "inafter") {
     if (["completed", "answered"].includes(p.DialCallStatus)) return xml("<Hangup/>");
@@ -48,7 +62,7 @@ export default wrap(async (req, ctx) => {
     if (!clients.length) return xml(`<Redirect>${x(H() + "/api/dialer/voice?step=inafter")}</Redirect>`);
     const cl = clients.map((c) => `<Client><Identity>${x(c)}</Identity><Parameter name="from" value="${x(to10(p.From))}"/><Parameter name="line" value="${x(p.To)}"/><Parameter name="kind" value="inbound"/></Client>`).join("");
     const recAttr = S.record ? ` record="record-from-answer-dual" recordingStatusCallback="${ev("type=rec")}" recordingStatusCallbackEvent="completed"` : "";
-    return xml(`${S.transcribe ? txStart(p.CallSid, "Lead", "Agent") : ""}<Dial timeout="22" answerOnBridge="true" action="${x(H() + "/api/dialer/voice?step=inafter")}"${recAttr}>${cl}</Dial>`);
+    return xml(`${S.record ? say("This call may be recorded for quality.") : ""}${S.transcribe ? txStart(p.CallSid, "Lead", "Agent") : ""}<Dial timeout="22" answerOnBridge="true" action="${x(H() + "/api/dialer/voice?step=inafter")}"${recAttr}>${cl}</Dial>`);
   }
 
   /* ---------- outbound from the browser phone ---------- */
