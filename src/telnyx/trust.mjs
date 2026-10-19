@@ -210,7 +210,7 @@ export async function trustRoute(req, action) {
 
   if (action === "trust-loa" && req.method === "GET") { // Telnyx fills the letter in from the business profile
     const r = await fetch(`${API}/v2/enterprises/${ent}/reputation/loa`, { method: "POST", headers: { authorization: "Bearer " + TX_KEY(), "content-type": "application/json", accept: "application/pdf" }, body: "{}" });
-    if (!r.ok) { const j = await r.json().catch(() => ({})); return bad("Telnyx: " + (j.errors?.[0]?.detail || r.statusText), 400); }
+    if (!r.ok) { const j = await r.json().catch(() => ({})); const er = j.errors?.[0] || {}; return bad("Telnyx: " + (er.detail || r.statusText) + (er.code ? ` (error ${er.code})` : ""), 400); }
     return new Response(r.body, { headers: { "content-type": "application/pdf", "content-disposition": 'attachment; filename="telnyx-letter-of-authorization.pdf"', "cache-control": "no-store" } });
   }
 
@@ -222,7 +222,7 @@ export async function trustRoute(req, action) {
     fd.append("file", new Blob([buf], { type: "application/pdf" }), "signed-letter-of-authorization.pdf");
     const r = await fetch(`${API}/v2/documents`, { method: "POST", headers: { authorization: "Bearer " + TX_KEY(), accept: "application/json" }, body: fd });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.data?.id) return bad("Telnyx couldn't take the letter: " + (j.errors?.[0]?.detail || r.statusText), 400);
+    if (!r.ok || !j.data?.id) return bad("Telnyx couldn't take the letter: " + (j.errors?.[0]?.detail || r.statusText) + (j.errors?.[0]?.code ? ` (error ${j.errors[0].code})` : ""), 400);
     const docId = j.data.id;
     let live;
     try {

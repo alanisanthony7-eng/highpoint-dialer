@@ -15,7 +15,12 @@ export async function tx(path, { method = "GET", body, query, raw } = {}) {
   if (raw && r.ok) return r.text();
   if (r.status === 204) return {};
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw httpErr(r.status >= 500 ? 502 : 400, "Telnyx: " + (j.errors?.[0]?.detail || j.errors?.[0]?.title || r.statusText));
+  if (!r.ok) {
+    const er = j.errors?.[0] || {};
+    // error 10038 = blocked at this Telnyx account level: say which request, so it's clear what needs upgrading
+    const where = String(er.code) === "10038" ? ` [${method} ${path.split("?")[0].replace(/\/[0-9a-f-]{20,}|\/v3:[^/]+|\/\+?\d{6,}/gi, "/…")}]` : "";
+    throw httpErr(r.status >= 500 ? 502 : 400, "Telnyx: " + (er.detail || er.title || r.statusText) + (er.code ? ` (error ${er.code})` : "") + where);
+  }
   return j;
 }
 const rnd = (n, abc = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789") => Array.from(crypto.randomBytes(n), (b) => abc[b % abc.length]).join("");

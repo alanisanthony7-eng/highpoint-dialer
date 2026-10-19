@@ -39,7 +39,7 @@ globalThis.fetch = async (url, o = {}) => {
   if (p === "/v2/enterprises/ent1/reputation" && m === "GET") return telnyx.some((x) => x.path === "/v2/enterprises/ent1/reputation" && x.method === "POST") ? J({ data: { status: "approved", loa_status: "approved" } }) : J({ errors: [{ detail: "Not found" }] }, 404);
   if (p === "/v2/enterprises/ent1/reputation/numbers" && m === "POST") { monitored.push(...body.phone_numbers); return J({ data: body.phone_numbers.map((n) => ({ phone_number: n })) }); }
   if (p === "/v2/enterprises/ent1/reputation/numbers" && m === "GET") return J({ data: monitored.map((n) => ({ phone_number: n, reputation_data: scores[n] || null })) });
-  if (/^\/v2\/phone_numbers\/[^/]+\/voice$/.test(p) && m === "PATCH") return p.includes("pnBad") ? J({ errors: [{ detail: "CNAM not available" }] }, 422) : J({ data: {} });
+  if (/^\/v2\/phone_numbers\/[^/]+\/voice$/.test(p) && m === "PATCH") return p.includes("pnBad") ? J({ errors: [{ code: "10038", title: "Feature not permitted", detail: "This feature is not permitted at this account level. Refer to https://telnyx.com/upgrade." }] }, 403) : J({ data: {} });
   return J({ data: {} });
 };
 
@@ -92,6 +92,7 @@ ok((await call("boss", "/api/telnyx/trust-cnam", { method: "POST", body: { name:
 r = await call("boss", "/api/telnyx/trust-cnam", { method: "POST", body: { name: "Highpoint Fin" } });
 ok(r.s === 200 && r.j.set === 2 && r.j.failed["+13055550103"], "the caller name is set on every number and failures are reported per number");
 ok(last("/v2/phone_numbers/pn1/voice", "PATCH")?.body?.cnam_listing?.cnam_listing_details === "HIGHPOINT FIN", "each number gets the name in capitals");
+ok(/not permitted at this account level.*\(error 10038\) \[PATCH \/v2\/phone_numbers\/pnBad\/voice\]/.test(r.j.failed["+13055550103"]), "a feature blocked at the account level says so, with the error number and which request it was");
 ok(!telnyx.some((x) => x.path === "/v2/phone_numbers/pnOld/voice"), "released numbers are left alone");
 
 // ---- Free Caller Registry ----
