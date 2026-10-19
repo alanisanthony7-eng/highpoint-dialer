@@ -1518,6 +1518,7 @@
       <div class="hph-via" role="group" aria-label="Call with"><span class="hpd-sm">Call with</span><button type="button" data-via="line" aria-pressed="${S.via !== "phone"}">Browser phone line</button><button type="button" data-via="phone" aria-pressed="${S.via === "phone"}">My phone</button></div>
       ${S.via === "phone" ? `<div class="hph-setup"><div><b>Calling from your own phone</b><span>${S.prefs.cellPhone && S.provider !== "telnyx" ? "Calls ring your cell first, and the lead joins the same recorded call." : S.provider === "telnyx" && S.prefs.cellPhone ? "<b>Not recorded.</b> Cell calls are only available on Twilio numbers for now." : "<b>Not recorded yet.</b> Save your cell number in Phone settings. Calls will then ring your cell and be recorded. Without it, each call opens your computer’s phone app."} Or switch to <b>Browser phone line</b> to talk in this tab.</span></div></div>` : ""}
       ${S.via !== "phone" && !S.demo && !S.ready ? `<div class="hph-setup"><div><b>${S.twilio ? "One step left: connect your phone line" : "Phone line not connected"}</b><span>${S.twilio ? (S.me?.admin ? `Your ${S.provider === "telnyx" ? "Telnyx" : "Twilio"} key is in. Press Connect once and every agent's dialer turns on.` : "Your admin needs to press Connect once.") : "Your admin needs to add the phone keys in Cloudflare first."}</span></div>${S.twilio && S.me?.admin ? `<button type="button" class="btn primary" id="hphSetup">Connect phone line</button>` : ""}</div>` : ""}
+      ${S.via !== "phone" && !S.demo && S.ready && S.me?.admin && S.provider === "telnyx" ? `<div class="hph-setup"><div><b>Phone line connected</b><span>After any change, press once so Telnyx sends call events to this site. Live transcripts need that.</span></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn" id="hphSetup2">Update phone connection</button><a class="btn" href="/api/telnyx/log" target="_blank" rel="noopener">Call event log</a></div></div>` : ""}
       ${S.via !== "phone" && !S.demo && S.ready && !S.numbers.length ? `<div class="hph-setup"><div><b>Get your first phone number</b><span>You need a number to call from. Pick one in your area code; ${S.provider === "telnyx" ? "Telnyx charges about $1 a month" : "Twilio charges about $1.15 a month"}.</span></div><button type="button" class="btn primary" id="hphBuy">Get a number</button></div>` : ""}
       <div class="hph-bar" data-h="${headset}"><span class="hph-dot"></span><b>${S.via === "phone" ? (S.phoneLead ? "Calling on your phone" : "Your phone is ready") : headset === "live" ? "On a call" : headset === "dial" ? "Headset on · dialing" : headset === "on" ? "Headset on" : "Headset off"}</b>
         <span class="hpd-sm">${headset === "live" ? "Talk away. The lead's profile is open." : headset === "dial" ? `Calling ${lines} at a time from ${esc(listName())}. Whoever says hello first comes straight to you.` : headset === "on" ? "Line is ready. Press Start calling." : S.ready ? "Connecting your line… allow the microphone if your browser asks." : "Press Start calling; your browser joins the line first (allow the microphone)."}</span>
@@ -1560,11 +1561,19 @@
       <button type="button" class="hpf-link hpd-sm" id="hphManual">${$("#dPane").classList.contains("hpd-showmanual") ? "Hide" : "Show"} the one-by-one call queue</button>`;
     // wiring
     $("#hphPick").onclick = openPicker; $("#hphAll").onclick = openPicker;
-    $("#hphSetup")?.addEventListener("click", async (e) => {
-      const b = e.currentTarget; b.disabled = true; b.textContent = "Connecting…";
-      try { const r = await api("/setup", { method: "POST" }); S.ready = true; document.body.classList.add("hpd-on"); toast(r.trial ? "Connected. Twilio trial accounts can only call numbers you've verified in Twilio." : "Phone line connected"); startDevice(); refreshNumbers(); renderPhone(); }
-      catch (er) { toast(er.message); b.disabled = false; b.textContent = "Connect phone line"; }
-    });
+    // Connect (first time) or update the existing connection, e.g. to re-register Telnyx's call-event webhook
+    const connectPhone = async (e) => {
+      const b = e.currentTarget, label = b.textContent, wasReady = S.ready;
+      b.disabled = true; b.textContent = "Connecting…";
+      try {
+        const r = await api("/setup", { method: "POST" }); S.ready = true; document.body.classList.add("hpd-on");
+        toast(wasReady ? "Phone connection updated" : r.trial ? "Connected. Twilio trial accounts can only call numbers you've verified in Twilio." : "Phone line connected");
+        if (!wasReady) startDevice(); // a phone that's already running stays as it is
+        refreshNumbers(); renderPhone();
+      } catch (er) { toast(er.message); b.disabled = false; b.textContent = label; }
+    };
+    $("#hphSetup")?.addEventListener("click", connectPhone);
+    $("#hphSetup2")?.addEventListener("click", connectPhone);
     $("#hphBuy")?.addEventListener("click", () => openTab("numbers"));
     $("#hphSound").onclick = () => { S.sound.open = !S.sound.open; lsSet("hpd.sound", S.sound); renderHome(); };
     $("#hphTest").onclick = () => ding(true);
