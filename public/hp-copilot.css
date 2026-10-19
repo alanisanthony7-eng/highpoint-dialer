@@ -94,3 +94,15 @@
 .hpc-ai{font-size:10.5px;color:var(--hp-mut,#9AA1AE)}
 @media (width<=760px){.hpc-pill{left:12px;bottom:calc(78px + env(safe-area-inset-bottom,0px))}}
 @media (prefers-reduced-motion:reduce){.hpc *,.hpc-pill{animation:none!important}}
+
+/* Script stage: where the live call is in the FEX script */
+.hpc-stage{display:flex;flex-direction:column;gap:8px;padding:10px 11px;border-radius:12px;background:rgba(95,184,255,.07);border:1px solid rgba(95,184,255,.24)}
+.hpc-stage-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px}
+.hpc-stage-h b{font-weight:750}
+.hpc-stage-h em{font-style:normal;font-size:11px;color:var(--hp-mut,#9AA1AE);font-variant-numeric:tabular-nums}
+.hpc-segs{display:grid;gap:4px}
+.hpc-segs i{height:5px;border-radius:3px;background:rgba(255,255,255,.12)}
+.hpc-segs i.done{background:#5FB8FF}
+.hpc-segs i.now{background:#FF2E88;box-shadow:0 0 10px rgba(255,46,136,.55)}
+.hpc-next{font-size:12.5px;line-height:1.5}
+.hpc-next span{display:block;font:800 10px/1 var(--f-ui,system-ui);letter-spacing:.14em;text-transform:uppercase;color:#9CC3F0;margin-bottom:5px}

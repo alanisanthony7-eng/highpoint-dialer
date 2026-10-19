@@ -135,3 +135,59 @@ window.HP_FEX = {
     ] }
   ]
 };
+
+/* Live call tracking against the script above. Pure: give it the call's lines ({who, text}) and it works out how far
+   through the script the agent has got. Only the agent's lines move it, because the agent is the one reading. Each line
+   is matched against the script's own words (names, numbers, {placeholders} and (notes) are ignored). The position only
+   moves forward, and a line needs several distinctive words from one script line, so small talk does not jump a stage. */
+(() => {
+  const STOP = new Set(("this that with have just your what when here there about going gonna would could will like okay " +
+    "also right know yeah sure really make want thing things gotta insurance coverage premium monthly month policy client " +
+    "alright perfect beautiful more from they them then than been were does into only some very much").split(" "));
+  const WIN = 30; // how far ahead of the current line a normal match may look
+  const words = (s) => {
+    const set = new Set();
+    String(s || "").toLowerCase().replace(/’/g, "'").replace(/\{[^}]*\}|\([^)]*\)/g, " ")
+      .match(/[a-z]+/g)?.forEach((w) => { if (w.length >= 4 && !STOP.has(w)) set.add(w); });
+    return set;
+  };
+  const hits = (set, said) => { let m = 0; for (const w of set) if (said.has(w)) m++; return m; };
+
+  function track(lines, stages) {
+    const items = [];
+    (stages || []).forEach((st, si) => st.items.forEach((it) => { if (it.k === "say") items.push({ si, text: it.x, set: words(it.x) }); }));
+    // first script line in [from, to] that this spoken line reads. Normal: 3+ words and half of the line.
+    // Strict (a jump-in, or the agent skipping ahead): 4+ words and 70% of the line.
+    const find = (said, from, to, strict) => {
+      for (let i = from; i <= to && i < items.length; i++) {
+        const n = items[i].set.size; if (n < 3) continue;
+        const m = hits(items[i].set, said);
+        if (strict ? n >= 4 && m >= 4 && m * 10 >= n * 7 : m >= 3 && m * 2 >= n) return i;
+      }
+      return -1;
+    };
+    let ptr = -1;
+    for (const ln of lines || []) {
+      if (ln.who !== "Agent") continue;
+      const said = words(ln.text);
+      if (said.size < 3) continue;
+      for (let rep = 0; rep < 3; rep++) { // one breath can read two script lines back to back
+        let hit = find(said, ptr + 1, ptr + WIN, false);
+        if (hit < 0) hit = find(said, ptr + 1, items.length - 1, true);
+        if (hit < 0) break;
+        ptr = hit;
+      }
+    }
+    const cur = ptr >= 0 ? items[ptr] : null, nx = items[ptr + 1] || null;
+    return {
+      stage: cur ? cur.si : -1,
+      stages: (stages || []).length,
+      title: cur ? stages[cur.si].title : "",
+      reached: cur ? cur.text : "",
+      next: nx ? { text: nx.text, stage: nx.si } : null,
+      done: items.length > 0 && ptr >= items.length - 1,
+      pct: items.length ? Math.round(((ptr + 1) / items.length) * 100) : 0,
+    };
+  }
+  window.HP_FEX_TRACK = { track };
+})();

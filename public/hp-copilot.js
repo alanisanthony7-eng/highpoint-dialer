@@ -224,6 +224,8 @@
     s.redacted = hid;
     const skip = (i) => s.skips.some(([a, b]) => i >= a && (b == null || i < b));
     s.ex = extract(s.lines, skip);
+    // where the call is in the FEX script (agent lines only; see hp-fex-script.js)
+    s.fex = window.HP_FEX_TRACK && window.HP_FEX ? window.HP_FEX_TRACK.track(s.lines, window.HP_FEX.stages) : null;
   }
 
   /* ============ events from the dialer ============ */
@@ -378,6 +380,15 @@ Never include Social Security, bank, card or account numbers. Transcript:
   function head(state, label) {
     return `<div class="hpc-h"><b>${ICON}Copilot</b><span class="hpc-st" data-s="${state}"><i></i>${label}</span></div>`;
   }
+  // Where the live call is in the FEX script: the stage, a progress strip and the next line to say.
+  function stageHTML(fx, l) {
+    const S = window.HP_FEX.stages, n = S.length;
+    const head = fx.done ? "Script complete" : fx.stage < 0 ? "Waiting for the intro" : `Stage ${fx.stage + 1} of ${n} · ${esc(fx.title)}`;
+    const segs = S.map((st, i) => `<i class="${i < fx.stage ? "done" : i === fx.stage ? "now" : ""}" title="${esc(st.title)}"></i>`).join("");
+    const fill = (t) => esc(t.length > 170 ? t.slice(0, 169).trimEnd() + "…" : t).replace(/\{name\}/g, esc(l.first || "them")).replace(/\{address\}/g, esc(l.address || "address"));
+    const nx = fx.next ? `<div class="hpc-next"><span>Next${fx.next.stage !== fx.stage ? " · " + esc(S[fx.next.stage].title) : ""}</span>“${fill(fx.next.text)}”</div>` : "";
+    return `<div class="hpc-stage"><div class="hpc-stage-h"><b>${head}</b><em>${fx.pct}%</em></div><div class="hpc-segs" style="grid-template-columns:repeat(${n},1fr)">${segs}</div>${nx}</div>`;
+  }
   function liveHTML(s, l) {
     const prod = s?.product || prodOf(l);
     const st = !s ? ["idle", "Idle"] : s.paused ? ["paused", "Paused"] : s.state === "ending" ? ["review", "Wrapping up"] : ["live", "Listening"];
@@ -386,6 +397,7 @@ Never include Social Security, bank, card or account numbers. Transcript:
     const tabs = [["live", "Live", Object.keys(ex.F).length], ["mem", "Memory", (l.copilot?.memory?.length || 0) + ex.mem.length], ["tasks", "Tasks", ex.tasks.length]];
     let body = "";
     if (tab === "live") {
+      if (s && prod === "FE" && window.HP_FEX && window.HP_FEX_TRACK) body += stageHTML(s.fex || window.HP_FEX_TRACK.track([], window.HP_FEX.stages), l);
       const obj = ex.objs[ex.objs.length - 1];
       const fresh = obj && s && s.lines.length - obj.line <= 6;
       if (fresh) body += `<div class="hpc-alert"><b>Objection · ${esc(obj.label)}</b><ul>${obj.tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`;
