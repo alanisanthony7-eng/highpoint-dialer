@@ -340,7 +340,9 @@ if(!window.hpDialer&&!document.querySelector('script[src="/hp-dialer.js"]')){con
 
 /* ---------- quoting engines (illustrative) ---------- */
 function interp(xs,ys,x){if(x<=xs[0])return ys[0];for(let i=1;i<xs.length;i++)if(x<=xs[i]){const t=(x-xs[i-1])/(xs[i]-xs[i-1]);return ys[i-1]+t*(ys[i]-ys[i-1])}const n=xs.length-1;return ys[n]+(x-xs[n])*(ys[n]-ys[n-1])/(xs[n]-xs[n-1])}
-const FE_AGES=[45,50,55,60,65,70,75,80,85], FE_RATE=[2.4,2.9,3.4,4.1,5.0,6.4,8.4,11.4,15.5];
+/* Generic final-expense curve, used only for carriers without real rates or check quotes (Mutual of Omaha, American Amicable, Royal Neighbors).
+   Calibrated Oct 2026 to the median of 131 real quotes in data/toolkits-checks.json (it used to run 13-31% low); ages 45 and 85 follow Transamerica's own age steps. */
+const FE_AGES=[45,50,55,60,65,70,75,80,85], FE_RATE=[2.96,3.36,4.14,5.13,6.06,7.65,10.84,15.72,24.16];
 const FE_PLANS={level:["Level benefit",1,"Full death benefit from day one for clients who answer no to the health questions."],graded:["Graded benefit",1.35,"For clients with some health history. Partial benefit in years 1–2 for natural causes, full benefit after."],gi:["Guaranteed issue",1.75,"No health questions. Return of premium plus interest in years 1–2, full benefit after."]};
 function feQuote({age,sex,tob,face,plan}){age=Math.min(85,Math.max(45,age));const r=interp(FE_AGES,FE_RATE,age)*(sex==="F"?0.78:1)*(tob?1.45:1)*FE_PLANS[plan][1];return Math.round((face/1000*r+3)*100)/100}
 const MP_AGES=[20,30,35,40,45,50,55,60,65,70], MP_RATE=[0.45,0.50,0.60,0.80,1.20,1.85,3.00,4.90,8.40,14.5], MP_TERMS={10:0.72,15:0.82,20:1,25:1.25,30:1.45};
