@@ -31,6 +31,7 @@
       { t: "Dialer analytics", s: "Dials, conversations, best hours", run: () => { D?.go("dialer"); setTimeout(() => $('[data-hpd="stats"]')?.click(), 300); }, k: "analytics stats report" },
       { t: "Buy a local number", s: "Number groups", run: () => { D?.go("dialer"); setTimeout(() => $('[data-hpd="numbers"]')?.click(), 300); }, k: "number buy phone caller id" },
       { t: window.hpSpotify?.playing ? "Pause music" : "Play music", s: "Spotify", run: () => window.hpSpotify?.togglePlay(), k: "music spotify play pause" },
+      { t: window.hpTheme?.look === "classic" ? "Switch to the Miami look" : "Switch to Highpoint Classic colors", s: window.hpTheme?.look === "classic" ? "Pink and orange neon" : "Navy and blue", run: () => window.hpTheme?.toggle(), k: "look theme colors classic miami navy blue" },
       { t: "Sign out", s: "End this session", run: () => $(".hp-acct [data-out]")?.click(), k: "logout sign out" },
     ];
     return list;

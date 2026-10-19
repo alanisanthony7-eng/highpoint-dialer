@@ -40,3 +40,5 @@
   Cache-Control: no-cache
 /hp-fex-script.js
   Cache-Control: no-cache
+/hp-theme.js
+  Cache-Control: no-cache

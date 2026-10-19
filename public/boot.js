@@ -188,6 +188,7 @@
   .hp-acct-who span{font-size:12px;color:#8C92A0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hp-acct-m button{all:unset;cursor:pointer;display:block;box-sizing:border-box;width:100%;padding:9px 10px;border-radius:9px;font-size:13.5px;color:#E4E6EC}
   .hp-acct-m button:hover,.hp-acct-m button:focus-visible{background:rgba(255,79,163,.14);color:#fff}
+  .hp-acct-m button small{display:block;margin-top:2px;font-size:11.5px;color:#9BA1AE}
   @media (max-width:1100px){.hp-acct-b span,.hp-acct-b svg{display:none}.hp-acct-b{padding:2px}}`;
   const st = document.createElement("style"); st.textContent = css; document.head.append(st);
 
@@ -259,13 +260,14 @@
     const row = document.querySelector(".topbar .row"); if (!row || row.querySelector(".hp-acct")) return;
     const a = document.createElement("div"); a.className = "hp-acct";
     a.innerHTML = `<button type="button" class="hp-acct-b" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu"><i aria-hidden="true">${esc((u.name || u.email)[0].toUpperCase())}</i><span>${esc((u.name || u.email).split(" ")[0])}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-      <div class="hp-acct-m" role="menu" hidden><div class="hp-acct-who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}</span></div>${u.admin ? `<button type="button" role="menuitem" data-team>Team</button>` : ""}<button type="button" role="menuitem" data-bill>Billing</button><button type="button" role="menuitem" data-out>Sign out</button></div>`;
+      <div class="hp-acct-m" role="menu" hidden><div class="hp-acct-who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}</span></div>${u.admin ? `<button type="button" role="menuitem" data-team>Team</button>` : ""}<button type="button" role="menuitem" data-bill>Billing</button><button type="button" role="menuitem" data-look>Look: ${window.hpTheme?.look === "classic" ? "Highpoint Classic" : "Miami"}<small>Switch to ${window.hpTheme?.look === "classic" ? "Miami" : "Highpoint Classic"}</small></button><button type="button" role="menuitem" data-out>Sign out</button></div>`;
     const btn = a.querySelector(".hp-acct-b"), menu = a.querySelector(".hp-acct-m");
     const open = (on) => { menu.hidden = !on; btn.setAttribute("aria-expanded", on); if (on) menu.querySelector("[role=menuitem]")?.focus(); };
     btn.onclick = (e) => { e.stopPropagation(); open(menu.hidden); };
     document.addEventListener("click", (e) => { if (!a.contains(e.target)) open(false); });
     a.addEventListener("keydown", (e) => { if (e.key === "Escape") { open(false); btn.focus(); } });
     a.querySelector("[data-bill]").onclick = () => { open(false); window.hpTeam?.openBilling(); };
+    a.querySelector("[data-look]").onclick = () => { open(false); window.hpTheme?.toggle(); }; // Miami ↔ Highpoint Classic colors (this browser)
     const tb = a.querySelector("[data-team]"); if (tb) tb.onclick = () => { open(false); window.hpTeam?.openTeam(); };
     a.querySelector("[data-out]").onclick = async () => { try { await call("/api/auth/logout", { method: "POST" }); } finally { location.reload(); } };
     row.append(a);
