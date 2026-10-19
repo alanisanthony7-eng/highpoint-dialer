@@ -12,7 +12,7 @@ Twilio carries the calls.
 | Path | What it is |
 |---|---|
 | `public/` | The desk (index.html, desk-app.js), the dialer (hp-dialer.js/.css), the Spotify player, and `boot.js` (sign-in screen + data layer) |
-| `public/hp-pop.js` | Pop-outs: small windows for the script, the quoter and the live call that stay up while you dial (Alt+S, Alt+Q, Alt+L). They follow the client on the call: the script fills in names and the quoter's prices and tracks where you are, and the quoter fills itself from what the client says once they agree to recording. One can be kept on top of other apps in Chrome and Edge. |
+| `public/hp-pop.js` | Call tools: the script, the quoter and the live call in one side panel on the right (Alt+S, Alt+Q, Alt+L). The page makes room for it; tools stack with draggable dividers, and any tool can pop out into its own window or stay on top of other apps (Chrome and Edge). They follow the client on the call: the script fills in names and the quoter's prices and tracks where you are, and the quoter fills itself from what the client says once they agree to recording. With a profile open, the call controls become a slim bar along its bottom. |
 | `functions/api/[[path]].js` | One entry point for every `/api/*` request |
 | `src/lib/auth.mjs` | Highpoint accounts: email + password, 30-day sessions, admin emails, team code |
 | `src/desk.mjs` | Leads, appointments and call logs (private per login); crew cards and settings (shared); lobby presence; Highpoint Bot |

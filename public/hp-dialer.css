@@ -219,8 +219,7 @@ body.hpd-on .hpd-wavv,body.hpd-on .panel.wv{display:none!important}
 .hpf-kv select{padding:4px 8px!important;font-size:13px!important}
 .hpf-appt{display:flex;flex-direction:column;padding:8px 10px;border-radius:10px;background:rgba(255,79,163,.1)}
 body.hpd-pf-open{overflow:hidden}
-@media (max-width:1180px){.hpf-cols{grid-template-columns:290px minmax(0,1fr)}.hpf-right{grid-column:1/-1;border-left:none;border-top:1px solid rgba(255,255,255,.08);flex-direction:row;flex-wrap:wrap;overflow:visible}.hpf-right .hpf-card{flex:1 1 260px}.hpf-cols{overflow-y:auto}}
-@media (max-width:900px){.hpd-profile{left:0}.hpf-cols{grid-template-columns:1fr;overflow-y:auto}.hpf-left,.hpf-right{overflow:visible;border:none}.hpf-tl{max-height:none;overflow:visible}.hpd-float{right:12px;top:auto;bottom:84px;width:min(290px,calc(100vw - 24px))}}
+@media (max-width:900px){.hpd-profile{left:0}.hpd-float{right:12px;top:auto;bottom:84px;width:min(290px,calc(100vw - 24px))}}
 @media (prefers-reduced-motion:reduce){.hpd-float,.hpd-profile{animation:none}}
 @media (max-width:600px){.hpf-top{gap:8px;padding:10px 12px}.hpf-who{flex-basis:calc(100% - 50px)}.hpf-who b{font-size:16px}.hpf-who b,.hpf-who .hpd-sm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hpf-who>div{min-width:0}.hpf-nav{margin-left:auto}}
 
@@ -502,3 +501,83 @@ body:has(#v-dialer:not([hidden])) .hpd-phonest{display:none}
 .hpd-trust-found .hpd-trow>span{min-width:0;flex:1 1 200px}
 .hpd-trust-gate{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;border:1px solid rgba(255,181,71,.5);background:rgba(255,181,71,.07)}
 .hpd-trust-warn{color:var(--hp-warn);margin:0}
+
+/* ================= in-call profile: fits whatever space it has ================= */
+/* The side panel (public/hp-pop.js) and the menu can take some of the width, so the columns follow the profile's own
+   width: three columns when it's wide, two (client details + log the call | conversation) on a laptop, one on a phone. */
+.hpd-profile{container:hpf / inline-size}
+html.hp-pro .hpd-profile .hpf-cols,.hpf-cols{grid-template-columns:minmax(250px,300px) minmax(0,1fr) minmax(240px,290px);grid-template-rows:minmax(0,1fr);min-height:0;overflow:hidden}
+.hpf-side{display:contents}
+.hpf-left{grid-column:1;grid-row:1}
+.hpf-mid{grid-column:2;grid-row:1}
+.hpf-right{grid-column:3;grid-row:1}
+.hpf-top{flex-wrap:nowrap;min-height:64px;padding:10px 16px;gap:12px}
+.hpf-who{min-width:0}
+.hpf-who>div{min-width:0}
+.hpf-who b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hpf-who .hpd-sm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hpf-nav .hpd-sm{white-space:nowrap}
+.hpf-pops{display:inline-flex;gap:4px;flex:none}
+.hpf-acts{flex:none}
+@container hpf (max-width:1040px){
+  html.hp-pro .hpd-profile .hpf-cols,.hpf-cols{grid-template-columns:minmax(250px,290px) minmax(0,1fr)}
+  .hpf-side{display:flex;flex-direction:column;grid-column:1;grid-row:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;border-right:1px solid rgba(255,255,255,.08)}
+  html.hp-pro .hpd-profile .hpf-left,html.hp-pro .hpd-profile .hpf-right,.hpf-left,.hpf-right{overflow:visible;min-height:auto;border:0;flex:none}
+  .hpf-right{order:-1;padding-bottom:4px}
+  .hpf-mid{grid-column:2}
+  .hpf-list{display:none}
+}
+@container hpf (max-width:820px){
+  .hpf-pops .hpf-pop span{display:none}
+  .hpf-pops .hpf-pop{padding:6px 7px}
+  .hpf-who .hpf-av{display:none}
+}
+@container hpf (max-width:640px){
+  html.hp-pro .hpd-profile .hpf-cols,.hpf-cols{grid-template-columns:1fr;grid-template-rows:auto;overflow-y:auto}
+  .hpf-side{display:contents}
+  .hpf-right,.hpf-mid,.hpf-left{grid-column:1;grid-row:auto}
+  .hpf-right{order:1}.hpf-mid{order:2}.hpf-left{order:3}
+  .hpf-top{padding:8px 10px;gap:8px;min-height:56px}
+  .hpf-who b{font-size:16px}
+  .hpf-tl{max-height:none;overflow:visible}
+  .hpf-nav .hpd-sm{display:none}
+}
+
+/* ================= call bar: the call controls along the bottom of an open profile ================= */
+body.hpd-bar .hpd-profile{bottom:58px}
+body.hpd-bar #hpfHang,body.hpd-bar .hpf-who .hpd-chip{display:none}
+.hpdk.callbar{left:262px!important;right:var(--hpp-w,0px)!important;top:auto!important;bottom:0!important;width:auto;height:58px;max-height:none;overflow:visible;z-index:330;border-radius:0;border-width:1px 0 0;animation:none;
+  background:linear-gradient(180deg,#120D1C,#0B0812);box-shadow:0 -18px 40px -26px rgba(0,0,0,.9)}
+html.hpp-tight .hpdk.callbar{left:0!important}
+@media (max-width:900px){.hpdk.callbar{left:0!important}}
+@media (max-width:600px){.hpdk.callbar{left:0!important;right:0!important;bottom:0!important;max-height:none;padding-bottom:env(safe-area-inset-bottom,0px);height:calc(58px + env(safe-area-inset-bottom,0px))}}
+.hpdk-row{display:flex;align-items:center;gap:8px;height:100%;padding:0 14px;min-width:0;container:hpdkbar / inline-size}
+.hpdk-row .hpdk-state{flex:none;font-size:13px}
+.hpdk-row .hpdk-state b{font-size:13px;margin-left:4px}
+.hpdk-row .hpdk-prog{margin-left:0;max-width:150px}
+.hpdk-sp{flex:1;min-width:4px}
+.hpdk-blines{display:flex;gap:4px;min-width:0;overflow:hidden}
+.hpdk-bline{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;max-width:130px;padding:4px 9px;border-radius:999px;font-size:12px;font-weight:650;background:rgba(255,255,255,.05);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hpdk-bline i{width:7px;height:7px;border-radius:50%;background:#FFB547;flex:none}
+.hpdk-bline[data-s="live"]{background:rgba(59,211,139,.16)}.hpdk-bline[data-s="live"] i{background:#3BD38B}
+.hpdk-bline[data-s="done"] i,.hpdk-bline[data-s="fail"] i{background:#6C7383}
+.hpdk-bnote{flex:none;font-size:11.5px;font-weight:650;color:#C9B37A;padding:4px 9px;border-radius:999px;background:rgba(255,181,71,.08);border:1px solid rgba(255,181,71,.22);white-space:nowrap}
+.hpdk-bb{all:unset;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 12px;border-radius:10px;font-size:12.5px;font-weight:650;color:#D5D8E2;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+.hpdk-bb svg{width:16px;height:16px;flex:none}
+.hpdk-bb:hover{background:rgba(255,255,255,.1)}
+.hpdk-bb.on{background:#fff;color:#14101F;border-color:#fff}
+.hpdk-bb:disabled{opacity:.35;cursor:default}
+.hpdk-bb:focus-visible,.hpdk-bend:focus-visible,.hpdk-bcall:focus-visible,.hpdk-bline:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.hpdk-bend,.hpdk-bcall{all:unset;cursor:pointer;flex:none;display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border-radius:11px;font-weight:800;font-size:13.5px;color:#fff}
+.hpdk-bend{background:linear-gradient(180deg,#FF5A6A,#D92B45);box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
+.hpdk-bend svg{width:16px;height:16px;transform:rotate(135deg)}
+.hpdk-bcall{background:linear-gradient(180deg,#38D98F,#12A866)}
+.hpdk-bcall svg{width:16px;height:16px}
+.hpdk-bend:hover,.hpdk-bcall:hover{filter:brightness(1.07)}
+.hpdk-row .hpdk-link{flex:none;padding:8px 6px}
+.hpdk-bpad{position:absolute;right:14px;bottom:calc(100% + 8px);display:grid;grid-template-columns:repeat(3,52px);gap:6px;padding:10px;border-radius:14px;background:#120D1C;border:1px solid rgba(255,255,255,.1);box-shadow:0 18px 40px -16px #000}
+.hpdk-bpad button{all:unset;cursor:pointer;text-align:center;padding:9px 0;border-radius:10px;font:700 17px var(--f-num,ui-monospace);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+.hpdk-bpad button:hover{background:rgba(255,255,255,.1)}
+@container hpdkbar (max-width:760px){.hpdk-bb span,.hpdk-bnote{display:none}.hpdk-bb{padding:0 10px}}
+@container hpdkbar (max-width:540px){.hpdk-prog,.hpdk-blines{display:none}.hpdk-bend span{display:none}.hpdk-bend{padding:0 12px}}
+html.hp-pro .hpdk.callbar{border-radius:0;border-width:1px 0 0;border-color:rgba(255,79,163,.22);box-shadow:0 -20px 40px -28px rgba(0,0,0,.95);background:linear-gradient(180deg,rgba(30,14,42,.98),rgba(10,5,16,.99))}

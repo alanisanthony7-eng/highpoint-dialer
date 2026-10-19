@@ -1234,7 +1234,7 @@
     const D = window.hpDesk, P = S.power, tiles = S.lastTiles || [];
     let f = document.getElementById("hpdDock");
     const active = S.call || P || S.ps || S.phoneLead;
-    if (!active) { f?.remove(); clearInterval(S.dockTick); S.dockLiveAt = 0; return; }
+    if (!active) { f?.remove(); clearInterval(S.dockTick); S.dockLiveAt = 0; document.body.classList.remove("hpd-bar"); return; }
     if (!f) {
       f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Call controls"); document.body.append(f);
       const pos = lsGet("hpd.dockPos", null); if (pos) { f.style.left = Math.max(4, Math.min(pos[0], innerWidth - 340)) + "px"; f.style.top = Math.max(4, Math.min(pos[1], innerHeight - 160)) + "px"; f.style.right = "auto"; f.style.bottom = "auto"; }
@@ -1249,9 +1249,39 @@
     const clock = l ? leadClock(l) : null;
     const multi = P && tiles.length > 1;
     const onCall = !!(S.call || P?.connected || (cell && S.phoneLead));
-    const min = S.dockMin;
+    // With a client's profile open, the call controls are a slim bar along its bottom edge instead of a card on top of it.
+    // The profile already has the client, the dispositions and the call tools, so the bar only carries the live controls.
+    const bar = !!PF.id && !$("#hpdProfile")?.hidden;
+    f.classList.toggle("callbar", bar); document.body.classList.toggle("hpd-bar", bar);
+    const two = l && S.settings?.record && ["CA", "CT", "DE", "FL", "IL", "MD", "MA", "MI", "MT", "NV", "NH", "OR", "PA", "WA"].includes(String(l.state || "").toUpperCase());
+    const min = S.dockMin && !bar;
     f.classList.toggle("min", !!min);
-    if (min) {
+    if (bar) {
+      f.innerHTML = `<div class="hpdk-row">
+        <span class="hpdk-state" data-tone="${tone}"><i></i>${esc(state)}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>
+        ${prog ? `<span class="hpdk-prog" title="${prog}">${prog}</span>` : ""}
+        ${multi ? `<span class="hpdk-blines">${tiles.map((t) => `<button type="button" class="hpdk-bline" data-s="${esc(t.s)}" data-lead="${esc(t.leadId || "")}" title="${esc(t.label)}"><i></i>${esc(t.name || fmt(t.to))}</button>`).join("")}</span>` : ""}
+        ${two ? `<span class="hpdk-bnote" title="${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Say &quot;this call may be recorded&quot; if the notice is off.">${esc(String(l.state).toUpperCase())} · two-party consent</span>` : ""}
+        <span class="hpdk-sp"></span>
+        ${cell ? "" : `<button type="button" class="hpdk-bb ${S.muted ? "on" : ""}" id="hpdkMute" ${onCall ? "" : "disabled"} title="${S.muted ? "Unmute" : "Mute"} (Alt+M)">${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button>
+        <button type="button" class="hpdk-bb ${S.dockPad ? "on" : ""}" id="hpdkPadBtn" ${onCall ? "" : "disabled"} title="Keypad">${I.pad}<span>Keypad</span></button>
+        <button type="button" class="hpdk-bb" id="hpdkVm" ${onCall ? "" : "disabled"} title="Drop your voicemail (Alt+V)">${I.vm}<span>Drop VM</span></button>`}
+        ${S.ps ? `<button type="button" class="hpdk-bb" id="hpdkSkip" title="Skip to the next lead">${I.skip}<span>Skip</span></button>` : P ? `<button type="button" class="hpdk-bb ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? I.play : I.pause}<span>${P.paused ? "Resume" : "Pause"}</span></button>` : ""}
+        ${onCall && !cell ? `<button type="button" class="hpdk-bend" id="hpdkHang" title="End call (Alt+H)">${I.phone}<span>End call</span></button>` : cell && l && !S.phoneLead ? `<button type="button" class="hpdk-bcall" id="hpdkTel">${I.phone}<span>Call on my phone</span></button>` : ""}
+        ${S.ps || P ? `<button type="button" class="hpdk-link" id="hpdkStop">End session</button>` : !onCall && S.phoneLead ? `<button type="button" class="hpdk-link" id="hpdkDone">Close</button>` : ""}
+      </div>${S.dockPad && onCall && !cell ? `<div class="hpdk-bpad" role="group" aria-label="Keypad">${["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((k) => `<button type="button" data-k="${k}">${k}</button>`).join("")}</div>` : ""}`;
+      $("#hpdkMute", f)?.addEventListener("click", () => { toggleMute(); dock(); });
+      $("#hpdkPadBtn", f)?.addEventListener("click", () => { S.dockPad = !S.dockPad; dock(); });
+      $$(".hpdk-bpad [data-k]", f).forEach((b) => (b.onclick = () => dtmf(b.dataset.k)));
+      $("#hpdkVm", f)?.addEventListener("click", dropVm);
+      $("#hpdkSkip", f)?.addEventListener("click", () => phoneNext());
+      $("#hpdkPause", f)?.addEventListener("click", togglePause);
+      $("#hpdkHang", f)?.addEventListener("click", hangup);
+      $("#hpdkTel", f)?.addEventListener("click", () => l && ringMyPhone(l));
+      $("#hpdkStop", f)?.addEventListener("click", () => (S.ps ? phoneEnd() : stopPower()));
+      $("#hpdkDone", f)?.addEventListener("click", () => { window.hpDesk.callStop(); S.phoneLead = null; S.callLead = null; dock(); renderHome(); });
+      $$(".hpdk-bline", f).forEach((b) => (b.onclick = () => b.dataset.lead && openProfile(b.dataset.lead, { keepList: true })));
+    } else if (min) {
       f.innerHTML = `<button type="button" class="hpdk-pill" id="hpdkMax" data-tone="${tone}"><i></i><b>${esc(state)}</b><span class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</span><span class="nm">${l ? esc(D.fullName(l)) : ""}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>`;
       $("#hpdkMax", f).onclick = () => { S.dockMin = false; dock(); };
     } else {
@@ -1340,10 +1370,11 @@
     if (!el) { el = document.createElement("div"); el.id = "hpdProfile"; el.className = "hpd hpd-profile"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Lead profile"); document.body.append(el); }
     el.hidden = false; document.body.classList.add("hpd-pf-open");
     renderProfile();
+    if (document.getElementById("hpdDock")) dock(); // the call card becomes the bar under the profile
     if (!S.demo) api("/sms?with=" + d10(D.leads.get(id).phone)).then((r) => { PF.sms = r.thread?.msgs || []; if (PF.id === id) drawTimeline(); }).catch(() => {});
     else PF.sms = [];
   }
-  function closeProfile() { const el = $("#hpdProfile"); if (el) el.hidden = true; document.body.classList.remove("hpd-pf-open"); PF.id = null; }
+  function closeProfile() { const el = $("#hpdProfile"); if (el) el.hidden = true; document.body.classList.remove("hpd-pf-open"); PF.id = null; if (document.getElementById("hpdDock")) dock(); }
 
   function renderProfile() {
     const D = window.hpDesk, l = D.leads.get(PF.id); const el = $("#hpdProfile"); if (!l || !el) return;
@@ -1356,29 +1387,19 @@
         <button type="button" class="hpf-x" id="hpfClose" aria-label="Close profile">✕</button>
         <div class="hpf-who"><span class="hpf-av">${esc(((l.first || "?")[0] + (l.last || "")[0] || "").toUpperCase())}</span><div><b>${esc(D.fullName(l))}</b><span class="hpd-sm">${esc(fmt(l.phone))}${l.state ? " · " + esc(l.state) : ""}${l.age ? " · " + esc(l.age) + " yrs" : ""}</span></div>
           ${live ? `<span class="hpd-chip" data-s="live"><i></i>On call <span id="hpfClock" class="num" style="margin-left:4px"></span></span>` : ""}</div>
-        <div class="hpf-nav"><span class="hpd-sm">${esc(listName())} · ${idx + 1}/${n}</span><button type="button" id="hpfPrev" aria-label="Previous lead" ${idx <= 0 ? "disabled" : ""}>‹</button><button type="button" id="hpfNext" aria-label="Next lead" ${idx >= n - 1 ? "disabled" : ""}>›</button></div>
+        ${window.hpPop ? `<span class="hpf-pops" role="group" aria-label="Call tools">${window.hpPop.launchers("hpf")}</span>` : ""}
+        <div class="hpf-nav"><span class="hpd-sm"><span class="hpf-list">${esc(listName())} · </span>${idx + 1}/${n}</span><button type="button" id="hpfPrev" aria-label="Previous lead" ${idx <= 0 ? "disabled" : ""}>‹</button><button type="button" id="hpfNext" aria-label="Next lead" ${idx >= n - 1 ? "disabled" : ""}>›</button></div>
         <div class="hpf-acts">${live ? `<button type="button" class="btn hpd-hang" id="hpfHang">${I.phone} Hang up</button>` : `<button type="button" class="btn primary" id="hpfCall" ${onAnother || S.power ? "disabled" : ""}>${I.phone} Call</button>`}</div>
       </div>
-      <div class="hpf-cols">
+      <div class="hpf-cols"><div class="hpf-side">
         <aside class="hpf-left">
           <div class="hpf-tabs" role="tablist">${[["all", "All fields"], ["dnc", "DND"], ["act", "Actions"]].map(([k, t]) => `<button type="button" role="tab" data-pft="${k}" aria-selected="${PF.tab === k}">${t}</button>`).join("")}</div>
           <div id="hpfLeft"></div>
         </aside>
-        <section class="hpf-mid">
-          <div class="hpf-midhead"><b>Conversations</b><span class="hpf-pops">${window.hpPop ? window.hpPop.launchers("hpf") : `<button type="button" class="hpd-sm hpf-link" id="hpfScriptBtn">Script</button>`}</span></div>
-          <div class="hpf-script" id="hpfScript" hidden></div>
-          <div class="hpf-tl" id="hpfTl"></div>
-          <div class="hpc-slot" id="hpfCopilot"></div>
-          <div class="hpf-live" id="hpfLiveWrap" ${live ? "" : "hidden"}><div class="hpd-sm" style="margin-bottom:6px">Live transcript</div><div class="hpd-tx" id="hpfTx"></div>
-            <div class="hpd-pad" id="hpfPad" ${S.padOpen ? "" : "hidden"} style="margin-top:8px">${"123456789*0#".split("").map((k) => `<button type="button" data-pdtmf="${k}">${k}</button>`).join("")}</div></div>
-          <div class="hpf-compose">
-            <div class="hpf-ctabs">${[["note", "Note"], ["sms", "Text"]].map(([k, t]) => `<button type="button" data-pfc="${k}" aria-pressed="${PF.compose === k}">${t}</button>`).join("")}</div>
-            <div class="hpd-flex" style="flex-wrap:nowrap"><textarea id="hpfMsg" rows="2" placeholder="${PF.compose === "sms" ? "Text " + esc(l.first || "this lead") + "…" : "Add a note to this lead…"}"></textarea><button type="button" class="btn primary" id="hpfSend">${PF.compose === "sms" ? "Send" : "Save"}</button></div>
-          </div>
-        </section>
+
         <aside class="hpf-right">
           <div class="hpf-card"><b>Log the call</b>
-            <div class="hpf-dz">${[["na", "No answer"], ["vm", "Left voicemail"], ["bad", "Bad number"], ["cb", "Call back"], ["appt", "Appointment set"], ["sold", "Sold"], ["ni", "Not interested"], ["dnc", "Do not call"]].map(([k, t]) => `<button type="button" class="btn ${k === "appt" ? "primary" : k === "sold" ? "sold" : ""}" data-pdz="${k}">${t}</button>`).join("")}</div>
+            <div class="hpf-dz">${[["na", "No answer"], ["vm", "Voicemail"], ["bad", "Bad number"], ["cb", "Call back"], ["appt", "Appointment"], ["sold", "Sold"], ["ni", "Not interested"], ["dnc", "Do not call"]].map(([k, t]) => `<button type="button" class="btn ${k === "appt" ? "primary" : k === "sold" ? "sold" : ""}" data-pdz="${k}">${t}</button>`).join("")}</div>
             <div class="hpd-flex" id="hpfWhen" hidden><input type="datetime-local" id="hpfAt" style="flex:1;min-width:0"><button type="button" class="btn primary" id="hpfWhenGo">Save</button></div>
             <input id="hpfNote" placeholder="Note for this call (optional)">
           </div>
@@ -1390,7 +1411,19 @@
             <span>Added</span><span>${l.createdAt ? new Date(l.createdAt).toLocaleDateString() : "—"}</span>
             ${l.callbackAt ? `<span>Callback</span><span>${new Date(l.callbackAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>` : ""}
           </div></div>
-        </aside>
+        </aside></div>
+        <section class="hpf-mid">
+          <div class="hpf-midhead"><b>Conversations</b>${window.hpPop ? "" : `<button type="button" class="hpd-sm hpf-link" id="hpfScriptBtn">Script</button>`}</div>
+          <div class="hpf-script" id="hpfScript" hidden></div>
+          <div class="hpf-tl" id="hpfTl"></div>
+          <div class="hpc-slot" id="hpfCopilot"></div>
+          <div class="hpf-live" id="hpfLiveWrap" ${live ? "" : "hidden"}><div class="hpd-sm" style="margin-bottom:6px">Live transcript</div><div class="hpd-tx" id="hpfTx"></div>
+            <div class="hpd-pad" id="hpfPad" ${S.padOpen ? "" : "hidden"} style="margin-top:8px">${"123456789*0#".split("").map((k) => `<button type="button" data-pdtmf="${k}">${k}</button>`).join("")}</div></div>
+          <div class="hpf-compose">
+            <div class="hpf-ctabs">${[["note", "Note"], ["sms", "Text"]].map(([k, t]) => `<button type="button" data-pfc="${k}" aria-pressed="${PF.compose === k}">${t}</button>`).join("")}</div>
+            <div class="hpd-flex" style="flex-wrap:nowrap"><textarea id="hpfMsg" rows="2" placeholder="${PF.compose === "sms" ? "Text " + esc(l.first || "this lead") + "…" : "Add a note to this lead…"}"></textarea><button type="button" class="btn primary" id="hpfSend">${PF.compose === "sms" ? "Send" : "Save"}</button></div>
+          </div>
+        </section>
       </div>`;
     // wiring
     $("#hpfClose").onclick = closeProfile;

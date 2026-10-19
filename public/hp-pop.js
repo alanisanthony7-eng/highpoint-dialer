@@ -1,6 +1,8 @@
-/* Highpoint pop-outs: small windows for the script, the quoter and the live call that stay up while you dial.
-   Drag one by its title bar, resize it from the corner, double-click the title to tuck it away, or keep it on top of
-   your other apps (Chrome and Edge). Positions are remembered, and pop-outs left open come back after a reload.
+/* Highpoint call tools: the script, the quoter and the live call, kept up while you dial.
+   By default they live in one side panel on the right. The page makes room for it instead of being covered, and you
+   can show one tool or stack two or three (drag the dividers to share the height, drag the panel's left edge to
+   widen it). Any tool can also pop out into its own window you can drag and resize, and in Chrome and Edge a window
+   can stay on top of your other apps. On phones each tool is a sheet at the bottom of the screen.
    They follow the call:
    - Script: fills in the client's details and the quoter's prices, and tracks where you are as you read it.
    - Quote: follows the client on the call and fills itself from what they say, once they agree to recording.
@@ -17,8 +19,10 @@
   const toast = (m) => (D()?.toast || console.log)(m);
   const usd = (n, d = 0) => (n == null || !isFinite(n) ? "—" : "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
   const isPhone = () => matchMedia("(max-width: 640px)").matches;
-  const soon = (fn) => (document.hidden ? setTimeout(fn, 30) : requestAnimationFrame(fn)); // a hidden tab pauses animation frames; pop-outs kept on top still update
+  let pipOpen = false; // set while a tool is kept on top of other apps
+  const soon = (fn) => (document.hidden || pipOpen ? setTimeout(fn, 30) : requestAnimationFrame(fn)); // the page's animation frames can pause while you work in another app; the on-top window still updates
   const up = (s) => String(s || "").trim().toUpperCase();
+  const HTML = document.documentElement;
 
   if (!document.querySelector('link[href="/hp-pop.css"]')) { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "/hp-pop.css"; document.head.append(l); }
 
@@ -30,41 +34,111 @@
     min: sv('<path d="M6 12h12"/>'),
     max: sv('<rect x="5" y="5" width="14" height="14" rx="2.5"/>'),
     x: sv('<path d="M6 6l12 12M18 6 6 18"/>'),
+    out: sv('<path d="M14 4h6v6"/><path d="M20 4l-8 8"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>'),
+    dock: sv('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M14 4v16"/>'),
     pip: sv('<rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="12" y="11.5" width="6.5" height="5" rx="1"/>'),
     back: sv('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
   };
   const KINDS = {
-    script: { title: "Script", label: "Script", key: "S", w: 360, h: 780, minW: 290, minH: 220 },
-    quote: { title: "Quote", label: "Quote", key: "Q", w: 370, h: 640, minW: 300, minH: 240 },
-    live: { title: "Live call", label: "Live", key: "L", w: 340, h: 520, minW: 280, minH: 200 },
+    script: { title: "Script", label: "Script", key: "S", w: 360, h: 640, minW: 290, minH: 220, wt: 1.25 },
+    quote: { title: "Quote", label: "Quote", key: "Q", w: 370, h: 620, minW: 300, minH: 240, wt: 1 },
+    live: { title: "Live call", label: "Live", key: "L", w: 340, h: 520, minW: 280, minH: 200, wt: 0.9 },
   };
   const ORDER = ["script", "quote", "live"];
   const PIP_OK = "documentPictureInPicture" in window;
 
-  /* ================= window manager ================= */
-  const G = lsGet("hp.pop", {}); // per kind: x, y, w, h, min, open
-  let gTimer = 0;
+  /* ================= where each tool lives: the side panel (default) or its own window ================= */
+  const G = lsGet("hp.pop", {}); // per tool: open, mode ("dock" | "float"), and the window's x, y, w, h, min
+  const PN = Object.assign({ w: 380, wt: {} }, lsGet("hp.pop.panel", {})); // the side panel: width, and each tool's share of its height
+  let gTimer = 0, pTimer = 0;
   const saveG = () => { clearTimeout(gTimer); gTimer = setTimeout(() => lsSet("hp.pop", G), 250); };
-  const W = new Map(); // kind -> { k, el, body, built, st }
-  let zTop = 360, pip = null; // pip: { k, win }
+  const savePN = () => { clearTimeout(pTimer); pTimer = setTimeout(() => lsSet("hp.pop.panel", PN), 250); };
+  const W = new Map(); // tool -> { k, el, body, built, st, docked }
+  const ST = {}; // each tool's view state, kept when it moves between the panel and a window
+  let zTop = 360, pip = null, panel = null; // pip: { k, win }
+  const floating = (k) => isPhone() || G[k]?.mode === "float";
+  const panelW = () => Math.round(Math.max(320, Math.min(PN.w || 380, 640, innerWidth * 0.5)));
 
-  // first-time spots: the script reads down the left, the quote sits just left of the call dock's column
-  // (the dock lives bottom-right during calls), and the live call goes between them when there's room
+  /* ---------- the side panel ---------- */
+  function panelEl() {
+    if (panel) return panel;
+    panel = document.createElement("aside");
+    panel.className = "hpp-panel"; panel.hidden = true; panel.setAttribute("aria-label", "Call tools");
+    panel.innerHTML = `<div class="hpp-pgrip" title="Drag to resize" aria-hidden="true"></div>
+      <header class="hpp-ptop"><div class="hpp-ptabs" role="group" aria-label="Tools in the panel">${ORDER.map((k) => `<button type="button" data-ptab="${k}" aria-pressed="false" title="${KINDS[k].title} · Alt+${KINDS[k].key}">${IC[k]}<span>${KINDS[k].label}</span></button>`).join("")}</div>
+        <span class="hpp-sp"></span><button type="button" class="hpp-hb" data-pa="out" title="Pop out into its own window" aria-label="Pop this tool out into its own window">${IC.out}</button><button type="button" class="hpp-hb" data-pa="close" title="Close the panel" aria-label="Close the panel">${IC.x}</button></header>
+      <div class="hpp-stack"></div>`;
+    $("[data-pa=close]", panel).onclick = () => ORDER.forEach((k) => { if (W.get(k)?.docked) close(k); });
+    $("[data-pa=out]", panel).onclick = () => { const k = ORDER.find((x) => W.get(x)?.docked); if (k) setMode(k, "float"); };
+    $$("[data-ptab]", panel).forEach((b) => (b.onclick = () => toggle(b.dataset.ptab)));
+    const grip = $(".hpp-pgrip", panel);
+    grip.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; e.preventDefault(); grip.setPointerCapture(e.pointerId); grip.classList.add("on"); HTML.classList.add("hpp-sizing");
+      grip.onpointermove = (m) => { PN.w = Math.round(Math.max(320, Math.min(640, innerWidth * 0.5, innerWidth - m.clientX))); layout(); };
+      grip.onpointerup = grip.onpointercancel = () => { grip.onpointermove = grip.onpointerup = grip.onpointercancel = null; grip.classList.remove("on"); HTML.classList.remove("hpp-sizing"); savePN(); };
+    });
+    document.body.append(panel);
+    return panel;
+  }
+  // put the docked tools in order, top to bottom, with a divider between each pair
+  function stack() {
+    const p = panelEl(), st = $(".hpp-stack", p), shown = ORDER.filter((k) => W.get(k)?.docked);
+    $$(".hpp-div", st).forEach((d) => d.remove());
+    shown.forEach((k, i) => { // only move what's out of place, so the others keep their scroll position
+      const el = W.get(k).el, at = st.children[i] || null;
+      if (at !== el) st.insertBefore(el, at);
+      el.style.flex = `${PN.wt[k] || KINDS[k].wt} 1 0px`;
+    });
+    shown.slice(0, -1).forEach((k, i) => W.get(k).el.after(divider(k, shown[i + 1])));
+    $$("[data-ptab]", p).forEach((b) => b.setAttribute("aria-pressed", String(shown.includes(b.dataset.ptab))));
+    p.hidden = !shown.length;
+    p.classList.toggle("single", shown.length === 1); // one tool: the panel's own header is enough
+    layout();
+  }
+  function divider(a, b) {
+    const d = document.createElement("div"); d.className = "hpp-div"; d.setAttribute("role", "separator"); d.setAttribute("aria-orientation", "horizontal"); d.title = "Drag to share the space";
+    d.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; e.preventDefault(); d.setPointerCapture(e.pointerId); d.classList.add("on");
+      const A = W.get(a).el, B = W.get(b).el, ha = A.getBoundingClientRect().height, hb = B.getBoundingClientRect().height, sy = e.clientY;
+      const wa = PN.wt[a] || KINDS[a].wt, wb = PN.wt[b] || KINDS[b].wt;
+      d.onpointermove = (m) => { const na = Math.max(110, Math.min(ha + hb - 110, ha + m.clientY - sy)); PN.wt[a] = (wa + wb) * na / (ha + hb); PN.wt[b] = (wa + wb) - PN.wt[a]; A.style.flex = `${PN.wt[a]} 1 0px`; B.style.flex = `${PN.wt[b]} 1 0px`; };
+      d.onpointerup = d.onpointercancel = () => { d.onpointermove = d.onpointerup = d.onpointercancel = null; d.classList.remove("on"); savePN(); };
+    });
+    d.addEventListener("dblclick", () => { delete PN.wt[a]; delete PN.wt[b]; savePN(); stack(); }); // back to the default split
+    return d;
+  }
+  // the page makes room for the panel; on a laptop the client profile also takes the menu's space during a call
+  function layout() {
+    const on = !!panel && !panel.hidden && !isPhone(), w = panelW();
+    HTML.classList.toggle("hpp-docked", on);
+    HTML.style.setProperty("--hpp-w", on ? w + "px" : "0px");
+    if (panel) panel.style.width = w + "px";
+    HTML.classList.toggle("hpp-tight", !isPhone() && innerWidth - (on ? w : 0) - 262 < 900);
+    const d = document.getElementById("hpdDock"); // a floating call card the agent dragged under the panel moves out of its way
+    if (d && on && !d.classList.contains("callbar") && d.style.left) { const r = d.getBoundingClientRect(), lim = innerWidth - w - 12; if (r.right > lim) d.style.left = Math.max(8, lim - r.width) + "px"; }
+  }
+
+  /* ---------- a tool in the panel ---------- */
+  function buildPane(k) {
+    const K = KINDS[k], el = document.createElement("section");
+    el.className = "hpp-pane"; el.dataset.kind = k; el.setAttribute("aria-label", K.title);
+    el.innerHTML = `<div class="hpp-ph"><span class="hpp-ic">${IC[k]}</span><b class="hpp-t">${K.title}</b><span class="hpp-sub"></span><span class="hpp-sp"></span>
+      <button type="button" class="hpp-hb" data-a="float" title="Pop out into its own window" aria-label="Pop the ${K.title.toLowerCase()} out into its own window">${IC.out}</button>
+      <button type="button" class="hpp-hb" data-a="x" title="Close" aria-label="Close the ${K.title.toLowerCase()}">${IC.x}</button></div><div class="hpp-body"></div>`;
+    $('[data-a="x"]', el).onclick = () => close(k);
+    $('[data-a="float"]', el).onclick = () => setMode(k, "float");
+    return { k, el, body: $(".hpp-body", el), built: false, st: (ST[k] = ST[k] || {}), docked: true };
+  }
+
+  /* ---------- a tool in its own window ---------- */
   function defaults(k) {
-    const tb = document.querySelector("header.topbar")?.getBoundingClientRect(); // open just under the top bar so its buttons stay reachable
-    const vw = innerWidth, vh = innerHeight, top = Math.round(Math.min(Math.max(76, (tb?.bottom || 0) + 8), vh * 0.3)), H = vh - top - 20, fit = (x) => Math.min(KINDS[x].w, vw - 24);
-    const sw = fit("script"), qw = fit("quote"), lw = fit("live");
-    const script = { x: 12, y: top, w: sw, h: Math.min(KINDS.script.h, H) };
-    const dockCol = vw >= 1100 ? 364 : 20;
-    let qx = vw - dockCol - qw; if (qx < 12 + sw + 8) qx = vw - qw - 20;
-    const quote = { x: qx, y: top, w: qw, h: Math.min(KINDS.quote.h, H) };
-    const room = qx - 8 - (12 + sw + 8), lh = Math.min(KINDS.live.h, H);
-    const live = room >= KINDS.live.minW ? { x: 12 + sw + 8, y: top, w: Math.min(lw, room), h: lh } : { x: Math.max(12, qx - lw - 8), y: Math.max(top, vh - lh - 20), w: lw, h: lh };
-    return { script, quote, live }[k];
+    const vw = innerWidth, vh = innerHeight, K = KINDS[k], w = Math.min(K.w, vw - 24), h = Math.min(K.h, vh - 40);
+    const i = ORDER.indexOf(k), x = Math.max(12, vw - panelW() * (HTML.classList.contains("hpp-docked") ? 1 : 0) - w - 24 - i * 28);
+    return { x, y: Math.max(12, Math.min(80 + i * 28, vh - h - 12)), w, h };
   }
   function geo(k) { return Object.assign(defaults(k), G[k] && G[k].w ? { x: G[k].x, y: G[k].y, w: G[k].w, h: G[k].h } : {}); }
   function place(k) {
-    const w = W.get(k); if (!w || w.el.classList.contains("in-pip")) return;
+    const w = W.get(k); if (!w || w.docked || w.el.classList.contains("in-pip")) return;
     const g = geo(k), K = KINDS[k], vw = innerWidth, vh = innerHeight;
     g.w = Math.max(K.minW, Math.min(g.w, vw - 16)); g.h = Math.max(K.minH, Math.min(g.h, vh - 16));
     g.x = Math.max(8, Math.min(g.x, vw - g.w - 8)); g.y = Math.max(8, Math.min(g.y, vh - 52));
@@ -72,33 +146,35 @@
     Object.assign(w.el.style, { left: g.x + "px", top: g.y + "px" });
     w.el.style.setProperty("--w", g.w + "px"); w.el.style.setProperty("--h", g.h + "px");
   }
+  const wins = () => [...W.values()].filter((x) => !x.docked);
   function front(k) {
-    const w = W.get(k); if (!w) return;
-    if (zTop >= 398) { zTop = 360; [...W.values()].sort((a, b) => (+a.el.style.zIndex || 0) - (+b.el.style.zIndex || 0)).forEach((x) => (x.el.style.zIndex = ++zTop)); }
+    const w = W.get(k); if (!w || w.docked) return;
+    if (zTop >= 398) { zTop = 360; wins().sort((a, b) => (+a.el.style.zIndex || 0) - (+b.el.style.zIndex || 0)).forEach((x) => (x.el.style.zIndex = ++zTop)); }
     w.el.style.zIndex = ++zTop;
-    W.forEach((x) => x.el.classList.toggle("front", x === w));
+    wins().forEach((x) => x.el.classList.toggle("front", x === w));
     G[k] = { ...(G[k] || {}), at: Date.now() }; saveG();
   }
-  function frontKind() { let best = null; W.forEach((x) => { if (!best || (+x.el.style.zIndex || 0) > (+best.el.style.zIndex || 0)) best = x; }); return best?.k || null; }
+  function frontKind() { let best = null; wins().forEach((x) => { if (!best || (+x.el.style.zIndex || 0) > (+best.el.style.zIndex || 0)) best = x; }); return best?.k || null; }
   const isOpen = (k) => W.has(k);
   const isMin = (k) => !!W.get(k)?.el.classList.contains("min");
 
-  function build(k) {
+  function buildWin(k) {
     const K = KINDS[k];
     const el = document.createElement("section");
     el.className = "hpp"; el.dataset.kind = k; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", K.title);
     el.innerHTML = `<header class="hpp-h"><span class="hpp-ic">${IC[k]}</span><b class="hpp-t">${K.title}</b><span class="hpp-sub"></span><span class="hpp-sp"></span>
-      <span class="hpp-switch" role="group" aria-label="Other pop-outs"></span>
-      ${PIP_OK ? `<button type="button" class="hpp-hb" data-a="pip" title="Keep on top of your other windows" aria-label="Keep on top of your other windows">${IC.pip}</button>` : ""}
+      <span class="hpp-switch" role="group" aria-label="Other tools"></span>
+      <button type="button" class="hpp-hb hpp-nophone" data-a="dock" title="Put it back in the side panel" aria-label="Put the ${K.title.toLowerCase()} back in the side panel">${IC.dock}</button>
+      ${PIP_OK ? `<button type="button" class="hpp-hb hpp-nophone" data-a="pip" title="Keep on top of your other windows" aria-label="Keep on top of your other windows">${IC.pip}</button>` : ""}
       <button type="button" class="hpp-hb" data-a="min" title="Tuck away" aria-label="Tuck away">${IC.min}</button>
-      <button type="button" class="hpp-hb" data-a="x" title="Close" aria-label="Close ${K.title}">${IC.x}</button></header>
+      <button type="button" class="hpp-hb" data-a="x" title="Close" aria-label="Close the ${K.title.toLowerCase()}">${IC.x}</button></header>
       <div class="hpp-body"></div><div class="hpp-rz" aria-hidden="true"></div>`;
-    const w = { k, el, body: $(".hpp-body", el), built: false, st: {} };
-    W.set(k, w);
+    const w = { k, el, body: $(".hpp-body", el), built: false, st: (ST[k] = ST[k] || {}), docked: false };
     const hd = $(".hpp-h", el);
     el.addEventListener("pointerdown", () => front(k), true);
     $('[data-a="x"]', el).onclick = () => close(k);
     $('[data-a="min"]', el).onclick = () => minimize(k, !isMin(k));
+    $('[data-a="dock"]', el).onclick = () => setMode(k, "dock");
     $('[data-a="pip"]', el)?.addEventListener("click", () => (pip?.k === k ? unpip() : toPip(k)));
     hd.addEventListener("dblclick", (e) => { if (!e.target.closest("button") && !el.classList.contains("in-pip")) minimize(k, !isMin(k)); });
     // drag by the title bar; snaps to the screen edges
@@ -126,44 +202,60 @@
     return w;
   }
 
+  /* ---------- open, close, move between panel and window ---------- */
   function open(k, opts = {}) {
     if (!KINDS[k]) return null;
+    const fl = floating(k);
     let w = W.get(k);
-    if (!w) { w = build(k); place(k); }
+    if (w && w.docked === fl) { drop(k); w = null; } // it's moving between the panel and a window
+    if (!w) { w = fl ? buildWin(k) : buildPane(k); W.set(k, w); if (fl) place(k); }
     if (opts.tab && k === "script") { w.st.tab = opts.tab; w.st.keepTab = true; w.st.sig = ""; }
-    minimize(k, opts.restore ? !!G[k]?.min : false, true);
+    if (fl) { minimize(k, opts.restore ? !!G[k]?.min : false, true); front(k); switcher(); }
+    else { stack(); if (!opts.restore) { w.el.classList.remove("hpp-flash"); void w.el.offsetWidth; w.el.classList.add("hpp-flash"); } }
     G[k] = { ...(G[k] || {}), open: true }; saveG();
-    front(k); paint(k, true); switcher(); syncPressed();
+    paint(k, true); syncPressed();
     if (pip?.k === k) try { pip.win.focus(); } catch {}
     return w;
   }
-  function close(k) {
+  function drop(k) { // take a tool off the screen, wherever it is
     const w = W.get(k); if (!w) return;
     if (pip?.k === k) unpip(); // closes the on-top window too
-    w.el.remove(); W.delete(k);
+    w.el.remove(); W.delete(k); w.built = false;
+    if (w.docked) stack();
+  }
+  function close(k) {
+    if (!W.has(k)) return;
+    drop(k);
     G[k] = { ...(G[k] || {}), open: false }; saveG();
     const fk = frontKind(); if (fk) front(fk);
     switcher(); syncPressed();
   }
+  function setMode(k, mode) {
+    G[k] = { ...(G[k] || {}), mode }; saveG();
+    if (W.has(k)) open(k);
+    if (mode === "float" && !isPhone()) toast(`${KINDS[k].title} is in its own window. Use the panel button in its title bar to put it back.`);
+  }
   function minimize(k, on, quiet) {
-    const w = W.get(k); if (!w) return;
+    const w = W.get(k); if (!w || w.docked) return;
     w.el.classList.toggle("min", !!on);
     const b = $('[data-a="min"]', w.el); b.innerHTML = on ? IC.max : IC.min; b.title = on ? "Open" : "Tuck away"; b.setAttribute("aria-label", b.title);
     G[k] = { ...(G[k] || {}), min: !!on }; saveG();
     if (!on) paint(k, true);
     if (!quiet) syncPressed();
   }
-  // a launcher button: open it, bring it forward, or close it when it's already up front
+  // a launcher: show the tool, or hide it when it's already showing (a window behind others comes forward first)
   function toggle(k) {
     if (!KINDS[k]) return;
-    if (isOpen(k) && !isMin(k) && (frontKind() === k || pip?.k === k)) return close(k);
+    const w = W.get(k);
+    if (w?.docked) return close(k);
+    if (w && !isMin(k) && (frontKind() === k || pip?.k === k)) return close(k);
     open(k);
   }
   // phones: one sheet at a time, with buttons to switch to the others
   function switcher() {
-    W.forEach((w) => {
+    wins().forEach((w) => {
       const s = $(".hpp-switch", w.el); if (!s) return;
-      s.innerHTML = ORDER.filter((k) => k !== w.k && W.has(k)).map((k) => `<button type="button" class="hpp-hb" data-swap="${k}" title="${KINDS[k].title}" aria-label="Show ${KINDS[k].title}">${IC[k]}</button>`).join("");
+      s.innerHTML = ORDER.filter((k) => k !== w.k && W.has(k)).map((k) => `<button type="button" class="hpp-hb" data-swap="${k}" title="${KINDS[k].title}" aria-label="Show the ${KINDS[k].title.toLowerCase()}">${IC[k]}</button>`).join("");
       $$("[data-swap]", s).forEach((b) => (b.onclick = () => { minimize(b.dataset.swap, false); front(b.dataset.swap); }));
     });
   }
@@ -171,11 +263,14 @@
     const docs = [document, pip?.win?.document].filter(Boolean);
     docs.forEach((d) => $$("[data-pop]", d).forEach((b) => b.setAttribute("aria-pressed", String(isOpen(b.dataset.pop) && !isMin(b.dataset.pop)))));
   }
-  addEventListener("resize", () => ORDER.forEach(place));
+  addEventListener("resize", () => {
+    ORDER.forEach((k) => { const w = W.get(k); if (w && w.docked === floating(k)) open(k, { restore: true }); }); // crossed the phone size: move between panel and sheet
+    ORDER.forEach(place); layout();
+  });
 
-  /* keep one pop-out on top of other apps: Document Picture-in-Picture (Chrome and Edge 116+) */
+  /* keep one window on top of other apps: Document Picture-in-Picture (Chrome and Edge 116+) */
   async function toPip(k) {
-    const w = W.get(k); if (!w || !PIP_OK) return;
+    const w = W.get(k); if (!w || w.docked || !PIP_OK) return;
     if (pip) unpip();
     const r = w.el.getBoundingClientRect();
     let win;
@@ -188,12 +283,12 @@
       catch { if (s.href) { const l = d.createElement("link"); l.rel = "stylesheet"; l.href = s.href; d.head.append(l); } }
     }
     const st = d.createElement("style"); st.textContent = css.join("\n"); d.head.append(st);
-    d.documentElement.className = document.documentElement.className;
-    const rs = document.documentElement.getAttribute("style"); if (rs) d.documentElement.setAttribute("style", rs);
+    d.documentElement.className = HTML.className;
+    const rs = HTML.getAttribute("style"); if (rs) d.documentElement.setAttribute("style", rs);
     d.body.className = "hpp-pipbody"; d.title = "Highpoint · " + KINDS[k].title;
     w.el.classList.remove("min"); w.el.classList.add("in-pip");
     d.body.append(w.el);
-    pip = { k, win };
+    pip = { k, win }; pipOpen = true;
     const pb = $('[data-a="pip"]', w.el); if (pb) { pb.innerHTML = IC.back; pb.title = "Put it back on the page"; pb.setAttribute("aria-label", pb.title); }
     d.addEventListener("click", popClick); d.addEventListener("keydown", hotkeys);
     win.addEventListener("pagehide", () => { if (pip?.win === win) unpip(true); }, { once: true });
@@ -201,7 +296,7 @@
   }
   function unpip(closed) {
     if (!pip) return;
-    const { k, win } = pip; pip = null;
+    const { k, win } = pip; pip = null; pipOpen = false;
     const w = W.get(k);
     if (w) {
       w.el.classList.remove("in-pip"); document.body.append(w.el); place(k);
@@ -228,7 +323,8 @@
   const SRC = { lead: "From the client's file", call: "Heard on this call", quote: "From the quoter", you: "Your name" };
   const SENSITIVE = /^(routing number|account number|bank)$/i;
   const fmtDob = (s) => { if (!s) return ""; const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[2]}/${m[3]}/${m[1]}` : String(s); };
-  const TABS = [["FE", "Final expense"], ["MP", "Mortgage"], ["IUL", "IUL"]];
+  const TABS = [["FE", "Final expense", "FE"], ["MP", "Mortgage", "MP"], ["IUL", "IUL", "IUL"]];
+  const lbl = (t, sh) => (sh && sh !== t ? `<span class="l">${t}</span><span class="s">${sh}</span>` : t); // short label when the tool is narrow
   const QTAB = { FE: "FE", MP: "TERM", IUL: "IUL" };
   // objections the copilot recognizes -> the matching answer in a script
   const OBJ_RE = { price: /afford|expensive|price|budget/i, family: /spouse|family|talk (?:it )?over|wife|husband/i, think: /think about/i, covered: /already have|through work|bank already|already covered/i, trust: /scam|legit|trust/i, mail: /mail/i, ni: /not interested/i };
@@ -287,9 +383,9 @@
     build(w) {
       follow();
       const st = w.st; st.fs = lsGet("hp.pop.fs", 0); st.follow = lsGet("hp.pop.follow", true); st.openSt = st.openSt || new Set([0]); st.userAt = 0;
-      w.body.innerHTML = `<div class="hpp-bar"><div class="hpp-seg" role="group" aria-label="Product">${TABS.map(([k, t]) => `<button type="button" data-tab="${k}">${t}</button>`).join("")}</div><span class="hpp-sp"></span>
-        <button type="button" class="hpp-tb" data-fs="-1" aria-label="Smaller text" title="Smaller text">A−</button><button type="button" class="hpp-tb" data-fs="1" aria-label="Bigger text" title="Bigger text">A+</button></div>
-        <div class="hpp-for" data-r="for"></div><div class="hpp-alerts" data-r="alerts"></div><div class="hpp-prog" data-r="prog"></div>
+      w.body.innerHTML = `<div class="hpp-bar"><div class="hpp-seg sm" role="group" aria-label="Product">${TABS.map(([k, t, sh]) => `<button type="button" data-tab="${k}" title="${t}">${lbl(t, sh)}</button>`).join("")}</div><span class="hpp-sp"></span>
+        <span data-r="follow"></span><span class="hpp-sizes" role="group" aria-label="Text size"><button type="button" class="hpp-tb" data-fs="-1" aria-label="Smaller text" title="Smaller text">A−</button><button type="button" class="hpp-tb" data-fs="1" aria-label="Bigger text" title="Bigger text">A+</button></span></div>
+        <div class="hpp-note" data-r="for"></div><div class="hpp-alerts" data-r="alerts"></div><div class="hpp-prog" data-r="prog"></div>
         <div class="hpp-scroll hpp-script" data-r="scroll"></div>`;
       const sc = $('[data-r="scroll"]', w.body);
       sc.addEventListener("scroll", () => { if (!st.auto) st.userAt = Date.now(); }, { passive: true });
@@ -312,9 +408,8 @@
       $$("[data-tab]", w.body).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tab === tab)));
       $(".hpp-sub", w.el).textContent = l ? fullName(l) : "";
       const useFex = tab === "FE" && window.HP_FEX && window.HP_FEX_TRACK;
-      $('[data-r="for"]', w.body).innerHTML = l
-        ? `<span>For <b>${esc(fullName(l))}</b>${l.state ? " · " + esc(up(l.state)) : ""}</span>${live ? `<span class="hpp-live"><i></i>On call</span>` : ""}${useFex ? `<span class="hpp-sp"></span><button type="button" class="hpp-chk" data-follow aria-pressed="${st.follow}" title="Highlights the line you just read and the next one, from the live transcript">Follow the call</button>` : ""}`
-        : `<span>No client open. Blanks stay as <span class="hpp-gap">placeholders</span>.</span>`;
+      $('[data-r="for"]', w.body).innerHTML = l ? "" : `No client open. Blanks stay as <span class="hpp-gap">placeholders</span>.`;
+      $('[data-r="follow"]', w.body).innerHTML = useFex && l ? `<button type="button" class="hpp-chk" data-follow aria-pressed="${st.follow}" title="Highlights the line you just read and the next one, from the live transcript">Follow</button>` : "";
       // objection and wording alerts from the copilot
       const ses = session(l?.id), ex = ses?.consent === "agreed" ? ses.ex : null, n = ses?.lines?.length || 0;
       let al = "";
@@ -438,11 +533,12 @@
   const QUOTE = {
     build(w) {
       const st = w.st; st.more = false;
-      w.body.innerHTML = `<div class="hpp-bar"><div class="hpp-seg" role="group" aria-label="Product">${[["FE", "Final expense"], ["TERM", "Term"], ["IUL", "IUL"]].map(([k, t]) => `<button type="button" data-qtab="${k}">${t}</button>`).join("")}</div></div>
-        <div class="hpp-for" data-r="for"></div>
+      w.body.innerHTML = `<div class="hpp-bar"><div class="hpp-seg sm" role="group" aria-label="Product">${[["FE", "Final expense", "FE"], ["TERM", "Term"], ["IUL", "IUL"]].map(([k, t, sh]) => `<button type="button" data-qtab="${k}" title="${t}">${lbl(t, sh)}</button>`).join("")}</div><span class="hpp-sp"></span><span data-r="link"></span></div>
         <div class="hpp-top" data-r="top" aria-live="polite"></div>
-        <div class="hpp-scroll" data-r="scroll"><div class="hpp-heard" data-r="heard"></div><div class="hpp-form" data-r="form"></div><div class="hpp-res" data-r="res"></div></div>
-        <div class="hpp-foot"><button type="button" class="hpp-mini" data-q="full">Open the full quoter</button><span class="hpp-sp"></span><span class="hpp-fine" data-r="fine"></span></div>`;
+        <div class="hpp-scroll" data-r="scroll"><div class="hpp-heard" data-r="heard"></div>
+          <div class="hpp-form"><button type="button" class="hpp-sum" data-q="form" data-r="sum"></button><div class="hpp-fbody" data-r="form"></div></div>
+          <div class="hpp-res" data-r="res"></div>
+          <div class="hpp-foot"><button type="button" class="hpp-mini" data-q="full">Open the full quoter</button><span class="hpp-fine" data-r="fine"></span></div></div>`;
       const Q = () => QT().Q, done = () => { QT().changed(); QUOTE.update(w); }; // your own clicks show right away
       w.body.addEventListener("click", (e) => {
         const t = e.target.closest("button"); if (!t || !w.body.contains(t)) return;
@@ -465,6 +561,7 @@
         else if (d.q === "unbind") { if (QF.lead) QF.ctx[QF.lead] = snapQ(); QF.lead = null; QF.manual = true; QUOTE.update(w); paint("script"); }
         else if (d.q === "more") { st.more = !st.more; QUOTE.update(w); }
         else if (d.q === "full") q.open();
+        else if (d.q === "form") { st.formOpen = !(st.formOpen ?? !QF.lead); QUOTE.update(w); if (st.formOpen) $('[data-r="form"] input, [data-r="form"] button', w.body)?.focus(); }
         else if (d.q === "copy") { const b = st.best; if (b) copy(b.text); }
         else if (d.q === "crm") { const b = st.best, id = QF.lead || ctxId(); if (b && id) q.attach(id, b.q); else toast("Open a client first, then add the quote"); }
       });
@@ -494,9 +591,17 @@
       $$("[data-qtab]", w.body).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.qtab === r.T)));
       $(".hpp-sub", w.el).textContent = l ? fullName(l) : "";
       const cid = ctxId(), cl = lead(cid);
-      $('[data-r="for"]', w.body).innerHTML = l
-        ? `<span>For <b>${esc(fullName(l))}</b></span>${live ? `<span class="hpp-live"><i></i>On call</span>` : ""}<span class="hpp-sp"></span><button type="button" class="hpp-mini" data-q="unbind" title="Stop following this client and quote freely">Unlink</button>`
-        : cl ? `<span>Quoting without a client</span><span class="hpp-sp"></span><button type="button" class="hpp-mini" data-q="bind">Quote for ${esc(cl.first || fullName(cl))}</button>` : `<span>Quoting without a client</span>`;
+      $('[data-r="link"]', w.body).innerHTML = l
+        ? `<button type="button" class="hpp-mini" data-q="unbind" title="Stop following ${esc(fullName(l))} and quote freely">Unlink</button>`
+        : cl ? `<button type="button" class="hpp-mini" data-q="bind" title="Quote with ${esc(fullName(cl))}'s details">Use ${esc(cl.first || fullName(cl))}</button>` : `<span class="hpp-fine">No client</span>`;
+      // client details: a one-line summary; tap it to edit (open by default when you're quoting without a client)
+      const fopen = st.formOpen ?? !QF.lead, FE = r.T === "FE", tob = FE ? !!q.NIC[Q.FE.nic]?.[1] : Q.tob === "1";
+      const planName = (r.plans.find(([v]) => String(v) === String(r.plan)) || [])[1] || "";
+      const nH = FE ? Q.FE.conds.length + Q.FE.meds.length : 0;
+      const sumEl = $('[data-r="sum"]', w.body);
+      sumEl.setAttribute("aria-expanded", String(fopen));
+      sumEl.innerHTML = `<span>${[Q.age, Q.sex === "F" ? "Female" : "Male", tob ? "Tobacco" : "No tobacco", Q.state, r.B ? usd(r.amt) + "/mo" : usd(r.amt), planName].filter(Boolean).map(esc).join(" · ")}${FE && nH ? ` · ${nH} health item${nH === 1 ? "" : "s"}` : ""}</span><em>${fopen ? "Done" : "Edit"}</em>`;
+      $('[data-r="form"]', w.body).hidden = !fopen;
       // the form: rebuilt when values change, unless you're typing in it
       const form = $('[data-r="form"]', w.body), doc = w.el.ownerDocument, ae = doc.activeElement, inForm = form.contains(ae);
       const sig = JSON.stringify([r.T, r.B, r.amt, r.plan, Q.age, Q.sex, Q.tob, Q.state, Q.cls, Q.FE.conds, Q.FE.meds, Q.FE.nic]);
@@ -525,10 +630,10 @@
             <div class="hpp-best-a"><button type="button" class="btn sm" data-q="copy">Copy</button><button type="button" class="btn sm primary" data-q="crm" ${forWho ? "" : "disabled"}>${forWho ? `Add to ${esc(forWho.first || "client")}'s file` : "Add to a client"}</button></div></div>`
         : `<div class="hpp-alert"><b>No carrier fits yet</b>${r.T === "FE" && q.uw().t >= 4 ? "Based on the health answers, this client likely doesn't qualify for final expense right now." : `Nothing in the model offers this at age ${Q.age}. Try another plan or amount.`}</div>`;
       $('[data-r="res"]', w.body).innerHTML = ok.length > 1
-        ? `<div class="hpp-hh"><span class="hpp-lbl">Other carriers</span></div><ol class="hpp-rows">${ok.slice(1, 8).map((x, i) => `<li><span class="rk">${i + 2}</span><div><b>${esc(x.n)}</b><span>${esc(x.sub)}</span><em class="hpp-badge ${badge(x)[0]}">${badge(x)[1]}</em></div><b class="num">${fmt(x.price)}</b></li>`).join("")}</ol>
+        ? `<div class="hpp-hh"><span class="hpp-lbl">Other carriers</span></div><ol class="hpp-rows">${ok.slice(1, 8).map((x, i) => `<li><span class="rk">${i + 2}</span><div><b>${esc(x.n)}</b><span>${esc(x.sub)}</span>${badge(x)[0] !== "c" ? `<em class="hpp-badge ${badge(x)[0]}">${badge(x)[1]}</em>` : ""}</div><b class="num">${fmt(x.price)}</b></li>`).join("")}</ol>
           ${ok.length > 8 ? `<p class="hpp-fine">${ok.length - 8} more in the full quoter.</p>` : ""}` : "";
       $('[data-r="res"]', w.body).innerHTML += off.length ? `<button type="button" class="hpp-mini" data-q="more" aria-expanded="${st.more}">${st.more ? "Hide" : "Show"} ${off.length} that can't offer this</button>${st.more ? `<ul class="hpp-off">${off.map((x) => `<li><b>${esc(x.n)}</b><span>${esc(x.why || "No price at this amount")}</span></li>`).join("")}</ul>` : ""}` : "";
-      $('[data-r="fine"]', w.body).textContent = r.T === "FE" ? "Estimates unless marked Carrier rates" : "Estimates. Confirm with the carrier.";
+      $('[data-r="fine"]', w.body).textContent = r.T === "FE" ? "Market-checked estimates unless marked" : "Estimates. Confirm with the carrier.";
     },
   };
   function formHTML(q, r) {
@@ -543,7 +648,7 @@
         <div class="hpp-step"><button type="button" data-step="-1" aria-label="Less">−</button><input data-f="amt" inputmode="numeric" value="${esc(amtVal)}" aria-label="${r.B ? "Monthly budget" : "Coverage amount"}"><button type="button" data-step="1" aria-label="More">+</button></div></div>
       <div class="hpp-quick">${r.quick.map(([v, t]) => `<button type="button" class="hpp-chip" data-amt="${v}" aria-pressed="${+v === +r.amt}">${t}</button>`).join("")}</div>
       <div class="hpp-plans">${seg("plan", r.plan, r.plans)}</div>`;
-    if (r.T === "TERM") h += `<label class="hpp-fld row"><span>Health class</span><select data-f="cls">${[["0.82", "Preferred plus"], ["1", "Preferred"], ["1.22", "Standard plus"], ["1.45", "Standard"]].map(([v, t]) => `<option value="${v}" ${v === String(Q.cls) ? "selected" : ""}>${t}</option>`).join("")}</select></label>`;
+    if (r.T === "TERM") h += `<label class="hpp-fld inl"><span>Health class</span><select data-f="cls">${[["0.82", "Preferred plus"], ["1", "Preferred"], ["1.22", "Standard plus"], ["1.45", "Standard"]].map(([v, t]) => `<option value="${v}" ${v === String(Q.cls) ? "selected" : ""}>${t}</option>`).join("")}</select></label>`;
     if (FE) {
       const uw = q.uw(), tier = ["Likely Preferred", "Likely Standard", "Likely Graded", "Likely Guaranteed issue", "Likely doesn't qualify"][uw.t];
       h += `<div class="hpp-health"><div class="hpp-hh"><span class="hpp-lbl">Health</span><span class="tierpill sm ${q.TIER_CLS[uw.t]}">${tier}</span></div>
@@ -640,14 +745,15 @@
     update(w) {
       const id = (CALL.live && liveId()) || CALL.txLead || ctxId(), l = lead(id), live = CALL.live && !!l && liveId() === l.id;
       $(".hpp-sub", w.el).textContent = l ? fullName(l) : "";
+      const pfOpen = !!l && DL()?.profileId === l.id && !document.getElementById("hpdProfile")?.hidden; // the profile already shows this client and the consent buttons
       $('[data-r="for"]', w.body).innerHTML = l
-        ? `${live ? `<span class="hpp-live"><i></i><span class="num" data-r="clock">${clock()}</span></span>` : CALL.endedAt && CALL.txLead === l.id ? `<span class="hpp-fine">Call ended</span>` : ""}<span><b>${esc(fullName(l))}</b>${l.phone ? ` · <span class="num">${esc(D().fmtPhone?.(l.phone) || l.phone)}</span>` : ""}</span><span class="hpp-sp"></span><button type="button" class="hpp-mini" data-l="profile">Profile</button>`
+        ? `${live ? `<span class="hpp-live"><i></i>On call <span class="num" data-r="clock">${clock()}</span></span>` : CALL.endedAt && CALL.txLead === l.id ? `<span>Call ended</span>` : `<span>Not on a call</span>`}<span class="hpp-sp"></span>${pfOpen ? "" : `<button type="button" class="hpp-mini" data-l="profile">Open profile</button>`}`
         : `<span>No call right now</span>`;
       const ses = session(l?.id), ex = ses?.consent === "agreed" ? ses.ex : null;
       // the consent gate, same as the profile's
-      $('[data-r="gate"]', w.body).innerHTML = live && ses && ses.consent === "none"
+      $('[data-r="gate"]', w.body).innerHTML = live && ses && ses.consent === "none" && !pfOpen
         ? `<div class="hpp-gate"><b>Read the disclosure first</b><span>“This call may be recorded for quality and training. Do you agree to continue?”</span><div><button type="button" class="btn sm primary" data-l="agree">Client agreed</button><button type="button" class="btn sm" data-l="decline">Client declined</button></div><em>The copilot and the quoter stay off until the client says yes.</em></div>`
-        : ses?.consent === "declined" ? `<div class="hpp-alert bad"><b>Client declined recording</b>Copilot is off for this call and nothing from it is kept.</div>` : "";
+        : ses?.consent === "declined" && !pfOpen ? `<div class="hpp-alert bad"><b>Client declined recording</b>Copilot is off for this call and nothing from it is kept.</div>` : "";
       // objection, wording check, and the next thing to ask
       let al = "";
       if (ex && ses) {
@@ -686,7 +792,10 @@
       for (const x of [...dirty]) {
         dirty.delete(x);
         const w = W.get(x); if (!w || (w.el.classList.contains("min") && !now)) continue;
-        try { if (!w.built) { VIEWS[x].build(w); w.built = true; } VIEWS[x].update(w); } catch (e) { console.warn("pop-out", x, e); }
+        try {
+          if (!w.built) { Object.assign(w.st, { sig: "", fsig: "", lastAt: null }); VIEWS[x].build(w); w.built = true; } // a new home (panel or window) draws everything fresh
+          VIEWS[x].update(w);
+        } catch (e) { console.warn("pop-out", x, e); }
       }
     });
   }

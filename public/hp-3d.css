@@ -132,7 +132,7 @@ html.hp-pro .toast{
 html.hp-pro .hpd-profile{overflow:hidden}
 html.hp-pro .hpd-profile .hpf-cols{grid-template-rows:minmax(0,1fr);min-height:0;overflow:hidden}
 html.hp-pro .hpd-profile .hpf-left,html.hp-pro .hpd-profile .hpf-right{min-height:0;overflow-y:auto;overscroll-behavior:contain}
-@media (max-width:900px){html.hp-pro .hpd-profile .hpf-cols{overflow-y:auto;grid-template-rows:auto}}
+/* narrow profiles: see the container rules at the end of hp-dialer.css */
 
 /* ---------- 8. FEX call script on the Scripts tab ---------- */
 html.hp-pro .fex-stage{padding:0 0 8px!important;overflow:hidden}

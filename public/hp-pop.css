@@ -1,4 +1,47 @@
-/* Highpoint pop-outs (public/hp-pop.js): small windows for the script, the quoter and the live call */
+/* Highpoint call tools (public/hp-pop.js): the script, the quoter and the live call, in the side panel or their own windows */
+
+/* ---------- the side panel ---------- */
+.hpp-panel{position:fixed;top:0;right:0;bottom:0;z-index:340;display:flex;flex-direction:column;width:380px;color:var(--ink);font-family:var(--f-ui,system-ui);font-size:13.5px;line-height:1.45;
+  background:var(--bg2);background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 88%,var(--bg)),var(--bg2));border-left:1px solid var(--line-2);box-shadow:-28px 0 50px -36px rgba(0,0,0,.95)}
+.hpp-panel *{box-sizing:border-box}
+.hpp-pgrip{position:absolute;left:-5px;top:0;bottom:0;width:10px;cursor:ew-resize;z-index:3}
+.hpp-pgrip::after{content:"";position:absolute;left:4px;top:0;bottom:0;width:2px;background:transparent;transition:background .15s}
+.hpp-pgrip:hover::after,.hpp-pgrip.on::after{background:var(--accent)}
+html.hpp-sizing,html.hpp-sizing *{cursor:ew-resize!important;user-select:none!important}
+.hpp-ptop{display:flex;align-items:center;gap:6px;height:64px;padding:0 8px 0 10px;border-bottom:1px solid var(--line);flex:none}
+.hpp-ptabs{display:flex;gap:2px;padding:3px;border:1px solid var(--line);border-radius:999px;background:var(--sunk)}
+.hpp-ptabs button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:650;color:var(--muted)}
+.hpp-ptabs button svg{width:14px;height:14px}
+.hpp-ptabs button:hover{color:var(--ink)}
+.hpp-ptabs button[aria-pressed="true"]{color:var(--accent-ink,#fff);background:linear-gradient(135deg,var(--fill-1),var(--fill-2))}
+.hpp-ptabs button:focus-visible{outline:2px solid var(--accent-2);outline-offset:1px}
+.hpp-stack{flex:1;min-height:0;display:flex;flex-direction:column}
+.hpp-panel.single .hpp-ph{display:none}
+.hpp-panel:not(.single) [data-pa="out"]{display:none}
+.hpp-pane{display:flex;flex-direction:column;min-height:110px;overflow:hidden;position:relative}
+.hpp-ph{display:flex;align-items:center;gap:7px;height:36px;padding:0 4px 0 12px;flex:none;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 55%,transparent)}
+.hpp-ph .hpp-ic{width:20px;height:20px;border-radius:6px}
+.hpp-ph .hpp-ic svg{width:12px;height:12px}
+.hpp-ph .hpp-t{font-size:12.5px}
+.hpp-ph .hpp-hb{width:26px;height:26px}
+.hpp-ph .hpp-hb svg{width:14px;height:14px}
+.hpp-div{flex:none;height:9px;cursor:ns-resize;position:relative;background:var(--bg);border-top:1px solid var(--line);border-bottom:1px solid var(--line);touch-action:none}
+.hpp-div::after{content:"";position:absolute;left:50%;top:50%;width:40px;height:3px;border-radius:2px;background:var(--line-2);transform:translate(-50%,-50%)}
+.hpp-div:hover::after,.hpp-div.on::after{background:var(--accent)}
+.hpp-pane.hpp-flash .hpp-ph{animation:hppFlash .9s ease}
+@keyframes hppFlash{0%{background:color-mix(in srgb,var(--accent) 40%,transparent)}100%{background:color-mix(in srgb,var(--surface) 55%,transparent)}}
+
+/* the page makes room for the panel; on a laptop the client profile also takes the menu's space */
+html.hpp-docked .app{margin-right:var(--hpp-w)}
+html.hpp-docked .hpd-profile{right:var(--hpp-w)}
+html.hpp-docked .hpdk:not(.callbar){right:calc(var(--hpp-w) + 20px)}
+html.hpp-tight .hpd-profile{left:0}
+html.hpp-docked .hpf-pops,html.hpp-docked .hpp-launch{display:none} /* the panel's own tabs do this while it's open */
+.hpp-pane .hpp-sub{display:none} /* the client is right next to the panel */
+.hpp-body{container:hppb / inline-size}
+.hpp-seg .s{display:none}
+@container hppb (max-width:440px){.hpp-seg .l{display:none}.hpp-seg .s{display:inline}}
+
 .hpp{position:fixed;z-index:360;display:flex;flex-direction:column;width:var(--w,380px);height:var(--h,540px);max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);min-width:0;
   color:var(--ink);font-family:var(--f-ui,system-ui);font-size:13.5px;line-height:1.45;border:1px solid var(--line-2);border-radius:16px;overflow:hidden;
   background:var(--surface-2);background:linear-gradient(180deg,color-mix(in srgb,var(--surface-2) 97%,transparent),color-mix(in srgb,var(--bg) 97%,transparent));
@@ -56,6 +99,16 @@
 .hpp-fine{font-size:11.5px;color:var(--faint,var(--muted));margin:4px 0}
 .hpp-empty{color:var(--muted);font-size:12.5px;margin:6px 0}
 .hpp-alerts:empty{display:none}
+.hpp-note:empty{display:none}
+.hpp-note{padding:7px 12px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);flex:none}
+.hpp-sizes{display:inline-flex;gap:2px}
+.hpp-sizes .hpp-tb{min-width:26px;height:24px;font-size:11.5px}
+.hpp-sum{all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--surface) 70%,transparent);font-size:12.5px;line-height:1.35}
+.hpp-sum span{flex:1;min-width:0;color:var(--ink)}
+.hpp-sum em{font-style:normal;font-weight:700;color:var(--accent-2);font-size:12px;flex:none}
+.hpp-sum:hover{border-color:var(--line-2)}
+.hpp-sum:focus-visible{outline:2px solid var(--accent-2);outline-offset:1px}
+.hpp-fbody{display:grid;gap:9px;margin-top:9px}
 .hpp-alerts{padding:8px 10px 0;display:grid;gap:6px;flex:none}
 .hpp-alert{border:1px solid color-mix(in srgb,var(--warn) 45%,transparent);background:var(--warn-soft);border-radius:10px;padding:8px 10px;font-size:12.5px;color:var(--ink)}
 .hpp-alert b{display:block;color:var(--warn);font-size:12px;margin-bottom:2px}
@@ -66,7 +119,8 @@
 .hpp-alert .hpp-mini{margin-top:4px;padding-left:0}
 .hpp-ask{border:1px dashed var(--line-2);border-radius:10px;padding:7px 10px;font-size:12.5px}
 .hpp-ask span{display:block;font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--sky,var(--accent-2));margin-bottom:2px}
-.hpp-foot{display:flex;align-items:center;gap:6px;padding:6px 10px;border-top:1px solid var(--line);flex:none}
+.hpp-foot{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-top:12px;padding-top:8px;border-top:1px solid var(--line)}
+.hpp-foot .hpp-mini{padding-left:0}
 .hpp-badge{font-style:normal;font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:999px;border:1px solid var(--line-2);color:var(--muted);white-space:nowrap}
 .hpp-badge.x{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
 .hpp-badge.c{color:var(--info,var(--sky));border-color:color-mix(in srgb,var(--info,var(--sky)) 40%,transparent)}
@@ -85,7 +139,7 @@
 .hpp-st-h .n{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:11.5px;background:var(--sunk);color:var(--muted);flex:none}
 .hpp-st-h .t{flex:1}
 .hpp-st-h em{font-style:normal;font-size:11px;font-weight:600;color:var(--muted)}
-.hpp-st-h::after{content:"";width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translateY(-2px);transition:transform .15s;flex:none}
+.hpp-st-h::after{content:"";margin-right:4px;width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translateY(-2px);transition:transform .15s;flex:none}
 .hpp-st.open .hpp-st-h::after{transform:rotate(225deg) translateY(-2px)}
 .hpp-st-b{display:none;padding:0 11px 10px}
 .hpp-st.open .hpp-st-b{display:block}
@@ -111,11 +165,11 @@
 .hpp-objq span{color:var(--muted);font-size:.93em}
 
 /* quote */
-.hpp-form{display:grid;gap:9px}
+.hpp-form{display:block}
 .hpp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .hpp-fld{display:grid;gap:3px;min-width:0}
 .hpp-fld>span{font-size:11px;font-weight:650;color:var(--muted)}
-.hpp-fld.row{grid-template-columns:auto 1fr;align-items:center;gap:8px}
+.hpp-fld.inl{grid-template-columns:auto 1fr;align-items:center;gap:8px}
 .hpp input,.hpp select{min-width:0;width:100%;height:32px;padding:0 9px;border-radius:9px;border:1px solid var(--line-2);background:var(--sunk);color:var(--ink);font:inherit;font-size:13px}
 .hpp input[type=number]{-moz-appearance:textfield}
 .hpp-amt{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -129,7 +183,7 @@
 .hpp-plans .hpp-seg{width:100%}
 .hpp-health,.hpp-heard{display:grid;gap:6px}
 .hpp-heard:empty{display:none}
-.hpp-heard{margin-top:10px;padding:8px 9px;border:1px solid var(--line);border-radius:11px;background:color-mix(in srgb,var(--surface) 70%,transparent)}
+.hpp-heard{margin-bottom:10px;padding:8px 9px;border:1px solid var(--line);border-radius:11px;background:color-mix(in srgb,var(--surface) 70%,transparent)}
 .hpp-hh{display:flex;align-items:center;gap:6px}
 .hpp-hchips{display:flex;flex-wrap:wrap;gap:5px}
 .hpp-hchips:empty{display:none}
@@ -228,6 +282,6 @@
   .hpp-switch{display:inline-flex}
   .hpp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hpp-launch{padding:2px}
-  .hpp [data-a="pip"]{display:none}
+  .hpp .hpp-nophone{display:none}
 }
 @media (prefers-reduced-motion:reduce){.hpp{animation:none}.hpp-live i{animation:none}}

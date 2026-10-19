@@ -106,3 +106,6 @@
 .hpc-segs i.now{background:#FF2E88;box-shadow:0 0 10px rgba(255,46,136,.55)}
 .hpc-next{font-size:12.5px;line-height:1.5}
 .hpc-next span{display:block;font:800 10px/1 var(--f-ui,system-ui);letter-spacing:.14em;text-transform:uppercase;color:#9CC3F0;margin-bottom:5px}
+.hpc-acts:has([data-consent]) .btn.primary{grid-column:auto} /* the two consent answers sit side by side, same size */
+.hpf-mid .hpc-slot{margin:10px 16px}
+.hpc-slot .hpc-alert{animation:none} /* the copilot redraws every few seconds; a fade-in here would flicker */
