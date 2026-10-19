@@ -498,3 +498,5 @@ body:has(#v-dialer:not([hidden])) .hpd-phonest{display:none}
 .hpd-tcheck{display:flex!important;align-items:flex-start;justify-content:flex-start;gap:8px;text-align:left;cursor:pointer}
 .hpd-tcheck input[type=checkbox]{flex:none;width:16px!important;height:16px;margin:2px 0 0;padding:0}
 .hpd-trust-flow input[type=file]{width:auto!important;flex:1 1 220px;min-width:0}
+.hpd-trust-found{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;border:1px solid rgba(59,211,139,.45);background:rgba(59,211,139,.06)}
+.hpd-trust-found .hpd-trow>span{min-width:0;flex:1 1 200px}

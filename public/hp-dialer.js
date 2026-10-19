@@ -747,6 +747,11 @@
         <form class="panel stack" id="hptProfile" style="gap:12px" novalidate>
           <div class="hpd-trow"><h2>1. Business profile</h2>${T.enterpriseId ? pill("healthy", "Registered with Telnyx") : pill("watch", "Not registered")}</div>
           <p class="hpd-sm" style="margin:0">Carriers vet this before they trust your numbers, so it has to match your IRS records. Registering is free.</p>
+          ${!T.enterpriseId && T.existing?.length ? `<div class="hpd-trust-found">
+            <b>Already registered in Telnyx</b>
+            <span class="hpd-sm">Your Telnyx account has ${T.existing.length === 1 ? "a business" : T.existing.length + " businesses"} on file. Use it instead of typing everything again.</span>
+            ${T.existing.map((e) => `<div class="hpd-trow"><span><b>${esc(e.legalName || "Unnamed business")}</b>${e.dba ? ` · ${esc(e.dba)}` : ""}<br><span class="hpd-sm">${e.einLast4 ? `EIN ending ${esc(e.einLast4)}` : "No EIN on file"}${e.reputation ? " · spam monitoring already on" : ""}</span></span><button class="btn primary" type="button" data-link="${esc(e.id)}">Use this business</button></div>`).join("")}
+          </div>` : ""}
           <div class="hpd-tform">
             ${field("legalName", "Legal business name", 'maxlength="64" autocomplete="organization"')}
             ${field("dba", "Doing business as (optional)")}
@@ -822,6 +827,11 @@
       try { await tapi("trust-profile", { method: "POST", body: Object.fromEntries(new FormData(form).entries()) }); toast("Business profile saved and registered with Telnyx"); renderTrust(); }
       catch (er) { msg.hidden = false; msg.textContent = er.data?.saved ? "Saved here, but Telnyx said: " + er.message : er.message; b.disabled = false; b.textContent = label; }
     };
+    $$("[data-link]", el).forEach((b) => (b.onclick = async () => {
+      b.disabled = true; b.textContent = "Linking…";
+      try { const r = await tapi("trust-link", { method: "POST", body: { id: b.dataset.link } }); toast(r.missing?.length ? `Linked. Telnyx's record is missing: ${r.missing.join(", ")}` : "Linked to your Telnyx business"); renderTrust(); }
+      catch (er) { toast(er.message); b.disabled = false; b.textContent = "Use this business"; }
+    }));
     // caller name
     $("#hptCnamGo", el).onclick = async (e) => {
       const b = e.currentTarget; b.disabled = true; b.textContent = "Applying…";

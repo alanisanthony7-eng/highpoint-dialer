@@ -19,7 +19,7 @@ const env = { DB, HP_ADMIN_EMAILS: "boss@hp.com", HP_INVITE_CODE: "HP2026", HP_P
 
 // Fake Telnyx
 const telnyx = [];
-let monitored = [], scores = {}, FAIL_DOC = false;
+let monitored = [], scores = {}, FAIL_DOC = false, existingEnts = [];
 globalThis.fetch = async (url, o = {}) => {
   const u = new URL(url);
   const J = (j, st = 200) => new Response(JSON.stringify(j), { status: st, headers: { "content-type": "application/json" } });
@@ -28,7 +28,9 @@ globalThis.fetch = async (url, o = {}) => {
   const body = o.body instanceof FormData ? { form: [...o.body.keys()], file: o.body.get("file") } : o.body ? JSON.parse(o.body) : undefined;
   telnyx.push({ method: m, path: p, body, query: Object.fromEntries(u.searchParams) });
   if (p === "/v2/enterprises" && m === "POST") return J({ data: { id: "ent1", ...body } }, 201);
-  if (p === "/v2/enterprises/ent1" && m === "PUT") return J({ data: { id: "ent1" } });
+  if (p === "/v2/enterprises" && m === "GET") return J({ data: existingEnts, meta: { total_results: existingEnts.length } });
+  if (/^\/v2\/enterprises\/[^/]+$/.test(p) && m === "PUT") return J({ data: { id: p.split("/").pop() } });
+  if (/^\/v2\/enterprises\/[^/]+$/.test(p) && m === "GET") { const e = existingEnts.find((x) => x.id === p.split("/").pop()); return e ? J({ data: e }) : J({ errors: [{ detail: "Not found" }] }, 404); }
   if (p === "/v2/terms_of_service/status") return J({ data: { agreed: telnyx.some((x) => x.path.endsWith("/number_reputation/agree")) } });
   if (p === "/v2/terms_of_service/number_reputation/agree") return J({ data: { agreed: true } });
   if (p === "/v2/enterprises/ent1/reputation/loa" && m === "POST") return new Response("%PDF-1.4 letter for ent1", { headers: { "content-type": "application/pdf" } });
@@ -136,5 +138,24 @@ ok(st.repLive?.status === "approved" && st.numbers.find((n) => n.e164 === "+1305
 await call("boss", "/api/telnyx/trust-profile", { method: "POST", body: { ...profile, title: "CEO" } });
 const put2 = last("/v2/enterprises/ent1", "PUT")?.body || {};
 ok(put2.organization_contact?.job_title === "CEO" && !("legal_name" in put2) && !("fein" in put2) && !("website" in put2), "after monitoring starts, legal name, EIN and website are left out of updates");
+
+// ---- a business already registered in the Telnyx portal ----
+existingEnts = [{ id: "0b1e2c3d-aaaa-bbbb-cccc-000000000001", legal_name: "Highpoint Financial LLC", doing_business_as: "Highpoint Financial", fein: "98-7654321", website: "https://highpointfinancial.com",
+  organization_type: "commercial", organization_legal_type: "llc", industry: "insurance", number_of_employees: "11-50", jurisdiction_of_incorporation: "Florida", number_reputation_enabled: true,
+  organization_contact: { first_name: "Alanis", last_name: "Anthony", job_title: "Owner", email: "owner@highpointfinancial.com", phone_number: "+13055550100" },
+  organization_physical_address: { street_address: "100 Biscayne Blvd", extended_address: "Suite 400", city: "Miami", administrative_area: "FL", postal_code: "33132", country: "US" } }];
+await setJ("trust", "hub", {});
+st = (await call("boss", "/api/telnyx/trust")).j;
+ok(st.enterpriseId === null && st.existing?.length === 1 && st.existing[0].einLast4 === "4321" && !JSON.stringify(st.existing).includes("98-7654321"), "a business already registered in Telnyx is offered, showing only the EIN's last 4 digits");
+ok((await call("boss", "/api/telnyx/trust-link", { method: "POST", body: { id: "nope" } })).s === 400, "linking needs a real business id");
+ok((await call("rep", "/api/telnyx/trust-link", { method: "POST", body: { id: existingEnts[0].id } })).s === 403, "agents can't link a business");
+r = await call("boss", "/api/telnyx/trust-link", { method: "POST", body: { id: existingEnts[0].id } });
+st = (await call("boss", "/api/telnyx/trust")).j;
+ok(r.s === 200 && r.j.missing.length === 0 && st.enterpriseId === existingEnts[0].id && st.profile.ein === "98-7654321" && st.profile.phone === "3055550100" && st.profile.suite === "Suite 400" && st.profile.title === "Owner", "using it links the registration and fills the form from Telnyx's record");
+ok(!!st.rep.enabledAt && st.existing === undefined, "monitoring already on in the portal is recognized, and the offer goes away once linked");
+const posts = telnyx.filter((x) => x.path === "/v2/enterprises" && x.method === "POST").length;
+await setJ("trust", "hub", {});
+r = await call("boss", "/api/telnyx/trust-profile", { method: "POST", body: { ...profile, ein: "987654321" } });
+ok(r.s === 200 && r.j.enterpriseId === existingEnts[0].id && telnyx.filter((x) => x.path === "/v2/enterprises" && x.method === "POST").length === posts && !!last(`/v2/enterprises/${existingEnts[0].id}`, "PUT"), "saving a profile whose EIN Telnyx already has updates that registration instead of creating a duplicate");
 
 console.log("done");

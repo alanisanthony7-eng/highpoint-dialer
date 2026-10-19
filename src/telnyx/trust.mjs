@@ -4,6 +4,7 @@
 //
 //   GET  /api/telnyx/trust            everything the Trust Hub page shows
 //   POST /api/telnyx/trust-profile    save the business profile and register it with Telnyx (free)
+//   POST /api/telnyx/trust-link       {id} use a business already registered in the Telnyx portal
 //   POST /api/telnyx/trust-cnam       {name} caller name on every Telnyx number
 //   POST /api/telnyx/trust-fcr        {done} Free Caller Registry submitted (a web form; no API)
 //   POST /api/telnyx/trust-tos        accept Telnyx's Number Reputation terms
@@ -74,6 +75,21 @@ export function enterpriseBody(p, { create = true, locked = false } = {}) {
   return body;
 }
 
+// The reverse: fill the form from a business already registered in the Telnyx portal
+export function profileFromEnterprise(e = {}) {
+  const c = e.organization_contact || {}, a = e.organization_physical_address || {};
+  return cleanProfile({
+    legalName: e.legal_name, dba: e.doing_business_as, ein: e.fein, website: e.website, legalType: e.organization_legal_type, orgType: e.organization_type,
+    industry: e.industry, employees: e.number_of_employees, incState: e.jurisdiction_of_incorporation,
+    street: a.street_address, suite: a.extended_address, city: a.city, state: a.administrative_area, zip: a.postal_code,
+    first: c.first_name, last: c.last_name, title: c.job_title, email: c.email, phone: c.phone_number,
+  });
+}
+async function existingEnterprises() {
+  try { const d = (await tx("/v2/enterprises", { query: { "page[size]": 50, "filter[role_type]": "enterprise" } })).data; return Array.isArray(d) ? d : []; } catch { return []; }
+}
+const einDigits = (v) => String(v || "").replace(/\D/g, "");
+
 /* ---------- reputation scores ---------- */
 async function listMonitored(ent) {
   const out = [];
@@ -115,6 +131,8 @@ async function trustStatus() {
   if (hub.enterpriseId) {
     try { out.repLive = (await tx(`/v2/enterprises/${hub.enterpriseId}/reputation`)).data || null; }
     catch (e) { out.repLive = null; out.repNote = e.message; }
+  } else { // a business already registered in the Telnyx portal can be used instead of registering again
+    out.existing = (await existingEnterprises()).map((e) => ({ id: e.id, legalName: e.legal_name || "", dba: e.doing_business_as || "", einLast4: einDigits(e.fein).slice(-4), reputation: !!e.number_reputation_enabled, branded: !!e.branded_calling_enabled, createdAt: e.created_at || null }));
   }
   try { out.tos = (await tx("/v2/terms_of_service/status", { query: { product_type: "number_reputation" } })).data ?? null; } catch (e) { out.tosErr = e.message; }
   out.tosOk = tosAgreed(hub, out.tos);
@@ -135,12 +153,30 @@ export async function trustRoute(req, action) {
     if (missing.length) return bad("Please check: " + missing.join(", ") + ".", 400, { missing });
     const hub = await hubGet();
     let enterpriseId = hub.enterpriseId || null, err = null;
+    if (!enterpriseId) { // same EIN already registered in Telnyx: update that one instead of making a duplicate
+      const same = (await existingEnterprises()).find((e) => einDigits(e.fein) && einDigits(e.fein) === einDigits(p.ein));
+      if (same) enterpriseId = same.id;
+    }
     try {
       if (enterpriseId) await tx(`/v2/enterprises/${enterpriseId}`, { method: "PUT", body: enterpriseBody(p, { create: false, locked: !!hub.rep?.enabledAt }) });
       else enterpriseId = (await tx("/v2/enterprises", { method: "POST", body: enterpriseBody(p) })).data?.id || null;
     } catch (e) { err = e.message; }
     await hubSave((h) => { h.profile = p; h.enterpriseId = enterpriseId; h.enterpriseErr = err; if (!err) h.enterpriseAt = Date.now(); });
     return err ? bad(err, 400, { saved: true }) : json({ ok: true, enterpriseId });
+  }
+
+  if (action === "trust-link" && post) { // use a business already registered in the Telnyx portal
+    const id = s((await req.json().catch(() => ({}))).id, 64);
+    if (!/^[0-9a-f-]{8,64}$/i.test(id)) return bad("Pick a business to use.");
+    let e;
+    try { e = (await tx(`/v2/enterprises/${id}`)).data; } catch (er) { return bad("Telnyx couldn't find that business on your account: " + er.message, 404); }
+    if (!e?.id) return bad("Telnyx couldn't find that business on your account.", 404);
+    const p = profileFromEnterprise(e);
+    await hubSave((h) => {
+      Object.assign(h, { profile: p, enterpriseId: e.id, enterpriseErr: null, enterpriseAt: Date.now(), linked: true });
+      if (e.number_reputation_enabled) h.rep = { ...(h.rep || {}), enabledAt: h.rep?.enabledAt || Date.now() }; // monitoring was already turned on in the portal
+    });
+    return json({ ok: true, enterpriseId: e.id, missing: profileProblems(p) });
   }
 
   if (action === "trust-cnam" && post) {
