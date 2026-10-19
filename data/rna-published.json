@@ -1,0 +1,52 @@
+{
+ "carrier": "Royal Neighbors",
+ "plan": "Ensured Legacy (SIWL and graded)",
+ "source": "PinnacleQuote sample rates, $10,000, non-tobacco, monthly (last updated Dec 4, 2025)",
+ "note": "Single level class (SIWL). Policy fee not published: $3.00/month assumed, like Foresters and American Home Life.",
+ "samples": {
+  "F": {
+   "pref": {
+    "50": 37.15,
+    "55": 41.55,
+    "60": 42.45,
+    "65": 48.55,
+    "70": 60.95,
+    "75": 88.05,
+    "80": 125.35,
+    "85": 170.55
+   },
+   "graded": {
+    "50": 50.95,
+    "55": 55.95,
+    "60": 57.45,
+    "65": 71.35,
+    "70": 93.55,
+    "75": 135.25,
+    "80": 190.55,
+    "85": 258.65
+   }
+  },
+  "M": {
+   "pref": {
+    "50": 43.85,
+    "55": 50.45,
+    "60": 54.95,
+    "65": 64.15,
+    "70": 82.35,
+    "75": 121.65,
+    "80": 169.65,
+    "85": 235.15
+   },
+   "graded": {
+    "50": 63.65,
+    "55": 70.65,
+    "60": 75.75,
+    "65": 93.55,
+    "70": 130.15,
+    "75": 183.75,
+    "80": 254.95,
+    "85": 351.45
+   }
+  }
+ }
+}
