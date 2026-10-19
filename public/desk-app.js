@@ -255,7 +255,7 @@ function dialQueue(){const st=$("#dqStage").value,pr=$("#dqProduct").value;
   return filteredLeads().filter(l=>(l.stage||"new")===st&&(!pr||l.product===pr)&&normPhone(l.phone))
     .sort((a,b)=>(a.callbackAt||0)-(b.callbackAt||0)||(a.lastCallAt||0)-(b.lastCallAt||0)||(a.createdAt||0)-(b.createdAt||0))}
 const SCRIPTS={
-  FE:l=>`Hi, is this ${esc(l.first||"…")}? This is [your name] calling about the request you sent in for information on final expense coverage, the plans that help cover funeral and burial costs so your family isn't left with the bill. I just need to verify a couple of details and see what you qualify for. Is your date of birth still ${esc(l.dob||"[DOB]")}?`,
+  FE:l=>`Hey ${esc(l.first||"…")}? This is [your name] giving you a call, we spoke right around a month or so ago, I was helping you out with your life insurance and sent a packet out to you at the ${esc(l.address||"[address]")} address, should of been a bigggg white packet, did you ever get a chance to look at that?`,
   MP:l=>`Hi ${esc(l.first||"…")}, this is [your name]. I'm following up on the mortgage protection form you sent back${l.lender?` about your loan with ${esc(l.lender)}`:""}. It's the coverage that pays off or keeps up the house payment if something happens to you. Did I catch you at an okay time to go over it for a few minutes?`,
   IUL:l=>`Hi ${esc(l.first||"…")}, this is [your name]. You'd asked about building tax-advantaged savings that also carries life insurance. I'd like to learn a little about your goals and then show you how an indexed universal life policy could fit. Do you have a few minutes now?`,
   "":l=>`Hi, is this ${esc(l.first||"…")}? This is [your name] following up on the information you requested about life insurance. Do you have a couple of minutes?`};
@@ -865,7 +865,7 @@ Tell me: the likely plan type or rate class, which answers on a typical applicat
 
 /* ---------- scripts ---------- */
 const SCRIPT_LIB={
- FE:{open:"Hi, is this {first}? This is {agent} with Highpoint Financial. I'm getting back to you on the request you sent in about final expense coverage, the plans that take care of funeral and burial costs so your family isn't left with the bill. I just need to confirm a few details and see what you qualify for. Is now an okay time?",
+ FE:{open:"Hey {first}? This is {agent} giving you a call, we spoke right around a month or so ago, I was helping you out with your life insurance and sent a packet out to you at the {address} address, should of been a bigggg white packet, did you ever get a chance to look at that?",
   facts:["Who would you want to receive this money?","Do you have anything in place now, and how much would it pay?","Have you thought about burial or cremation? (helps size the face amount)","Any health conditions, medications or hospital stays in the last few years?","What monthly amount would be comfortable without straining your budget?"],
   obj:[["I need to think about it.","Of course. Usually that means either the price or the plan isn't quite right. Which one is it for you? If it's the amount, we can adjust the coverage to fit."],["I can't afford it.","I understand. That's why we start with your budget, not a number I pick. What would feel comfortable each month? Even a smaller plan keeps the bill off your family."],["Send me something in the mail.","I can, but the price depends on your health answers, so anything I mail would be a guess. Let's take two minutes now and you'll have a real number to look at."]],
   close:"Based on everything you told me, the {plan} plan for {face} at {premium} a month fits what you want. Which day works best for the draft, the 1st or the 3rd?"},
@@ -880,6 +880,13 @@ const SCRIPT_LIB={
 };
 let scTab="FE";
 function renderScripts(){
+  if(scTab==="FE"&&window.HP_FEX){
+    $$("#scTabs .tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.sc===scTab));
+    const F=HP_FEX, hl=t=>esc(t).replace(/\{([\w ]+)\}/g,'<b style="color:var(--accent-2)">[$1]</b>');
+    $("#scBody").innerHTML=`<div class="panel wide fex-head"><h3>${esc(F.title)}</h3><p class="muted" style="margin:0">Blue lines are read aloud. Grey notes are for you. Open a stage to read it, or copy the whole stage.</p></div>`+F.stages.map((st,i)=>`<details class="panel wide fex-stage"${i===0?" open":""}><summary><span>${esc(st.title)}</span><button class="btn copy" type="button" data-stage="${i}">Copy stage</button></summary>${st.items.map(it=>it.k==="h"?`<h4 class="fex-h">${esc(it.x)}</h4>`:it.k==="note"?`<p class="fex-note">${esc(it.x)}</p>`:`<p class="fex-say${it.k==="obj"?" obj":""}">${it.k==="obj"?esc(it.x):hl(it.x)}</p>`).join("")}</details>`).join("");
+    $$("#scBody [data-stage]").forEach(b=>b.onclick=async e=>{e.preventDefault();e.stopPropagation();const st=F.stages[+b.dataset.stage];const t=st.items.filter(i=>i.k!=="note").map(i=>i.x).join("\n\n");try{await navigator.clipboard.writeText(t);toast("Stage copied")}catch{toast("Select the text to copy it")}});
+    return;
+  }
   $$("#scTabs .tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.sc===scTab));
   const s=SCRIPT_LIB[scTab]; const hl=t=>esc(t).replace(/\{(\w+)\}/g,'<b style="color:var(--accent-2)">[$1]</b>');
   $("#scBody").innerHTML=`

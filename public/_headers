@@ -38,3 +38,5 @@
   Cache-Control: public, max-age=31536000, immutable
 /hp-ui.css
   Cache-Control: no-cache
+/hp-fex-script.js
+  Cache-Control: no-cache
