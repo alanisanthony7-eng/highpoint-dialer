@@ -36,7 +36,7 @@ html.hpp-docked .app{margin-right:var(--hpp-w)}
 html.hpp-docked .hpd-profile{right:var(--hpp-w)}
 html.hpp-docked .hpdk:not(.callbar){right:calc(var(--hpp-w) + 20px)}
 html.hpp-tight .hpd-profile{left:0}
-html.hpp-paneled .hpf-pops,html.hpp-paneled .hpp-launch{display:none} /* the side panel's own tabs do this while it's open */
+html.hpp-docked .hpf-pops,html.hpp-docked .hpp-launch{display:none} /* the panel's own tabs do this while it's open */
 .hpp-pane .hpp-sub{display:none} /* the client is right next to the panel */
 .hpp-body{container:hppb / inline-size}
 .hpp-seg .s{display:none}
@@ -285,6 +285,3 @@ html.hpp-paneled .hpf-pops,html.hpp-paneled .hpp-launch{display:none} /* the sid
   .hpp .hpp-nophone{display:none}
 }
 @media (prefers-reduced-motion:reduce){.hpp{animation:none}.hpp-live i{animation:none}}
-.hpp-pin[aria-pressed="true"]{color:var(--accent-2)}
-.hpp-pin[aria-pressed="true"] svg{fill:color-mix(in srgb,var(--accent-2) 35%,transparent)}
-.hpp-hb[hidden]{display:none}

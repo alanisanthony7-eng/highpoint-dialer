@@ -38,8 +38,6 @@
     dock: sv('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M14 4v16"/>'),
     pip: sv('<rect x="3" y="5" width="18" height="14" rx="2.5"/><rect x="12" y="11.5" width="6.5" height="5" rx="1"/>'),
     back: sv('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
-    pin: sv('<path d="M9 3h6l-1 6 3 3H7l3-3z"/><path d="M12 15v6"/>'),
-    tidy: sv('<rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/>'),
   };
   const KINDS = {
     script: { title: "Script", label: "Script", key: "S", w: 360, h: 640, minW: 290, minH: 220, wt: 1.25 },
@@ -58,10 +56,7 @@
   const W = new Map(); // tool -> { k, el, body, built, st, docked }
   const ST = {}; // each tool's view state, kept when it moves between the panel and a window
   let zTop = 360, pip = null, panel = null; // pip: { k, win }
-  const floating = (k) => isPhone() || G[k]?.mode !== "dock";
-  // tools that open by themselves when a call connects (pin button on each tool); ones you close stay closed for that call
-  const AUTO = Object.assign({ script: true, quote: true, live: false }, lsGet("hp.pop.oncall", {}));
-  const shut = new Set(); let autoLead = null;
+  const floating = (k) => isPhone() || G[k]?.mode === "float";
   const panelW = () => Math.round(Math.max(320, Math.min(PN.w || 380, 640, innerWidth * 0.5)));
 
   /* ---------- the side panel ---------- */
@@ -114,16 +109,13 @@
   }
   // the page makes room for the panel; on a laptop the client profile also takes the menu's space during a call
   function layout() {
-    const pOn = panelOn(), pw = pOn ? panelW() : 0;
-    const cw = !isPhone() && inline().some((k) => !isMin(k)) ? colW() + 16 : 0, room = pw + cw;
-    HTML.classList.toggle("hpp-docked", room > 0);
-    HTML.classList.toggle("hpp-inline", cw > 0);
-    HTML.classList.toggle("hpp-paneled", pOn);
-    HTML.style.setProperty("--hpp-w", room + "px");
-    if (panel) panel.style.width = panelW() + "px";
-    HTML.classList.toggle("hpp-tight", !isPhone() && innerWidth - room - 262 < 900);
-    const d = document.getElementById("hpdDock"); // a floating call card the agent dragged into the reserved space moves out of its way
-    if (d && room && !d.classList.contains("callbar") && d.style.left) { const r = d.getBoundingClientRect(), lim = innerWidth - room - 12; if (r.right > lim) d.style.left = Math.max(8, lim - r.width) + "px"; }
+    const on = !!panel && !panel.hidden && !isPhone(), w = panelW();
+    HTML.classList.toggle("hpp-docked", on);
+    HTML.style.setProperty("--hpp-w", on ? w + "px" : "0px");
+    if (panel) panel.style.width = w + "px";
+    HTML.classList.toggle("hpp-tight", !isPhone() && innerWidth - (on ? w : 0) - 262 < 900);
+    const d = document.getElementById("hpdDock"); // a floating call card the agent dragged under the panel moves out of its way
+    if (d && on && !d.classList.contains("callbar") && d.style.left) { const r = d.getBoundingClientRect(), lim = innerWidth - w - 12; if (r.right > lim) d.style.left = Math.max(8, lim - r.width) + "px"; }
   }
 
   /* ---------- a tool in the panel ---------- */
@@ -131,62 +123,28 @@
     const K = KINDS[k], el = document.createElement("section");
     el.className = "hpp-pane"; el.dataset.kind = k; el.setAttribute("aria-label", K.title);
     el.innerHTML = `<div class="hpp-ph"><span class="hpp-ic">${IC[k]}</span><b class="hpp-t">${K.title}</b><span class="hpp-sub"></span><span class="hpp-sp"></span>
-      ${pinBtn(k)}<button type="button" class="hpp-hb" data-a="float" title="Pop out into its own window" aria-label="Pop the ${K.title.toLowerCase()} out into its own window">${IC.out}</button>
+      <button type="button" class="hpp-hb" data-a="float" title="Pop out into its own window" aria-label="Pop the ${K.title.toLowerCase()} out into its own window">${IC.out}</button>
       <button type="button" class="hpp-hb" data-a="x" title="Close" aria-label="Close the ${K.title.toLowerCase()}">${IC.x}</button></div><div class="hpp-body"></div>`;
     $('[data-a="x"]', el).onclick = () => close(k);
     $('[data-a="float"]', el).onclick = () => setMode(k, "float");
-    $('[data-a="pin"]', el).onclick = () => togglePin(k);
     return { k, el, body: $(".hpp-body", el), built: false, st: (ST[k] = ST[k] || {}), docked: true };
   }
 
   /* ---------- a tool in its own window ---------- */
-  // The free space for windows: under the profile's header (or the desk's top bar), above the call bar, and left of
-  // the side panel or a floating call card on the right.
-  const panelOn = () => !!panel && !panel.hidden && !isPhone();
-  function area() {
-    const bottom = innerHeight - (document.body.classList.contains("hpd-bar") ? 58 : 0) - 8;
-    return { top: 8, bottom: Math.max(208, bottom), right: innerWidth - (panelOn() ? panelW() : 0) - 8 };
-  }
-  // Until you move a window it stays in line: a tidy column down the right edge, split between the open tools, and the
-  // page makes room for it so nothing is hidden underneath. Tucked-away tools sit as title bars at the bottom of the
-  // column. Drag a window out of line and it floats over the page wherever you put it.
-  const colW = () => Math.round(Math.max(320, Math.min(380, innerWidth * 0.3)));
-  const inline = () => ORDER.filter((k) => { const w = W.get(k); return w && !w.docked && !G[k]?.moved && !w.el.classList.contains("in-pip"); });
-  function slots() {
-    const right = innerWidth - (panelOn() ? panelW() : 0) - 8, w = colW(), gap = 8, out = {};
-    const inl = inline(), up = inl.filter((k) => !isMin(k)), mins = inl.filter((k) => isMin(k));
-    let bottom = innerHeight - 8;
-    for (const k of mins.slice().reverse()) { out[k] = { x: right - w, y: bottom - 44, w, h: 44 }; bottom -= 44 + gap; }
-    const H = bottom - 8; let y = 8;
-    up.forEach((k, i) => { const h = i === up.length - 1 ? bottom - y : Math.round((H - gap * (up.length - 1)) / up.length); out[k] = { x: right - w, y, w, h }; y += h + gap; });
-    return out;
-  }
   function defaults(k) {
-    const s = slots()[k]; if (s) return s;
-    const a = area(), w = Math.min(KINDS[k].w, innerWidth - 24);
-    return { x: a.right - w, y: a.top, w, h: Math.min(KINDS[k].h, a.bottom - a.top) };
+    const vw = innerWidth, vh = innerHeight, K = KINDS[k], w = Math.min(K.w, vw - 24), h = Math.min(K.h, vh - 40);
+    const i = ORDER.indexOf(k), x = Math.max(12, vw - panelW() * (HTML.classList.contains("hpp-docked") ? 1 : 0) - w - 24 - i * 28);
+    return { x, y: Math.max(12, Math.min(80 + i * 28, vh - h - 12)), w, h };
   }
-  function geo(k) { return G[k]?.moved && G[k].w ? { x: G[k].x, y: G[k].y, w: G[k].w, h: G[k].h } : defaults(k); }
+  function geo(k) { return Object.assign(defaults(k), G[k] && G[k].w ? { x: G[k].x, y: G[k].y, w: G[k].w, h: G[k].h } : {}); }
   function place(k) {
     const w = W.get(k); if (!w || w.docked || w.el.classList.contains("in-pip")) return;
-    const g = geo(k), K = KINDS[k], vw = innerWidth, a = G[k]?.moved ? area() : { top: 8, bottom: innerHeight - 8 };
-    const minH = isMin(k) ? 44 : K.minH; // a tucked-away window is just its title bar
-    g.w = Math.max(K.minW, Math.min(g.w, vw - 16)); g.h = Math.max(minH, Math.min(g.h, a.bottom - 8));
-    g.x = Math.max(8, Math.min(g.x, vw - g.w - 8)); g.y = Math.max(8, Math.min(g.y, a.bottom - 44));
-    if (g.y + g.h > a.bottom) { g.h = Math.max(minH, a.bottom - g.y); if (g.y + g.h > a.bottom) g.y = Math.max(8, a.bottom - g.h); } // never under the call bar
+    const g = geo(k), K = KINDS[k], vw = innerWidth, vh = innerHeight;
+    g.w = Math.max(K.minW, Math.min(g.w, vw - 16)); g.h = Math.max(K.minH, Math.min(g.h, vh - 16));
+    g.x = Math.max(8, Math.min(g.x, vw - g.w - 8)); g.y = Math.max(8, Math.min(g.y, vh - 52));
+    if (g.y + g.h > vh - 8) { g.h = Math.max(K.minH, vh - 8 - g.y); if (g.y + g.h > vh - 8) g.y = Math.max(8, vh - 8 - g.h); } // keep the resize corner on screen
     Object.assign(w.el.style, { left: g.x + "px", top: g.y + "px" });
     w.el.style.setProperty("--w", g.w + "px"); w.el.style.setProperty("--h", g.h + "px");
-    const t = $('[data-a="tidy"]', w.el); if (t) t.hidden = !G[k]?.moved;
-  }
-  let tileRaf = 0;
-  const retile = () => { if (tileRaf) return; tileRaf = requestAnimationFrame(() => { tileRaf = 0; layout(); ORDER.forEach(place); }); };
-  // magnet: while you drag, edges snap to the screen and to the other windows
-  function snap(k, x, y, wd, ht) {
-    const a = area(), rs = wins().filter((o) => o.k !== k && !o.el.classList.contains("in-pip")).map((o) => o.el.getBoundingClientRect());
-    const xs = [8, a.right - wd, ...rs.flatMap((o) => [o.left - wd - 8, o.right + 8, o.left, o.right - wd])];
-    const ys = [a.top, a.bottom - ht, ...rs.flatMap((o) => [o.top - ht - 8, o.bottom + 8, o.top, o.bottom - ht])];
-    const near = (v, list) => { let best = v, d = 14; for (const c of list) { const dd = Math.abs(v - c); if (dd < d) { d = dd; best = c; } } return best; };
-    return [near(x, xs), near(y, ys)];
   }
   const wins = () => [...W.values()].filter((x) => !x.docked);
   function front(k) {
@@ -206,9 +164,7 @@
     el.className = "hpp"; el.dataset.kind = k; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", K.title);
     el.innerHTML = `<header class="hpp-h"><span class="hpp-ic">${IC[k]}</span><b class="hpp-t">${K.title}</b><span class="hpp-sub"></span><span class="hpp-sp"></span>
       <span class="hpp-switch" role="group" aria-label="Other tools"></span>
-      <button type="button" class="hpp-hb hpp-nophone" data-a="tidy" hidden title="Put it back in line" aria-label="Put the ${K.title.toLowerCase()} back in line">${IC.tidy}</button>
-      ${pinBtn(k)}
-      <button type="button" class="hpp-hb hpp-nophone" data-a="dock" title="Move it into a side panel" aria-label="Move the ${K.title.toLowerCase()} into a side panel">${IC.dock}</button>
+      <button type="button" class="hpp-hb hpp-nophone" data-a="dock" title="Put it back in the side panel" aria-label="Put the ${K.title.toLowerCase()} back in the side panel">${IC.dock}</button>
       ${PIP_OK ? `<button type="button" class="hpp-hb hpp-nophone" data-a="pip" title="Keep on top of your other windows" aria-label="Keep on top of your other windows">${IC.pip}</button>` : ""}
       <button type="button" class="hpp-hb" data-a="min" title="Tuck away" aria-label="Tuck away">${IC.min}</button>
       <button type="button" class="hpp-hb" data-a="x" title="Close" aria-label="Close the ${K.title.toLowerCase()}">${IC.x}</button></header>
@@ -219,8 +175,6 @@
     $('[data-a="x"]', el).onclick = () => close(k);
     $('[data-a="min"]', el).onclick = () => minimize(k, !isMin(k));
     $('[data-a="dock"]', el).onclick = () => setMode(k, "dock");
-    $('[data-a="tidy"]', el).onclick = () => { G[k] = { ...(G[k] || {}), moved: false }; saveG(); retile(); };
-    $('[data-a="pin"]', el).onclick = () => togglePin(k);
     $('[data-a="pip"]', el)?.addEventListener("click", () => (pip?.k === k ? unpip() : toPip(k)));
     hd.addEventListener("dblclick", (e) => { if (!e.target.closest("button") && !el.classList.contains("in-pip")) minimize(k, !isMin(k)); });
     // drag by the title bar; snaps to the screen edges
@@ -228,15 +182,12 @@
       if (e.button !== 0 || e.target.closest("button") || isPhone() || el.classList.contains("in-pip")) return;
       const r = el.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
       hd.setPointerCapture(e.pointerId); el.classList.add("moving");
-      hd.onpointermove = (m) => {
-        const [x, y] = snap(k, Math.max(8 - r.width + 80, Math.min(innerWidth - 80, m.clientX - dx)), Math.max(0, Math.min(innerHeight - 44, m.clientY - dy)), r.width, isMin(k) ? 44 : r.height);
-        el.style.left = x + "px"; el.style.top = y + "px";
-      };
+      hd.onpointermove = (m) => { el.style.left = Math.max(8 - r.width + 80, Math.min(innerWidth - 80, m.clientX - dx)) + "px"; el.style.top = Math.max(0, Math.min(innerHeight - 44, m.clientY - dy)) + "px"; };
       hd.onpointerup = hd.onpointercancel = () => {
         hd.onpointermove = hd.onpointerup = hd.onpointercancel = null; el.classList.remove("moving");
-        const b = el.getBoundingClientRect();
-        if (Math.abs(b.left - r.left) < 3 && Math.abs(b.top - r.top) < 3) return; // a click, not a move
-        G[k] = { ...(G[k] || {}), moved: true, x: Math.round(b.left), y: Math.round(b.top), w: Math.round(r.width), h: Math.round(r.height) }; saveG(); place(k); retile();
+        const b = el.getBoundingClientRect(); let x = b.left, y = b.top;
+        if (x < 28) x = 8; if (innerWidth - b.right < 28) x = innerWidth - b.width - 8; if (y < 28) y = 8; if (b.bottom <= innerHeight && innerHeight - b.bottom < 28 && !isMin(k)) y = innerHeight - b.height - 8;
+        G[k] = { ...(G[k] || {}), ...geo(k), x: Math.round(x), y: Math.round(y) }; saveG(); place(k);
       };
     });
     // resize from the corner
@@ -245,7 +196,7 @@
       if (e.button !== 0) return; e.preventDefault(); e.stopPropagation();
       const r = el.getBoundingClientRect(), sx = e.clientX, sy = e.clientY; rz.setPointerCapture(e.pointerId); el.classList.add("moving");
       rz.onpointermove = (m) => { el.style.setProperty("--w", Math.max(KINDS[k].minW, Math.min(innerWidth - r.left - 8, r.width + m.clientX - sx)) + "px"); el.style.setProperty("--h", Math.max(KINDS[k].minH, Math.min(innerHeight - r.top - 8, r.height + m.clientY - sy)) + "px"); };
-      rz.onpointerup = rz.onpointercancel = () => { rz.onpointermove = rz.onpointerup = rz.onpointercancel = null; el.classList.remove("moving"); const b = el.getBoundingClientRect(); G[k] = { ...(G[k] || {}), moved: true, x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height) }; saveG(); place(k); retile(); };
+      rz.onpointerup = rz.onpointercancel = () => { rz.onpointermove = rz.onpointerup = rz.onpointercancel = null; el.classList.remove("moving"); const b = el.getBoundingClientRect(); G[k] = { ...(G[k] || {}), x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height) }; saveG(); };
     });
     document.body.append(el);
     return w;
@@ -257,7 +208,7 @@
     const fl = floating(k);
     let w = W.get(k);
     if (w && w.docked === fl) { drop(k); w = null; } // it's moving between the panel and a window
-    if (!w) { w = fl ? buildWin(k) : buildPane(k); W.set(k, w); if (fl) { place(k); retile(); } }
+    if (!w) { w = fl ? buildWin(k) : buildPane(k); W.set(k, w); if (fl) place(k); }
     if (opts.tab && k === "script") { w.st.tab = opts.tab; w.st.keepTab = true; w.st.sig = ""; }
     if (fl) { minimize(k, opts.restore ? !!G[k]?.min : false, true); front(k); switcher(); }
     else { stack(); if (!opts.restore) { w.el.classList.remove("hpp-flash"); void w.el.offsetWidth; w.el.classList.add("hpp-flash"); } }
@@ -276,22 +227,13 @@
     if (!W.has(k)) return;
     drop(k);
     G[k] = { ...(G[k] || {}), open: false }; saveG();
-    if (CALL.live) shut.add(k); // closed during a call: it stays closed until the next one
-    retile();
     const fk = frontKind(); if (fk) front(fk);
     switcher(); syncPressed();
   }
   function setMode(k, mode) {
     G[k] = { ...(G[k] || {}), mode }; saveG();
     if (W.has(k)) open(k);
-    if (!isPhone()) toast(mode === "dock" ? `${KINDS[k].title} is in the side panel. The arrow in its corner pops it back out.` : `${KINDS[k].title} is back in its own window.`);
-  }
-  function pinBtn(k) { return `<button type="button" class="hpp-hb hpp-pin hpp-nophone" data-a="pin" aria-pressed="${!!AUTO[k]}" title="${AUTO[k] ? "Opens on every call. Click to stop." : "Click to open it on every call"}" aria-label="Open the ${KINDS[k].title.toLowerCase()} on every call">${IC.pin}</button>`; }
-  function togglePin(k) {
-    AUTO[k] = !AUTO[k]; lsSet("hp.pop.oncall", AUTO);
-    const d = [document, pip?.win?.document].filter(Boolean);
-    d.forEach((doc) => $$(`[data-kind="${k}"] [data-a="pin"]`, doc).forEach((b) => { b.setAttribute("aria-pressed", String(AUTO[k])); b.title = AUTO[k] ? "Opens on every call. Click to stop." : "Click to open it on every call"; }));
-    toast(AUTO[k] ? `${KINDS[k].title} will open on every call` : `${KINDS[k].title} won't open by itself anymore`);
+    if (mode === "float" && !isPhone()) toast(`${KINDS[k].title} is in its own window. Use the panel button in its title bar to put it back.`);
   }
   function minimize(k, on, quiet) {
     const w = W.get(k); if (!w || w.docked) return;
@@ -299,7 +241,6 @@
     const b = $('[data-a="min"]', w.el); b.innerHTML = on ? IC.max : IC.min; b.title = on ? "Open" : "Tuck away"; b.setAttribute("aria-label", b.title);
     G[k] = { ...(G[k] || {}), min: !!on }; saveG();
     if (!on) paint(k, true);
-    retile();
     if (!quiet) syncPressed();
   }
   // a launcher: show the tool, or hide it when it's already showing (a window behind others comes forward first)
@@ -322,8 +263,6 @@
     const docs = [document, pip?.win?.document].filter(Boolean);
     docs.forEach((d) => $$("[data-pop]", d).forEach((b) => b.setAttribute("aria-pressed", String(isOpen(b.dataset.pop) && !isMin(b.dataset.pop)))));
   }
-  // the call bar, the profile and the call card come and go: keep windows in line and off the call bar
-  new MutationObserver(retile).observe(document.body, { attributes: true, attributeFilter: ["class"] });
   addEventListener("resize", () => {
     ORDER.forEach((k) => { const w = W.get(k); if (w && w.docked === floating(k)) open(k, { restore: true }); }); // crossed the phone size: move between panel and sheet
     ORDER.forEach(place); layout();
@@ -867,12 +806,9 @@
     if (id !== CALL.leadId) { CALL.lines = []; CALL.partial = []; CALL.txLead = null; }
     Object.assign(CALL, { live: true, t0: Date.now(), leadId: id, endedAt: 0 });
     if (following() && id) { QF.manual = false; bind(id); }
-    // fewer clicks: pinned tools open by themselves when a call connects (not on phones, where they'd cover the call)
-    if (id !== autoLead) { shut.clear(); autoLead = id; }
-    if (!isPhone()) ORDER.forEach((k) => { if (AUTO[k] && !W.has(k) && !shut.has(k)) open(k, { auto: true }); });
-    retile(); paint();
+    paint();
   }, 80));
-  addEventListener("hp:callend", () => { CALL.live = false; CALL.endedAt = Date.now(); CALL.partial = []; paint(); setTimeout(retile, 60); });
+  addEventListener("hp:callend", () => { CALL.live = false; CALL.endedAt = Date.now(); CALL.partial = []; paint(); });
   addEventListener("hp:tx", (e) => {
     const { leadId, lines, partial } = e.detail || {}; if (!leadId || !Array.isArray(lines)) return;
     if (leadId !== CALL.txLead) { CALL.txLead = leadId; if (!CALL.live && DL()?.busy) Object.assign(CALL, { live: true, t0: Date.now(), leadId }); }
@@ -910,8 +846,6 @@
   window.hpPop = {
     open, close, toggle, isOpen, minimize,
     closeAll: () => ORDER.forEach(close),
-    tidy() { ORDER.forEach((k) => { if (G[k]) G[k].moved = false; }); saveG(); retile(); }, // every window back in line
-    get pinned() { return { ...AUTO }; },
     launchers, dockRow: () => `<div class="hpdk-pops" role="group" aria-label="Pop-outs">${launchers("hpdk")}</div>`,
     get state() { return { call: { ...CALL, lines: CALL.lines.length }, open: [...W.keys()], pip: pip?.k || null }; },
   };
