@@ -107,18 +107,29 @@ export async function roomRoute(req, action) {
 // Highpoint Bot + call summaries (needs ANTHROPIC_API_KEY)
 export async function aiRoute(req) {
   await requireUser(req);
-  const key = env("ANTHROPIC_API_KEY");
-  if (!key) return json({ error: "The assistant isn't turned on yet. Your admin adds ANTHROPIC_API_KEY in Cloudflare.", code: "unavailable" }, 503);
+  const key = String(env("ANTHROPIC_API_KEY") || "").trim();
+  if (!key) return json({ error: "The assistant isn't turned on yet. An admin needs to add ANTHROPIC_API_KEY in Cloudflare Pages → Settings → Variables and secrets.", code: "unavailable" }, 503);
   const b = await req.json().catch(() => ({}));
   const messages = (b.messages || []).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, content: typeof m.content === "string" ? redact(m.content.slice(0, 40000)) : redact(JSON.stringify(m.content)).slice(0, 40000) })).slice(-30);
   if (!messages.length) return json({ error: "Nothing to send" }, 400);
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  const system = String(b.system || "You are Highpoint Bot, a helpful assistant for life insurance agents at Highpoint Financial (final expense, mortgage protection, IUL). Be concise and practical. You are not a lawyer; flag compliance questions for a licensed advisor.").slice(0, 8000);
+  const ask = (model) => fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: env("HP_AI_MODEL", "claude-haiku-4-5-20251001"), max_tokens: 1500, system: String(b.system || "You are Highpoint Bot, a helpful assistant for life insurance agents at Highpoint Financial (final expense, mortgage protection, IUL). Be concise and practical. You are not a lawyer; flag compliance questions for a licensed advisor.").slice(0, 8000), messages }),
+    body: JSON.stringify({ model, max_tokens: 1500, system, messages }),
   });
-  const j = await r.json().catch(() => ({}));
-  if (r.status === 429) return json({ error: "Too many requests", code: "rate_limited" }, 429);
-  if (!r.ok) return json({ error: j.error?.message || "Assistant error" }, 502);
-  return json({ text: (j.content || []).filter((c) => c.type === "text").map((c) => c.text).join("") });
+  const DEFAULT_MODEL = "claude-haiku-5-5"; // fast and inexpensive; HP_AI_MODEL can pick another
+  const chosen = String(env("HP_AI_MODEL") || "").trim() || DEFAULT_MODEL;
+  let r = await ask(chosen);
+  let j = await r.json().catch(() => ({}));
+  // a model set in HP_AI_MODEL that Anthropic has retired: fall back to the default instead of breaking the bot
+  if (r.status === 404 && chosen !== DEFAULT_MODEL) { r = await ask(DEFAULT_MODEL); j = await r.json().catch(() => ({})); }
+  if (r.ok) return json({ text: (j.content || []).filter((c) => c.type === "text").map((c) => c.text).join("") });
+  const detail = String(j.error?.message || "");
+  if (r.status === 401) return json({ error: "The Anthropic API key isn't valid. An admin needs to check ANTHROPIC_API_KEY in Cloudflare (it starts with sk-ant-).", code: "bad_key" }, 502);
+  if (r.status === 403) return json({ error: "This Anthropic API key doesn't have access. Check the key's workspace in the Claude Console.", code: "forbidden" }, 502);
+  if (/credit balance|billing|purchase credits/i.test(detail)) return json({ error: "The Anthropic account is out of credits. An admin needs to add credits in the Claude Console (Billing).", code: "no_credit" }, 502);
+  if (r.status === 429) return json({ error: "Too many requests right now. Try again in a minute.", code: "rate_limited" }, 429);
+  if (r.status === 529 || r.status >= 500) return json({ error: "Claude is busy right now. Try again in a moment.", code: "busy" }, 503);
+  return json({ error: detail || "Assistant error" }, 502);
 }
