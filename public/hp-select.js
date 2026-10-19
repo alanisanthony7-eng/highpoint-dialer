@@ -8,7 +8,7 @@
   const css = `
   select{color-scheme:dark}
   select[data-hps]{-webkit-appearance:none!important;appearance:none!important;padding-right:38px!important;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%239097AA' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")!important;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23FF9E3D' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")!important;
     background-repeat:no-repeat!important;background-position:right 13px center!important;background-size:14px 14px!important;cursor:pointer}
   select[data-hps][aria-expanded="true"]{border-color:#FF4FA3!important;box-shadow:0 0 0 3px rgba(255,79,163,.2)!important}
   input[type=date],input[type=datetime-local],input[type=time],input[type=month]{color-scheme:dark}
