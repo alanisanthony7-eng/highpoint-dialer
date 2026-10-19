@@ -1,7 +1,7 @@
 // Telnyx: REST helper, one-click setup, per-agent browser-phone tokens, numbers
 import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
-import { env, json, bad, requireUser, wrap, httpErr, getJ, setJ, updateJ, config as loadConfig, to10, AREA, siteUrl } from "../lib/hp.mjs";
+import { env, json, bad, requireUser, wrap, httpErr, getJ, setJ, updateJ, listKeys, config as loadConfig, to10, AREA, siteUrl, saveCall, patchCallBySid, aggregate } from "../lib/hp.mjs";
 import { redact } from "../lib/redact.mjs";
 
 export const TX_KEY = () => env("TELNYX_API_KEY");
@@ -32,7 +32,9 @@ export async function txSetup() {
   const body = { connection_name: "Highpoint Dialer", active: true, anchorsite_override: "Latency", outbound: { outbound_voice_profile_id: ovp.id }, inbound: { ani_number_format: "+E.164", dnis_number_format: "+e164", simultaneous_ringing: "enabled" } };
   // Telnyx posts every call event (and live transcription) for this connection to our webhook.
   // If the account refuses the webhook fields, save the connection without them so the phone keeps working.
-  const hook = { webhook_event_url: `${siteUrl()}/api/telnyx/events`, webhook_api_version: "2" };
+  // sip_uri_calling_preference "internal": inbound calls are transferred to an agent's credential from our own Call Control app
+  const hookUrl = `${siteUrl()}/api/telnyx/events`;
+  const hook = { webhook_event_url: hookUrl, webhook_api_version: "2", sip_uri_calling_preference: "internal" };
   const creds = conn ? {} : { user_name: "hpdialer" + rnd(10, "abcdefghijkmnpqrstuvwxyz23456789"), password: rnd(28) };
   const save = (extra) => (conn
     ? tx(`/v2/credential_connections/${conn.id}`, { method: "PATCH", body: { ...body, ...extra } })
@@ -41,11 +43,19 @@ export async function txSetup() {
   try { saved = await save(hook); t.hookErr = null; }
   catch (e) { t.hookErr = e.message; saved = await save({}); }
   if (!conn) t.connId = saved.data.id;
-  // make sure the outbound profile allows this connection
+  // Inbound: Telnyx can't ring browser credentials directly, so numbers point at a Call Control app whose
+  // webhook (/api/telnyx/events) rings each agent. Outbound calls still go out through the credential connection.
+  const appBody = { application_name: "Highpoint Inbound", active: true, anchorsite_override: "Latency", webhook_event_url: hookUrl, webhook_api_version: "2", outbound: { outbound_voice_profile_id: ovp.id } };
+  try {
+    const app = t.appId ? (await tx(`/v2/call_control_applications/${t.appId}`).catch(() => null))?.data : null;
+    if (app?.id) await tx(`/v2/call_control_applications/${app.id}`, { method: "PATCH", body: appBody });
+    else { t.appId = null; t.appId = (await tx("/v2/call_control_applications", { method: "POST", body: appBody })).data.id; }
+    t.appErr = null;
+  } catch (e) { t.appErr = e.message; }
   await setJ("config", "app", { ...cfg, tx: { ...t, setupAt: Date.now() } });
-  // point our numbers at the connection so they can call out and ring the browser
+  // point our numbers at the inbound app (or, if it couldn't be made, the browser connection)
   const all = (await getJ("numbers", "all")) || {};
-  for (const n of Object.values(all)) if (!n.released && n.provider === "telnyx" && n.sid) await tx(`/v2/phone_numbers/${n.sid}`, { method: "PATCH", body: { connection_id: t.connId } }).catch(() => {});
+  for (const n of Object.values(all)) if (!n.released && n.provider === "telnyx" && n.sid) await tx(`/v2/phone_numbers/${n.sid}`, { method: "PATCH", body: { connection_id: t.appId || t.connId } }).catch(() => {});
   return { ...t, ovpName: ovp.name };
 }
 
@@ -81,7 +91,8 @@ export async function txSearch(ac, st, contains) {
 
 export async function txBuy(phoneNumber) {
   const cfg = await loadConfig();
-  const o = await tx("/v2/number_orders", { method: "POST", body: { phone_numbers: [{ phone_number: phoneNumber }], ...(cfg.tx?.connId ? { connection_id: cfg.tx.connId } : {}) } });
+  const home = cfg.tx?.appId || cfg.tx?.connId; // inbound calls are routed by the Call Control app when there is one
+  const o = await tx("/v2/number_orders", { method: "POST", body: { phone_numbers: [{ phone_number: phoneNumber }], ...(home ? { connection_id: home } : {}) } });
   // the order completes in a few seconds; look the number up so we can store its id
   let id = "";
   for (let i = 0; i < 8 && !id; i++) {
@@ -89,7 +100,7 @@ export async function txBuy(phoneNumber) {
     const l = await tx("/v2/phone_numbers", { query: { "filter[phone_number]": phoneNumber } }).catch(() => ({}));
     id = l.data?.[0]?.id || "";
   }
-  if (id && cfg.tx?.connId) await tx(`/v2/phone_numbers/${id}`, { method: "PATCH", body: { connection_id: cfg.tx.connId } }).catch(() => {});
+  if (id && home) await tx(`/v2/phone_numbers/${id}`, { method: "PATCH", body: { connection_id: home } }).catch(() => {});
   return { sid: id, orderId: o.data?.id, status: o.data?.status };
 }
 
@@ -141,33 +152,144 @@ function scrub(v, k = "") {
 async function logEvent(entry) {
   await updateJ("txlog", "recent", (a) => [...(Array.isArray(a) ? a : []), { at: Date.now(), ...entry }].slice(-40), []);
 }
-const leadOf = (p) => to10(/out/i.test(p.direction || "") ? p.to : p.from);
+// The lead's number is the far end of the call. A SIP address (an agent's browser) is never a lead.
+const leadOf = (p) => { const v = String((/out/i.test(p.direction || "") ? p.to : p.from) || ""); return /sip:|@/i.test(v) ? "" : to10(v); };
+const b64json = (o) => btoa(JSON.stringify(o));
+const unjson = (s) => { try { return JSON.parse(atob(String(s || ""))); } catch { return null; } };
+const act = (ccid, action, body = {}) => tx(`/v2/calls/${ccid}/actions/${action}`, { method: "POST", body });
+
+// Start live transcription once per call. `target` is the leg whose "inbound" track is the lead's voice.
+async function startTx(lead, sess, target) {
+  const rec = await getJ("txlive", lead);
+  if (!rec || rec.sess !== sess) return "answer for an earlier call";
+  if (rec.declined) return "not transcribing: the client declined";
+  if (rec.started) return "transcription already running";
+  if ((await loadConfig()).settings?.transcribe === false) return "not transcribing: turned off in settings";
+  let err = null;
+  try { await act(target, "transcription_start", { transcription_engine: "Google", transcription_tracks: "both", language: "en-US", interim_results: true }); }
+  catch (e) { err = e.message; }
+  await updateJ("txlive", lead, (r) => { if (r.sess === sess) Object.assign(r, { started: !err, startErr: err, ccid: target }); return r; }, {});
+  await logEvent({ type: "transcription_start", note: err ? "failed: " + err : "started" });
+  return err ? "transcription failed to start" : "transcription started";
+}
+
+/* ---------- inbound calls ----------
+   Telnyx can't ring a browser's on-demand credential directly ("inbound calls directly to on-demand generated
+   credential is not currently supported"), so our numbers point at a Call Control app and this webhook routes
+   each call: ring the number's owner (a team number rings agents active in the last 12 hours), one at a time,
+   by transferring the caller to that agent's credential. If nobody picks up, log a missed call in the inbox
+   and tell the caller we'll call back. State per call: txin/<call_session_id>. */
+async function ringList(num) {
+  const cfg = await loadConfig();
+  let ids = num.owner ? [num.owner] : [];
+  if (!ids.length) { // same rule as Twilio numbers
+    for (const k of (await listKeys("agents", "")).slice(0, 60)) { const a = await getJ("agents", k); if (a && a.seen > Date.now() - 12 * 36e5) ids.push(a.identity); }
+    ids = ids.slice(0, 10);
+  }
+  const out = [];
+  for (const id of ids) { const c = await getJ("txcred", id); if (c?.sip && c.connId === cfg.tx?.connId) out.push({ id, sip: c.sip }); }
+  return out;
+}
+async function inboundStart(p, sess) {
+  const all = (await getJ("numbers", "all")) || {};
+  const num = all[p.to] || all["+1" + to10(p.to)];
+  if (!num || num.released) return ""; // not one of our numbers
+  const queue = await ringList(num);
+  let created = false;
+  await updateJ("txin", sess, (x) => { if (x) return undefined; created = true; return { sess, ccid: p.call_control_id, from: p.from, to: num.e164 || p.to, owner: num.owner || "", queue, i: -1, at: Date.now() }; }, null);
+  if (!created) return "already being routed";
+  await saveCall({ id: sess, sid: sess, agent: queue[0]?.id || num.owner || "_team", dir: "in", mode: "inbound", to: to10(p.from), from: num.e164 || p.to, at: Date.now(), status: "ringing" });
+  await ringNext(sess);
+  return queue.length ? `ringing ${queue.length} agent${queue.length > 1 ? "s" : ""}` : "no agent can take it";
+}
+async function ringNext(sess) {
+  let moved = false;
+  const s = await updateJ("txin", sess, (x) => {
+    if (!x || x.bridged || x.done || x.fallback || x.waitAnswer) return undefined;
+    x.i += 1; if (x.i >= x.queue.length) x.fallback = true; moved = true; return x;
+  }, null);
+  if (!moved) return;
+  if (s.fallback) return missedCall(s);
+  const a = s.queue[s.i];
+  const body = { to: `sip:${a.sip}@sip.telnyx.com`, from: s.from, timeout_secs: 22, target_leg_client_state: b64json({ in: sess, i: s.i }) };
+  let err = null;
+  try { await act(s.ccid, "transfer", body); }
+  catch (e) {
+    err = e.message;
+    if (/answer/i.test(err) && !s.answered) { // this account wants the call answered before a transfer: answer, ring again on call.answered
+      await updateJ("txin", sess, (x) => (x ? Object.assign(x, { i: x.i - 1, waitAnswer: true }) : undefined), null);
+      await act(s.ccid, "answer").catch((e2) => logEvent({ type: "inbound", note: "couldn't answer the call: " + e2.message }));
+      return;
+    }
+    if (/from|caller|ani/i.test(err)) { delete body.from; try { await act(s.ccid, "transfer", body); err = null; } catch (e2) { err = e2.message; } } // caller ID refused: ring without it
+  }
+  if (err) { await logEvent({ type: "inbound", note: `couldn't ring agent ${s.i + 1}: ${err}` }); return ringNext(sess); }
+  await logEvent({ type: "inbound", note: `ringing agent ${s.i + 1} of ${s.queue.length}` });
+}
+async function missedCall(s) {
+  let first = false;
+  await updateJ("txin", s.sess, (x) => { if (!x || x.missed) return undefined; first = true; x.missed = true; return x; }, null);
+  if (first) {
+    await setJ("inbox", `${s.owner || "_team"}/${Date.now()}-${s.sess}`, { kind: "missed", from: to10(s.from), to: s.to, at: Date.now(), sid: s.sess, owner: s.owner });
+    await logEvent({ type: "inbound", note: "nobody picked up: missed call logged" });
+  }
+  if (s.done) return;
+  if (s.answered) await sayMissed(s); // otherwise answer first; call.answered plays the message
+  else await act(s.ccid, "answer").catch(() => act(s.ccid, "hangup").catch(() => {}));
+}
+async function sayMissed(s) {
+  const co = (await loadConfig()).settings?.company || "Highpoint Financial";
+  try { await act(s.ccid, "speak", { payload: `Thanks for calling ${co}. Everyone is with a client right now. We'll call you back shortly. Goodbye.`, voice: "female", language: "en-US" }); }
+  catch (e) { await logEvent({ type: "inbound", note: "missed-call message failed: " + e.message }); await act(s.ccid, "hangup").catch(() => {}); }
+}
+async function inboundAnswered(sess) { // the agent's browser picked up
+  let first = false;
+  const s = await updateJ("txin", sess, (x) => { if (!x || x.bridged || x.done) return undefined; first = true; return Object.assign(x, { bridged: true, agent: x.queue[x.i]?.id || "", bridgedAt: Date.now() }); }, null);
+  if (!first) return "already connected";
+  await patchCallBySid(sess, (c) => Object.assign(c, { status: "in-progress", answered: true, answeredAt: Date.now() }));
+  await logEvent({ type: "inbound", note: `agent ${s.i + 1} picked up` });
+  const lead = (await getJ("txsess", sess))?.lead;
+  return lead ? startTx(lead, sess, s.ccid) : "connected";
+}
+async function inboundEnded(sess) { // the caller's leg ended
+  let first = false;
+  const s = await updateJ("txin", sess, (x) => { if (!x || x.done) return undefined; first = true; return Object.assign(x, { done: true, endedAt: Date.now() }); }, null);
+  if (!first) return;
+  if (!s.bridged) await missedCall(s);
+  const talkSec = s.bridged ? Math.max(0, Math.round((s.endedAt - s.bridgedAt) / 1000)) : 0;
+  const rec = await patchCallBySid(sess, (c) => Object.assign(c, { endedAt: s.endedAt, talkSec, answered: !!s.bridged, human: !!s.bridged, status: s.bridged ? "completed" : "no-answer", final: true }));
+  if (rec?.final) await aggregate({ ...rec, from: null }, "end").catch(() => {});
+}
 
 async function handleTelnyx(type, p) {
   const ccid = p.call_control_id || "", sess = p.call_session_id || ccid;
+  const inb = sess ? await getJ("txin", sess) : null; // set when this is an inbound call we're routing
   if (type === "call.initiated") {
-    const lead = leadOf(p); if (!lead || !ccid) return "no lead number on this call";
     const out = /out/i.test(p.direction || "");
+    // a leg that rings an agent's browser has a SIP address, not a number: it belongs to the same call session
+    const lead = leadOf(p) || (await getJ("txsess", sess))?.lead || "";
+    if (!lead || !ccid) return "no lead number on this call";
     await setJ("txcc", ccid, { lead, sess });
+    await setJ("txsess", sess, { lead });
     await updateJ("txlive", lead, (r) => {
       if (r.sess !== sess) Object.assign(r, { sess, ccid, out, lines: [], partial: {}, started: false, startErr: null, declined: false, endedAt: null, at: Date.now(), tlog: 0 });
       return r;
     }, {});
+    if (!out && !inb) { const note = await inboundStart(p, sess); if (note) return "incoming call: " + note; }
     return out ? "outgoing call started" : "incoming call ringing";
   }
   if (type === "call.answered") {
+    if (inb) {
+      if (ccid !== inb.ccid) return inboundAnswered(sess); // the agent picked up
+      await updateJ("txin", sess, (x) => (x ? Object.assign(x, { answered: true, waitAnswer: false }) : undefined), null);
+      if (inb.fallback) { await sayMissed(inb); return "playing the missed-call message"; }
+      if (inb.waitAnswer) { await ringNext(sess); return "answered; ringing agents"; }
+      return "caller's leg answered";
+    }
     const m = await getJ("txcc", ccid); if (!m) return "answer for a call we never saw start";
-    const rec = await getJ("txlive", m.lead);
-    if (!rec || rec.sess !== m.sess) return "answer for an earlier call";
-    if (rec.declined) return "not transcribing: the client declined";
-    if (rec.started) return "transcription already running";
-    let err = null;
-    try { await tx(`/v2/calls/${ccid}/actions/transcription_start`, { method: "POST", body: { transcription_engine: "Google", transcription_tracks: "both", language: "en-US", interim_results: true } }); }
-    catch (e) { err = e.message; }
-    await updateJ("txlive", m.lead, (r) => { if (r.sess === m.sess) Object.assign(r, { started: !err, startErr: err, ccid }); return r; }, {});
-    await logEvent({ type: "transcription_start", note: err ? "failed: " + err : "started" });
-    return err ? "transcription failed to start" : "transcription started";
+    return startTx(m.lead, m.sess, ccid);
   }
+  if (type === "call.speak.ended" && inb && ccid === inb.ccid && inb.fallback) { await act(ccid, "hangup").catch(() => {}); return "missed-call message played"; }
   if (type === "call.transcription") {
     const m = await getJ("txcc", ccid); if (!m) return "transcript for an unknown call";
     const td = p.transcription_data || p.transcription || p;
@@ -190,6 +312,15 @@ async function handleTelnyx(type, p) {
     return kept ? "line stored" : "line dropped";
   }
   if (type === "call.hangup") {
+    if (inb && ccid !== inb.ccid) { // a leg that rang an agent
+      if (inb.done) return "agent leg closed";
+      const cs = unjson(p.client_state);
+      if (cs && cs.in === sess && cs.i !== inb.i) return "an earlier ring attempt closed";
+      if (inb.bridged) { await act(inb.ccid, "hangup").catch(() => {}); return "the agent hung up"; }
+      await ringNext(sess);
+      return `agent ${inb.i + 1} didn't pick up (${p.hangup_cause || "no answer"})`;
+    }
+    if (inb && ccid === inb.ccid) await inboundEnded(sess);
     const m = await getJ("txcc", ccid); if (!m) return "hangup for an unknown call";
     await updateJ("txlive", m.lead, (r) => { if (r.sess === m.sess) Object.assign(r, { endedAt: Date.now(), partial: {} }); return r; }, {});
     return "call ended";
@@ -255,7 +386,7 @@ export const telnyxRoute = wrap(async (req, action) => {
   if (action === "setup" && req.method === "POST") return json({ ok: true, ...(await txSetup()) });
   if (action === "log") { // admin: the last webhook events, with transcript text and numbers masked
     const cfg = await loadConfig();
-    return json({ webhook: `${siteUrl()}/api/telnyx/events`, publicKey: (await telnyxKey().catch(() => null)) ? "ok" : "missing (set TELNYX_PUBLIC_KEY)", connection: cfg.tx?.connId || null, hookErr: cfg.tx?.hookErr || null, events: (await getJ("txlog", "recent")) || [] });
+    return json({ webhook: `${siteUrl()}/api/telnyx/events`, publicKey: (await telnyxKey().catch(() => null)) ? "ok" : "missing (set TELNYX_PUBLIC_KEY)", connection: cfg.tx?.connId || null, hookErr: cfg.tx?.hookErr || null, inboundApp: cfg.tx?.appId || null, inboundAppErr: cfg.tx?.appErr || null, events: (await getJ("txlog", "recent")) || [] });
   }
   if (action === "get") { // admin read-only look at the Telnyx account (diagnostics)
     const path = new URL(req.url).searchParams.get("p") || "";
