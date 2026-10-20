@@ -1831,18 +1831,55 @@
   }
 
   const SP_LOGO = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm4.6 14.4a.6.6 0 0 1-.9.2c-2.4-1.5-5.4-1.8-9-1a.6.6 0 1 1-.3-1.2c3.9-.9 7.2-.5 9.9 1.1.3.2.4.6.3.9Zm1.2-2.7a.8.8 0 0 1-1 .3c-2.8-1.7-7-2.2-10.3-1.2a.8.8 0 1 1-.4-1.5c3.8-1.1 8.4-.6 11.5 1.4.3.2.4.7.2 1Zm.1-2.8C14.6 8.9 9.2 8.7 6.1 9.7a.9.9 0 1 1-.5-1.8c3.6-1.1 9.6-.9 13.3 1.3a.9.9 0 0 1-1 1.7Z"/></svg>';
+  // The music card on the dialer page: with Spotify Premium connected it shows the song and has back / play-pause /
+  // next and a volume slider; otherwise it opens the player (and offers Connect Spotify).
+  const MI = {
+    prev: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h2v14H7zM19 5.8v12.4a.8.8 0 0 1-1.25.66L10 13.2a1.4 1.4 0 0 1 0-2.4l7.75-5.66A.8.8 0 0 1 19 5.8Z"/></svg>',
+    next: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 5h2v14h-2zM5 5.8v12.4a.8.8 0 0 0 1.25.66L14 13.2a1.4 1.4 0 0 0 0-2.4L6.25 5.14A.8.8 0 0 0 5 5.8Z"/></svg>',
+  };
   function renderMusic() {
     const el = $("#hphMusic"); if (!el) return;
     const sp = window.hpSpotify;
     el.style.display = sp?.locked ? "none" : ""; if (sp?.locked) return; // Spotify isn't in this plan
-    if (!sp) { el.innerHTML = `<span class="hph-splogo">${SP_LOGO}</span><div class="hph-spt"><b>Music</b><span>Loading Spotify…</span></div>`; return; }
+    if (!sp) { el.dataset.m = ""; el.innerHTML = `<span class="hph-splogo">${SP_LOGO}</span><div class="hph-spt"><b>Music</b><span>Loading Spotify…</span></div>`; return; }
+    if (sp.premium) {
+      // built once, then updated in place so dragging the volume slider is never interrupted
+      if (el.dataset.m !== "sdk") {
+        el.dataset.m = "sdk";
+        el.innerHTML = `<span class="hph-spart" data-art>${SP_LOGO}</span>
+          <div class="hph-spt"><b data-tt></b><span data-ta></span></div>
+          <div class="hph-spctl"><button type="button" class="hph-spbtn" data-prev aria-label="Previous song" title="Previous">${MI.prev}</button><button type="button" class="hph-spplay" data-pp></button><button type="button" class="hph-spbtn" data-next aria-label="Next song" title="Next">${MI.next}</button></div>
+          <div class="sp-vol hph-spvol">${sp.volHTML()}</div>
+          <button type="button" class="btn" data-open></button>
+          <label class="hph-spauto"><input type="checkbox" data-auto> Pause on calls</label>`;
+        $("[data-pp]", el).onclick = () => sp.togglePlay();
+        $("[data-prev]", el).onclick = () => sp.prev();
+        $("[data-next]", el).onclick = () => sp.next();
+        $("[data-open]", el).onclick = () => sp.toggleOpen();
+        $("[data-auto]", el).onchange = (e) => { sp.autoPause = e.target.checked; };
+        sp.wireVol(el);
+      }
+      const t = sp.track;
+      $("[data-tt]", el).textContent = t ? t.name : sp.ready ? "Ready to play" : "Starting Spotify…";
+      $("[data-ta]", el).textContent = t ? t.artist : sp.ready ? "Press play, or pick a playlist in the player" : "Your Spotify Premium plays right here";
+      const art = $("[data-art]", el); art.style.backgroundImage = t?.art ? `url("${t.art}")` : ""; art.classList.toggle("img", !!t?.art); if (t?.art) art.innerHTML = ""; else if (!art.innerHTML) art.innerHTML = SP_LOGO;
+      const pp = $("[data-pp]", el); pp.innerHTML = sp.playing ? I.pause : I.play; pp.setAttribute("aria-label", sp.playing ? "Pause music" : "Play music");
+      $("[data-prev]", el).disabled = $("[data-next]", el).disabled = !t;
+      $("[data-open]", el).textContent = sp.isOpen ? "Hide player" : "Player";
+      $("[data-auto]", el).checked = !!sp.autoPause;
+      return;
+    }
+    el.dataset.m = "embed";
+    const connect = sp.configured && !sp.connected;
     el.innerHTML = `<span class="hph-splogo">${SP_LOGO}</span>
-      <div class="hph-spt"><b>${sp.playing ? "Now playing on Spotify" : sp.ready ? "Spotify paused" : "Spotify"}</b><span>${sp.playing ? "Pauses on its own when a lead picks up" : sp.ready ? "Press play to bring it back" : sp.connected === false ? "Connect your Spotify in the player" : "Open the player and pick a playlist"}</span></div>
+      <div class="hph-spt"><b>${sp.playing ? "Now playing on Spotify" : sp.ready ? "Spotify paused" : "Spotify"}</b><span>${connect ? "Connect your Spotify Premium to see the song and control it here" : sp.playing ? "Pauses on its own when a lead picks up" : sp.ready ? "Press play to bring it back" : "Open the player and pick a playlist"}</span></div>
       <button type="button" class="hph-spplay" id="hphSpPlay" aria-label="${sp.playing ? "Pause music" : "Play music"}">${sp.playing ? I.pause : I.play}</button>
+      ${connect ? `<button type="button" class="btn primary" id="hphSpConnect">Connect Spotify</button>` : ""}
       <button type="button" class="btn" id="hphSpOpen">${sp.isOpen ? "Hide player" : "Player"}</button>
-      <label class="hph-spauto"><input type="checkbox" id="hphSpAuto" ${sp.autoPause ? "checked" : ""}> Spotify pauses on calls</label>`;
+      <label class="hph-spauto"><input type="checkbox" id="hphSpAuto" ${sp.autoPause ? "checked" : ""}> Pause on calls</label>`;
     $("#hphSpPlay").onclick = () => sp.togglePlay();
     $("#hphSpOpen").onclick = () => sp.toggleOpen();
+    $("#hphSpConnect")?.addEventListener("click", () => sp.connect());
     $("#hphSpAuto").onchange = (e) => { sp.autoPause = e.target.checked; };
   }
   function renderHome() {

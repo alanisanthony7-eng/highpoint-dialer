@@ -61,6 +61,16 @@
   #spDock .sp-ctl button.main:hover{transform:scale(1.04);background:#fff}
   #spDock .sp-ctl svg{width:18px;height:18px}
   #spDock .sp-row{display:flex;gap:8px}
+  .sp-vol{display:flex;align-items:center;gap:8px;padding:0 4px}
+  .sp-mute{all:unset;cursor:pointer;width:28px;height:28px;display:grid;place-items:center;border-radius:8px;color:#C9CDD5;flex:none}
+  .sp-mute:hover{background:rgba(255,255,255,.08);color:#fff}.sp-mute svg{width:18px;height:18px}
+  input.sp-range{-webkit-appearance:none!important;appearance:none!important;flex:1;min-width:60px;width:auto!important;height:16px!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important;outline:none;cursor:pointer;background:transparent!important}
+  input.sp-range::-webkit-slider-runnable-track{height:4px;border-radius:999px;background:linear-gradient(90deg,#1DB954 var(--v,70%),rgba(255,255,255,.22) var(--v,70%))}
+  input.sp-range::-moz-range-track{height:4px;border-radius:999px;background:linear-gradient(90deg,#1DB954 var(--v,70%),rgba(255,255,255,.22) var(--v,70%))}
+  input.sp-range::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);border:0}
+  input.sp-range::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:0}
+  input.sp-range:focus{outline:none!important;box-shadow:none!important;border:0!important;background:transparent!important}
+  input.sp-range:focus-visible{outline:2px solid #1DB954!important;outline-offset:3px}
   #spDock input[type=text],#spDock select{flex:1;min-width:0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#F2F4F8;padding:8px 10px;font:inherit}
   #spDock select option{background:#16161c}
   #spDock input[type=text]:focus,#spDock select:focus{outline:none;border-color:#1DB954;box-shadow:0 0 0 3px rgba(29,185,84,.18)}
@@ -87,6 +97,9 @@
 
   const LOGO = `<svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm4.6 14.4a.62.62 0 0 1-.86.2c-2.35-1.44-5.3-1.76-8.79-.96a.62.62 0 1 1-.28-1.21c3.81-.87 7.08-.5 9.72 1.11.3.18.39.56.21.86Zm1.22-2.72a.78.78 0 0 1-1.07.26c-2.69-1.65-6.79-2.13-9.97-1.17a.78.78 0 1 1-.45-1.49c3.63-1.1 8.15-.57 11.23 1.33.37.22.48.7.26 1.07Zm.1-2.83C14.7 8.94 9.36 8.76 6.28 9.7a.94.94 0 1 1-.55-1.8c3.54-1.07 9.43-.87 13.15 1.34a.94.94 0 0 1-.96 1.61Z"/></svg>`;
   const IC = {
+    vol: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>`,
+    volLow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>`,
+    mute: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/><path d="M22 9l-6 6M16 9l6 6"/></svg>`,
     play: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.4-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5Z"/></svg>`,
     pause: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`,
     prev: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h2v14H7zM19 5.8v12.4a.8.8 0 0 1-1.25.66L10 13.2a1.4 1.4 0 0 1 0-2.4l7.75-5.66A.8.8 0 0 1 19 5.8Z"/></svg>`,
@@ -97,10 +110,10 @@
   /* ---------- state ---------- */
   // per login, per browser: where the dock sits and whether it's open; per login everywhere: the rest (saved to the account)
   let uid = "", srv = { configured: false, connected: false }, mode = "embed"; // "sdk" plays in the desk (Premium); "embed" is Spotify's embedded player
-  const st = { uri: DEFAULT_URI, open: false, autoPause: true, autoResume: true, x: null, y: null };
+  const st = { uri: DEFAULT_URI, open: false, autoPause: true, autoResume: true, x: null, y: null, volume: 0.7, lastVol: 0.7 };
   const lkey = () => "hp.spotify." + (uid || "anon");
   const loadLocal = () => { try { return JSON.parse(localStorage.getItem(lkey())) || {}; } catch { return {}; } };
-  const saveLocal = () => { try { localStorage.setItem(lkey(), JSON.stringify({ open: st.open, x: st.x, y: st.y, uri: st.uri, autoPause: st.autoPause, autoResume: st.autoResume })); } catch {} };
+  const saveLocal = () => { try { localStorage.setItem(lkey(), JSON.stringify({ open: st.open, x: st.x, y: st.y, uri: st.uri, autoPause: st.autoPause, autoResume: st.autoResume, volume: st.volume, lastVol: st.lastVol })); } catch {} };
   let prefT = 0;
   const savePrefs = () => { saveLocal(); clearTimeout(prefT); prefT = setTimeout(() => api("prefs", { uri: st.uri, autoPause: st.autoPause, autoResume: st.autoResume }).catch(() => {}), 600); };
 
@@ -144,8 +157,8 @@
     if (mode === "sdk") {
       body().innerHTML = `${m}<div class="sp-now"><div class="sp-art" data-art>${IC.note}</div><div class="sp-tt"><b data-tt>${sdkReady ? "Ready to play" : "Starting the player…"}</b><span data-ta>${sdkReady ? "Pick a playlist or press play" : "Connecting to Spotify"}</span></div>
           <div class="sp-ctl"><button type="button" data-prev aria-label="Previous">${IC.prev}</button><button type="button" class="main" data-pp aria-label="Play">${IC.play}</button><button type="button" data-next aria-label="Next">${IC.next}</button></div></div>
+        <div class="sp-vol">${volHTML()}</div>
         <div class="sp-row"><select data-pl aria-label="Your playlists"><option value="">Your playlists…</option></select></div>
-        <form class="sp-row" data-form autocomplete="off"><input type="text" data-link placeholder="Or paste a Spotify link" aria-label="Spotify link"><button class="sp-go" type="submit">Play</button></form>
         ${optsHTML()}
         <p class="sp-fine">Playing on “Highpoint Desk” with your Spotify Premium. <button type="button" class="sp-link" data-disc>Disconnect Spotify</button></p>`;
       $("[data-pp]").onclick = () => togglePlay();
@@ -165,7 +178,8 @@
         ${free || (srv.configured ? "" : `<p class="sp-fine">Log in to Spotify in this browser for full songs (otherwise Spotify plays 30-second previews). In Spotify: Share → Copy link, then paste it above.</p>`)}`;
       ctrl = null; embedApi ? mountEmbed() : loadEmbedApi();
     }
-    $("[data-form]").onsubmit = (e) => {
+    wireVol(dock);
+    const fm = $("[data-form]"); if (fm) fm.onsubmit = (e) => {
       e.preventDefault();
       const uri = toUri($("[data-link]").value);
       if (!uri) { notify("That doesn't look like a Spotify link"); return; }
@@ -176,6 +190,27 @@
     dock.querySelectorAll("[data-disc]").forEach((b) => (b.onclick = disconnect));
     wireOpts();
   }
+
+  /* ---------- volume (the desk's own player only; Spotify's embedded player has no volume control) ---------- */
+  const volIcon = () => (st.volume <= 0.001 ? IC.mute : st.volume < 0.45 ? IC.volLow : IC.vol);
+  const volHTML = () => `<button type="button" class="sp-mute" data-mute aria-label="${st.volume <= 0.001 ? "Unmute" : "Mute"}" title="${st.volume <= 0.001 ? "Unmute" : "Mute"}">${volIcon()}</button><input type="range" class="sp-range" data-vol min="0" max="100" step="1" value="${Math.round(st.volume * 100)}" aria-label="Music volume" style="--v:${Math.round(st.volume * 100)}%">`;
+  function setVolume(v, from) {
+    v = Math.max(0, Math.min(1, +v || 0));
+    if (v > 0.001) st.lastVol = v;
+    st.volume = v; saveLocal();
+    try { player?.setVolume(Math.max(v, 0.0001)); } catch {}
+    window.dispatchEvent(new CustomEvent("hp:musicvol", { detail: { volume: v, from } }));
+  }
+  // keep every volume control on the page in step
+  function syncVol(root) {
+    root.querySelectorAll("[data-vol]").forEach((r) => { if (document.activeElement !== r) r.value = Math.round(st.volume * 100); r.style.setProperty("--v", Math.round(st.volume * 100) + "%"); });
+    root.querySelectorAll("[data-mute]").forEach((b) => { b.innerHTML = volIcon(); b.setAttribute("aria-label", st.volume <= 0.001 ? "Unmute" : "Mute"); b.title = st.volume <= 0.001 ? "Unmute" : "Mute"; });
+  }
+  function wireVol(root) {
+    root.querySelectorAll("[data-vol]").forEach((r) => (r.oninput = () => { r.style.setProperty("--v", r.value + "%"); setVolume(r.value / 100, r); }));
+    root.querySelectorAll("[data-mute]").forEach((b) => (b.onclick = () => setVolume(st.volume <= 0.001 ? st.lastVol || 0.7 : 0, b)));
+  }
+  window.addEventListener("hp:musicvol", () => syncVol(document));
 
   /* ---------- Spotify's embedded player (Free, or not connected) ---------- */
   let ctrl = null, embedApi = null, playing = false, pausedByCall = false;
@@ -218,7 +253,7 @@
   }
   function initSdk() {
     if (player) return;
-    player = new window.Spotify.Player({ name: "Highpoint Desk", getOAuthToken: (cb) => token().then(cb).catch(() => {}), volume: 0.7 });
+    player = new window.Spotify.Player({ name: "Highpoint Desk", getOAuthToken: (cb) => token().then(cb).catch(() => {}), volume: Math.max(st.volume, 0.0001) });
     player.addListener("ready", ({ device_id }) => {
       deviceId = device_id; sdkReady = true;
       if (srv.product !== "premium") { srv.product = "premium"; api("product", { product: "premium" }).catch(() => {}); }
@@ -229,7 +264,11 @@
     player.addListener("authentication_error", () => { srv.connected = false; srv.lost = true; toEmbed("Spotify signed you out. Connect again to keep listening.", true); });
     player.addListener("initialization_error", () => toEmbed("This browser can't run Spotify's player (try Chrome, Edge or Firefox), so this is Spotify's own player.", true));
     player.addListener("playback_error", ({ message }) => notify("Spotify: " + (message || "couldn't play that")));
-    player.addListener("player_state_changed", (s) => { lastState = s; const was = playing; playing = !!s && !s.paused; paintNow(s); if (was !== playing) changed(); });
+    player.addListener("player_state_changed", (s) => {
+      const prevId = lastState?.track_window?.current_track?.id; lastState = s;
+      const was = playing; playing = !!s && !s.paused; paintNow(s);
+      if (was !== playing || prevId !== s?.track_window?.current_track?.id) changed();
+    });
     player.connect();
   }
   function toEmbed(text, warn) {
@@ -338,7 +377,11 @@
       togglePlay,
       get playing() { return playing; }, get ready() { return mode === "sdk" ? sdkReady : !!ctrl; }, get isOpen() { return !dock.hidden; },
       get autoPause() { return st.autoPause; }, set autoPause(v) { st.autoPause = !!v; savePrefs(); const c = $("[data-ap]"); if (c) c.checked = !!v; },
-      get uri() { return st.uri; }, get connected() { return !!srv.connected; }, get premium() { return mode === "sdk"; },
+      get uri() { return st.uri; }, get connected() { return !!srv.connected; }, get configured() { return !!srv.configured; }, get premium() { return mode === "sdk"; },
+      get track() { const t = lastState?.track_window?.current_track; if (!t) return null; const im = t.album?.images || []; return { name: t.name || "", artist: (t.artists || []).map((a) => a.name).join(", "), art: (im[im.length > 1 ? 1 : 0] || im[0])?.url || "" }; },
+      next: () => player?.nextTrack(), prev: () => player?.previousTrack(),
+      get volume() { return st.volume; }, set volume(v) { setVolume(v); }, toggleMute: () => setVolume(st.volume <= 0.001 ? st.lastVol || 0.7 : 0),
+      volHTML, wireVol, connect: () => { location.href = "/api/spotify/login"; },
     };
     dock.hidden = !st.open;
     if (st.open) start();

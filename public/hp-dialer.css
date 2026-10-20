@@ -621,3 +621,14 @@ html.hp-pro .hpdk.callbar{border-radius:0;border-width:1px 0 0;border-color:rgba
 .hpf-padbtn{padding:0;width:38px;height:38px;display:inline-grid;place-items:center;flex:none}
 .hpf-acts .hpf-padbtn svg{width:18px!important;height:18px!important;flex:none}
 .hpf-acts{display:flex;gap:8px;align-items:center}
+/* music card on the dialer page: the song, controls and volume */
+.hph-spart{width:48px;height:48px;border-radius:10px;display:grid;place-items:center;background:#121212 center/cover no-repeat;color:#1DB954;flex:none;box-shadow:0 6px 16px -8px #000}
+.hph-spart svg{width:26px;height:26px}
+.hph-music[data-m="sdk"] .hph-spt b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hph-music[data-m="sdk"] .hph-spt span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hph-spctl{display:flex;align-items:center;gap:6px;flex:none}
+.hph-spbtn{all:unset;cursor:pointer;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#E6E8EE}
+.hph-spbtn:hover{background:rgba(255,255,255,.08)}.hph-spbtn:disabled{opacity:.35;cursor:default;background:none}
+.hph-spbtn svg{width:17px;height:17px}.hph-spbtn:focus-visible{outline:2px solid #1DB954;outline-offset:1px}
+.hph-spvol{width:150px;flex:none}
+@media (max-width:760px){.hph-spvol{width:auto;flex:1 1 140px}}
