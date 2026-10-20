@@ -317,7 +317,7 @@ $("#wavvCsv")?.addEventListener("click",()=>{const q=dialQueue();if(!q.length){t
   offerFile(`queue-${$("#dqStage").value}-${new Date().toISOString().slice(0,10)}.csv`,toCSV(["First Name","Last Name","Phone","Email","State","Notes"],q.map(l=>[l.first||"",l.last||"",normPhone(l.phone),l.email||"",l.state||"",[PROD[l.product],l.source].filter(Boolean).join(" · ")])))});
 
 /* ---------- Highpoint Dialer hooks ---------- */
-window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,renderDialer,openDrawer,
+window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLead,renderDialer,openDrawer,
   currentId:()=>dCurId,setCurrent(id){dCurId=id;if(view==="dialer")renderDialer()},
   get calls(){return calls},get appts(){return appts},putAppt,addNoteObj,stageName,STAGES,PROD,go,
   async dispoDirect(id,kind,o={}){const l=leads.get(id);if(!l)return;const note=o.note||"";

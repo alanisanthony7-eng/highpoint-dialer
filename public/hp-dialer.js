@@ -64,7 +64,9 @@
     if (!$("#v-dialer")) return;
     document.body.classList.add("hpd");
     if (!window.hpSpotify && !document.querySelector('script[src*="spotify-dock"]')) { const sp = document.createElement("script"); sp.src = "/spotify-dock.js"; document.body.append(sp); }
+    S.padSec = lsGet("hpd.padSec", true);
     buildUI(); buildBar();
+    if (!addPadButton()) { const mo = new MutationObserver(() => { if (addPadButton()) mo.disconnect(); }); mo.observe(document.body, { childList: true, subtree: true }); }
     try {
       const st = await api("/setup");
       Object.assign(S, { provider: st.provider || "twilio", ready: st.ready, twilio: st.twilio, me: st.me, settings: st.settings, trust: st.trust || {}, prefs: { ...S.prefs, ...(st.prefs || {}) } });
@@ -126,6 +128,7 @@
   /* ================= phone panel ================= */
   function renderPhone() {
     const el = $("#hpdPhone"); if (!el) return;
+    const padFocus = !!document.activeElement?.closest?.("#hpdDialPad"); // typing a number survives a redraw
     const live = !!S.call || !!S.power;
     const maxL = S.settings.maxLines || 3;
     const myNums = S.numbers.filter((n) => n.mine || S.me?.admin || n.shared);
@@ -139,6 +142,7 @@
       ${S.mode === "power" ? `<div class="hpd-linesel">Lines ${[1, 2, 3].map((n) => `<button type="button" data-lines="${n}" aria-pressed="${S.lines === n}" ${n > maxL || live ? "disabled" : ""}>${n}</button>`).join("")}<span style="margin-left:auto" class="hpd-sm">${S.lines > 1 ? "First to say hello connects" : "One at a time"}</span></div>` : ""}
       <label class="field"><span>Your cell number</span><input id="hpdCell" value="${S.prefs.cellPhone ? esc(fmt(S.prefs.cellPhone)) : ""}" placeholder="(305) 555-0123" inputmode="tel"></label><label class="field"><span>Caller ID</span><select id="hpdCid" ${live ? "disabled" : ""}><option value="">Auto: local number for each lead</option>${myNums.map((n) => `<option value="${esc(n.e164)}" ${S.prefs.defaultCallerId === n.e164 ? "selected" : ""}>${esc(fmt(n.e164))}${n.label ? " · " + esc(n.label) : ""}${n.health?.status === "flagged" ? " (flagged)" : ""}</option>`).join("")}</select></label>
       <div class="hpd-actions" id="hpdActs"></div>
+      ${live ? "" : `<details class="hpkp-sec" id="hpdDialSec" ${S.padSec !== false ? "open" : ""}><summary>${I.pad}<span>Dial a number</span></summary><div class="hpd hpkp inline" id="hpdDialPad"></div></details>`}
       <div id="hpdLive" class="stack" style="gap:10px" hidden>
         <div class="hpd-tiles" id="hpdTiles"></div>
         <div class="hpd-ctrls">
@@ -162,6 +166,8 @@
     $("#hpdVm").onclick = dropVm;
     $("#hpdSkip").onclick = () => { if (S.power) togglePause(); else { openTab("inbox"); setTimeout(() => $("#hpdSmsBody")?.focus(), 900); } };
     $("#hpdSetup")?.addEventListener("click", runSetup);
+    const dp = $("#hpdDialPad", el); if (dp) { dp.innerHTML = padHTML(); wirePad(dp); if (padFocus) { const i = $("[data-padin]", dp); i.focus(); try { i.setSelectionRange(i.value.length, i.value.length); } catch {} } }
+    const ds = $("#hpdDialSec", el); if (ds) ds.ontoggle = () => { S.padSec = ds.open; lsSet("hpd.padSec", ds.open); };
     renderActions(); renderLive();
     if (S.demo) setChip("demo", "Demo"); else if (S.call || S.power?.connected) setChip("live", "On call"); else if (S.power) setChip("ready", S.power.paused ? "Paused" : "Dialing"); else if (S.device?.state === "registered" || S.deviceReady) setChip("ready", "Ready"); else if (!S.ready) setChip("", "Not set up"); else setChip("", "Connecting");
     renderHome();
@@ -345,6 +351,96 @@
     toast(done ? `List finished · ${n} lead${n === 1 ? "" : "s"} called` : "Phone session ended");
   }
 
+  /* ================= keypad: dial any number ================= */
+  // A number that's already a client calls that client. A new number is saved as an unnamed client (source "Keypad"),
+  // so the call, its notes, the transcript and Copilot all have a home; name them during the call.
+  // On a call, the same keypad sends tones (for phone menus).
+  const PADK = [["1", ""], ["2", "ABC"], ["3", "DEF"], ["4", "GHI"], ["5", "JKL"], ["6", "MNO"], ["7", "PQRS"], ["8", "TUV"], ["9", "WXYZ"], ["*", ""], ["0", "+"], ["#", ""]];
+  S.padNum = ""; S.padTones = "";
+  const padRecent = () => lsGet("hpd.padRecent", []);
+  const padMatch = (n) => { const D = window.hpDesk; if (!D || n.length < 10) return null; return [...D.leads.values()].find((l) => d10(l.phone) === n || d10(l.phone2) === n) || null; };
+  const padOnCall = () => !!(S.call || S.power?.connected);
+  const fmtTyping = (d) => d.length <= 3 ? d : d.length <= 6 ? `(${d.slice(0, 3)}) ${d.slice(3)}` : `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6, 10)}`;
+  function padHTML(where) {
+    const on = padOnCall(), n = d10(S.padNum), hit = on ? null : padMatch(n), D = window.hpDesk;
+    const sub = on ? "Sending tones on this call" : n.length === 10 ? (hit ? `${esc(D.fullName(hit))} · in your clients` : "New number · saved to your clients when you call") : S.via === "phone" ? "Calls from your phone" : "Calls from your browser line";
+    const rec = on ? [] : padRecent().filter((x) => x !== n).slice(0, 4);
+    return `<div class="hpkp-disp"><input class="hpkp-in" data-padin inputmode="tel" autocomplete="off" spellcheck="false" aria-label="${on ? "Tones sent" : "Phone number"}" placeholder="${on ? "Tap keys to send tones" : "Enter a number"}" value="${esc(on ? S.padTones : fmtTyping(n))}" ${on ? "readonly" : ""}>
+        <button type="button" class="hpkp-del" data-paddel aria-label="Delete" title="Delete" ${on || !n ? "hidden" : ""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9l-5 6M12 9l5 6"/></svg></button></div>
+      <div class="hpkp-sub ${hit ? "hit" : ""}" data-padsub>${sub}</div>
+      <div class="hpkp-keys" role="group" aria-label="Keypad">${PADK.map(([k, t]) => `<button type="button" data-padk="${k}" aria-label="${k}"><b>${k}</b><small>${t || "&nbsp;"}</small></button>`).join("")}</div>
+      ${on ? "" : `<button type="button" class="hpkp-call" data-padcall ${n.length === 10 ? "" : "disabled"}>${I.phone}<span>${hit ? "Call " + esc(D.fullName(hit).split(" ")[0]) : "Call"}</span></button>`}
+      ${rec.length ? `<div class="hpkp-rec"><span>Recent</span>${rec.map((r) => { const l = padMatch(r); return `<button type="button" data-padrec="${r}" title="${esc(fmt(r))}">${esc(l && (l.first || l.last) ? D.fullName(l) : fmt(r))}</button>`; }).join("")}</div>` : ""}`;
+  }
+  function wirePad(root, after) {
+    const inp = $("[data-padin]", root), redraw = () => { root.innerHTML = padHTML(); wirePad(root, after); const i2 = $("[data-padin]", root); i2.focus(); try { i2.setSelectionRange(i2.value.length, i2.value.length); } catch {} };
+    const press = (k) => {
+      if (padOnCall()) { dtmf(k); S.padTones = (S.padTones + k).slice(-24); inp.value = S.padTones; return; }
+      if (/\d/.test(k) && d10(S.padNum + k).length <= 11) { S.padNum = d10(S.padNum + k).slice(0, 10); redraw(); }
+    };
+    $$("[data-padk]", root).forEach((b) => (b.onclick = () => press(b.dataset.padk)));
+    inp.oninput = () => { if (padOnCall()) return; const d = d10(inp.value).slice(0, 10); if (d !== d10(S.padNum)) { S.padNum = d; redraw(); } };
+    inp.onkeydown = (e) => {
+      if (e.key === "Enter") { e.preventDefault(); $("[data-padcall]", root)?.click(); }
+      if (padOnCall() && /^[\d*#]$/.test(e.key)) { e.preventDefault(); press(e.key); }
+    };
+    inp.onpaste = (e) => { if (padOnCall()) return; e.preventDefault(); S.padNum = d10((e.clipboardData || window.clipboardData).getData("text")).slice(0, 10); redraw(); };
+    const del = $("[data-paddel]", root); if (del) del.onclick = () => { S.padNum = d10(S.padNum).slice(0, -1); redraw(); };
+    $$("[data-padrec]", root).forEach((b) => (b.onclick = () => { S.padNum = b.dataset.padrec; redraw(); }));
+    const go = $("[data-padcall]", root);
+    if (go) go.onclick = async () => { go.disabled = true; const ok = await dialNumber(S.padNum); if (ok) { after?.(); } else { go.disabled = false; } };
+  }
+  async function dialNumber(raw) {
+    const n = d10(raw);
+    if (n.length !== 10) { toast("Enter a 10-digit phone number"); return false; }
+    if (window.hpTeam?.can?.("dialer") === false) { window.hpTeam.upgrade("dialer"); return false; }
+    if (S.call || S.power) { toast("Finish the call you're on first"); return false; }
+    const D = window.hpDesk; if (!D) return false;
+    let l = padMatch(n);
+    if (!l) {
+      try {
+        const id = await D.putLead({ first: "", last: "", phone: n, state: AREA_ST[n.slice(0, 3)] || "", stage: "new", source: "Keypad", fields: {}, notes: [], createdAt: Date.now() });
+        for (let i = 0; i < 30 && !D.leads.get(id); i++) await sleep(100);
+        l = D.leads.get(id) || { id, phone: n, first: "", last: "", state: AREA_ST[n.slice(0, 3)] || "", stage: "new", source: "Keypad" };
+        toast(`${fmt(n)} saved to your clients. Add their name on the profile.`);
+      } catch (e) { toast("Couldn't save the number: " + (e.message || e)); return false; }
+    }
+    lsSet("hpd.padRecent", [n, ...padRecent().filter((x) => x !== n)].slice(0, 8));
+    S.padNum = "";
+    if (S.via === "phone") { phoneCall(l); return true; }
+    const r = await dialLead(l);
+    return r !== false;
+  }
+  // the Keypad button in the top bar: a dial pad from anywhere in the desk
+  let padAnchor = null;
+  function padPop(open, anchor) {
+    let pop = $("#hpkpPop"); if (anchor) padAnchor = anchor; const btn = padAnchor?.isConnected ? padAnchor : $("#hpkpBtn");
+    if (open === undefined) open = !pop;
+    if (!open) { pop?.remove(); btn?.setAttribute("aria-expanded", "false"); document.removeEventListener("pointerdown", padAway, true); return; }
+    if (!pop) { pop = document.createElement("div"); pop.id = "hpkpPop"; pop.className = "hpd hpkp pop"; pop.setAttribute("role", "dialog"); pop.setAttribute("aria-label", "Keypad"); document.body.append(pop); }
+    S.padTones = "";
+    pop.innerHTML = padHTML(); wirePad(pop, () => padPop(false));
+    const r = btn?.getBoundingClientRect();
+    if (r && r.width) { const w = 280; pop.style.top = Math.round(Math.min(r.bottom + 8, innerHeight - 470)) + "px"; pop.style.left = Math.round(Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))) + "px"; }
+    else { pop.style.top = "72px"; pop.style.left = Math.max(8, innerWidth - 300) + "px"; }
+    btn?.setAttribute("aria-expanded", "true");
+    setTimeout(() => $("[data-padin]", pop)?.focus(), 20);
+    document.addEventListener("pointerdown", padAway, true);
+    pop.onkeydown = (e) => { if (e.key === "Escape") { padPop(false); btn?.focus(); } };
+  }
+  function padAway(e) { const pop = $("#hpkpPop"); if (pop && !pop.contains(e.target) && !e.target.closest?.("[data-padbtn]")) padPop(false); }
+  function addPadButton() {
+    const row = document.querySelector("header.topbar .row"); if (!row) return false;
+    if ($("#hpkpBtn")) return true;
+    if (window.hpTeam?.can?.("dialer") === false) return true; // not in this plan
+    const b = document.createElement("button"); b.type = "button"; b.id = "hpkpBtn"; b.className = "btn hpkp-btn"; b.title = "Keypad: dial any number"; b.dataset.padbtn = "";
+    b.setAttribute("aria-haspopup", "dialog"); b.setAttribute("aria-expanded", "false");
+    b.innerHTML = `${I.pad}<span>Keypad</span>`;
+    b.onclick = () => padPop($("#hpkpPop") && padAnchor === b ? false : true, b);
+    row.insertBefore(b, row.querySelector(".hpp-launch") || row.querySelector(".hp-acct") || null);
+    return true;
+  }
+
   /* ================= click-to-call ================= */
   // Do Not Call, calling hours and the 24-hour attempt cap: the same rules the voice webhook applies. Fails closed.
   async function preCheck(lead) {
@@ -384,6 +480,7 @@
   }
   function endCall() {
     const leadId = S.callLead;
+    if ($("#hpkpPop")) setTimeout(() => { const p = $("#hpkpPop"); if (p) { S.padTones = ""; p.innerHTML = padHTML(); wirePad(p, () => padPop(false)); } }, 0);
     S.call = null; S.muted = false; clearTimeout(S.liveTimer);
     window.hpDesk.callStop();
     renderPhone(); renderFloat(); if (PF.id) renderProfile();
@@ -1387,11 +1484,11 @@
     el.innerHTML = `
       <div class="hpf-top">
         <button type="button" class="hpf-x" id="hpfClose" aria-label="Close profile">✕</button>
-        <div class="hpf-who"><span class="hpf-av">${esc(((l.first || "?")[0] + (l.last || "")[0] || "").toUpperCase())}</span><div><b>${esc(D.fullName(l))}</b><span class="hpd-sm">${esc(fmt(l.phone))}${l.state ? " · " + esc(l.state) : ""}${l.age ? " · " + esc(l.age) + " yrs" : ""}</span></div>
+        <div class="hpf-who"><span class="hpf-av">${esc(((l.first || "?")[0] + ((l.last || "")[0] || "")).toUpperCase())}</span><div><b>${esc(D.fullName(l))}</b><span class="hpd-sm">${esc(fmt(l.phone))}${l.state ? " · " + esc(l.state) : ""}${l.age ? " · " + esc(l.age) + " yrs" : ""}</span></div>
           ${live ? `<span class="hpd-chip" data-s="live"><i></i>On call <span id="hpfClock" class="num" style="margin-left:4px"></span></span>` : ""}</div>
         ${window.hpPop ? `<span class="hpf-pops" role="group" aria-label="Call tools">${window.hpPop.launchers("hpf")}</span>` : ""}
         <div class="hpf-nav"><span class="hpd-sm"><span class="hpf-list">${esc(listName())} · </span>${idx + 1}/${n}</span><button type="button" id="hpfPrev" aria-label="Previous lead" ${idx <= 0 ? "disabled" : ""}>‹</button><button type="button" id="hpfNext" aria-label="Next lead" ${idx >= n - 1 ? "disabled" : ""}>›</button></div>
-        <div class="hpf-acts">${live ? `<button type="button" class="btn hpd-hang" id="hpfHang">${I.phone} Hang up</button>` : `<button type="button" class="btn primary" id="hpfCall" ${onAnother || S.power ? "disabled" : ""}>${I.phone} Call</button>`}</div>
+        <div class="hpf-acts">${window.hpTeam?.can?.("dialer") === false ? "" : `<button type="button" class="btn hpf-padbtn" id="hpfPadBtn" data-padbtn title="${live ? "Keypad: send tones" : "Keypad: dial any number"}" aria-label="Keypad" aria-haspopup="dialog">${I.pad}</button>`}${live ? `<button type="button" class="btn hpd-hang" id="hpfHang">${I.phone} Hang up</button>` : `<button type="button" class="btn primary" id="hpfCall" ${onAnother || S.power ? "disabled" : ""}>${I.phone} Call</button>`}</div>
       </div>
       <div class="hpf-cols"><div class="hpf-side">
         <aside class="hpf-left">
@@ -1432,6 +1529,7 @@
     $("#hpfPrev").onclick = () => openProfile(PF.list[idx - 1], { keepList: true });
     $("#hpfNext").onclick = () => openProfile(PF.list[idx + 1], { keepList: true });
     $("#hpfCall")?.addEventListener("click", () => dialLead(l));
+    $("#hpfPadBtn")?.addEventListener("click", (e) => padPop($("#hpkpPop") && padAnchor === e.currentTarget ? false : true, e.currentTarget));
     $("#hpfHang")?.addEventListener("click", hangup);
     $$("[data-pft]", el).forEach((b) => (b.onclick = () => { PF.tab = b.dataset.pft; $$("[data-pft]", el).forEach((x) => x.setAttribute("aria-selected", x === b)); drawLeft(); }));
     $$("[data-pfc]", el).forEach((b) => (b.onclick = () => { PF.compose = b.dataset.pfc; renderProfile(); $("#hpfMsg").focus(); }));
