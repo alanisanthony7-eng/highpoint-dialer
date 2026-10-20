@@ -16,7 +16,11 @@
   };
 
   // dark layer over the sunset so every page reads cleanly
-  const addScrim = () => { if (!$(".hp-scrim")) document.body.insertAdjacentHTML("beforeend", '<div class="hp-scrim" aria-hidden="true"></div>'); };
+  const addScrim = () => {
+    if (!$(".hp-scrim")) document.body.insertAdjacentHTML("beforeend", '<div class="hp-scrim" aria-hidden="true"></div>');
+    // the synth grid floor: its lines move on their own compositor layer (hp-smooth.css)
+    if (!$(".hp-floor")) document.body.insertAdjacentHTML("beforeend", '<div class="hp-floor" aria-hidden="true"><i></i></div>');
+  };
 
   /* ---------- command palette ---------- */
   let pal = null;

@@ -1,0 +1,114 @@
+/* ============================================================
+   Highpoint Smooth: one render budget for the whole desk.
+   Loaded last. The Miami backdrop becomes a still picture with one cheap, GPU-only
+   piece of motion (the grid floor); the per-frame blur comes off every content
+   surface; and every surface gets the same layered glass: a lit top edge, a tinted
+   body, soft depth, and a hover glow that fades in with opacity instead of
+   re-painting shadows. Scoped to html.hp-pro. Revert: remove the <link> in index.html.
+   ============================================================ */
+
+/* ---------- 0. glass tokens ---------- */
+html.hp-pro{
+  --gl-base:rgba(15,9,26,.80);
+  --gl-base-2:rgba(11,7,19,.86);
+  --gl-sheen:linear-gradient(160deg,rgba(255,255,255,.085) 0%,rgba(255,255,255,.022) 38%,rgba(255,255,255,0) 62%,rgba(255,46,136,.05) 100%);
+  --gl-edge:linear-gradient(180deg,rgba(255,255,255,.22) 0,rgba(255,255,255,0) 2px);
+  --gl-line:rgba(255,255,255,.10);
+  --gl-line-hot:rgba(255,79,163,.45);
+  --gl-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -1px 0 rgba(0,0,0,.28),0 24px 48px -28px rgba(0,0,0,.85);
+  --gl-glow:0 30px 56px -26px rgba(255,46,136,.45),0 0 0 1px rgba(255,79,163,.22);
+  --gl-r:20px;
+  --gl-ease:cubic-bezier(.2,.8,.2,1);
+}
+
+/* ---------- 1. the backdrop is a still ---------- */
+/* The sunset SVG is full-screen; animating its children repaints the whole screen every frame. */
+html.hp-pro .vsvg *{animation:none!important}
+html.hp-pro .vscene{contain:layout paint}
+/* light rays and sparks stay, but they no longer drift (a full-screen moving layer under blurred chrome) */
+html.hp-pro .vscene::after{animation:none!important;opacity:.8}
+/* the old scanline/grid pseudo-element animated background-position (a repaint per frame) */
+html.hp-pro body::after{display:none!important;animation:none!important}
+
+/* grid floor: the lines move on their own compositor layer (transform only) */
+.hp-floor{position:fixed;left:-35%;right:-35%;bottom:-8vh;height:52vh;z-index:0;pointer-events:none;overflow:hidden;
+  transform:perspective(520px) rotateX(64deg);transform-origin:50% 100%;opacity:.85;
+  -webkit-mask-image:linear-gradient(0deg,#000 8%,transparent 88%);mask-image:linear-gradient(0deg,#000 8%,transparent 88%)}
+.hp-floor>i{position:absolute;left:0;right:0;top:-72px;height:calc(100% + 144px);display:block;will-change:transform;
+  background:linear-gradient(90deg,rgba(255,79,163,.6) 1px,transparent 1px) 0 0/72px 72px,linear-gradient(0deg,rgba(255,158,61,.55) 1px,transparent 1px) 0 0/72px 72px;
+  animation:hpFloor 8s linear infinite}
+@keyframes hpFloor{from{transform:translateY(0)}to{transform:translateY(72px)}}
+html.gated .hp-floor,html:not(.hp-pro) .hp-floor{display:none}
+@media (max-width:900px){.hp-floor{display:none}}
+@media (prefers-reduced-motion:reduce){.hp-floor>i{animation:none}}
+
+/* ---------- 2. no per-frame blur on content ---------- */
+html.hp-pro :is(.panel,.hero,.kpis>div,.col,.rank-card,.tiles>*,.hph-card,.hph-bar,.hph-usage,.hph-ready,.hph-sound,.hph-music,.hpd-kpis>div,
+  .tablewrap,.chat,.queue,.strip,.strip>div,.amount,.leadwith,.hstats>div,.bigseg,.seg2,.seg,.card,.gs-card,.drawer .dh,.drawer .df,.toast,.rail,.hpk-box){
+  -webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+/* chrome and floating call tools keep a light blur: few of them, and they sit over a still */
+html.hp-pro .topbar{-webkit-backdrop-filter:blur(14px) saturate(140%)!important;backdrop-filter:blur(14px) saturate(140%)!important;
+  background:rgba(9,5,15,.74)!important;border-bottom:1px solid var(--gl-line)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 12px 30px -24px rgba(0,0,0,.9)!important}
+html.hp-pro .win{-webkit-backdrop-filter:blur(12px) saturate(140%)!important;backdrop-filter:blur(12px) saturate(140%)!important;background:rgba(11,7,18,.9)!important}
+html.hp-pro .hpdk,html.hp-pro .hpd-incoming{-webkit-backdrop-filter:blur(12px) saturate(140%);backdrop-filter:blur(12px) saturate(140%)}
+html.hp-pro .hpp{-webkit-backdrop-filter:blur(12px) saturate(130%);backdrop-filter:blur(12px) saturate(130%)}
+/* the Spotify dock is already 94% opaque; its 22px blur ran even while hidden (opacity 0, still display:block) */
+html.hp-pro #spDock{-webkit-backdrop-filter:none!important;backdrop-filter:none!important;background:var(--gl-edge),var(--gl-sheen),rgba(10,8,16,.97)!important;border-color:var(--gl-line)!important}
+
+/* ---------- 3. one glass for every surface ---------- */
+html.hp-pro :is(.panel,.hero,.kpis>div,.col,.rank-card,.tiles>*,.hph-card,.hph-bar,.hph-usage,.hph-ready,.hph-sound,.hph-music,.hpd-kpis>div,.tablewrap,.chat,.queue,.hstats>div,.gs-card){
+  background:var(--gl-edge),var(--gl-sheen),var(--gl-base)!important;
+  border:1px solid var(--gl-line)!important;
+  border-radius:var(--gl-r)!important;
+  box-shadow:var(--gl-shadow)!important;
+  transition:border-color .25s var(--gl-ease),transform .4s var(--gl-ease)!important;
+}
+html.hp-pro :is(.kpis>div,.tiles>*,.hstats>div,.hpd-kpis>div,.rank-card){border-radius:16px!important}
+html.hp-pro .col{border-top:2px solid rgba(255,79,163,.5)!important}
+html.hp-pro .hero{border-radius:26px!important;
+  background:var(--gl-edge),
+    radial-gradient(120% 90% at 100% 0%,rgba(255,46,136,.18),transparent 55%),
+    radial-gradient(90% 80% at 0% 100%,rgba(61,184,255,.10),transparent 55%),
+    var(--gl-sheen),var(--gl-base-2)!important}
+html.hp-pro .rail{background:linear-gradient(180deg,#0e0818,#06040c)!important;border-right:1px solid var(--gl-line)!important;box-shadow:12px 0 40px -28px rgba(255,46,136,.35)!important}
+html.hp-pro :is(.bigseg,.seg2,.seg){background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.03))!important;border:1px solid var(--gl-line)!important}
+html.hp-pro .toast{background:linear-gradient(180deg,rgba(28,12,40,.98),rgba(13,8,22,.98))!important}
+
+/* hover: the border lights and a spotlight fades in (opacity only, no shadow/background transitions) */
+html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col){position:relative;isolation:isolate}
+html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col)::after{content:"";position:absolute;inset:0;width:auto;height:auto;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;
+  transition:opacity .3s var(--gl-ease);will-change:opacity;
+  background:radial-gradient(440px circle at var(--mx,50%) var(--my,0%),rgba(255,79,163,.24),rgba(255,158,61,.07) 42%,transparent 66%)}
+html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col).hp3-hot::after{opacity:1}
+html.hp-pro .hp3-hot{background:var(--gl-edge),var(--gl-sheen),var(--gl-base)!important;box-shadow:var(--gl-shadow)!important;border-color:var(--gl-line-hot)!important}
+html.hp-pro .hero.hp3-hot{background:var(--gl-edge),
+    radial-gradient(120% 90% at 100% 0%,rgba(255,46,136,.18),transparent 55%),
+    radial-gradient(90% 80% at 0% 100%,rgba(61,184,255,.10),transparent 55%),
+    var(--gl-sheen),var(--gl-base-2)!important}
+html.hp-pro .col.hp3-hot{border-top-color:rgba(255,79,163,.8)!important}
+html.hp-pro :is(.kpis>div,.tiles>*,.rank-card){will-change:transform}
+html.hp-pro .kpis>div:hover{box-shadow:var(--gl-shadow)!important}
+
+/* pipeline cards: lift with transform, glow with an opacity-faded ring */
+html.hp-pro .card{position:relative;isolation:isolate;
+  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028))!important;border:1px solid rgba(255,255,255,.09)!important;border-radius:14px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 10px 22px -16px rgba(0,0,0,.9)!important;
+  transition:transform .22s var(--gl-ease),border-color .2s!important}
+html.hp-pro .card::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .25s var(--gl-ease);box-shadow:var(--gl-glow)}
+html.hp-pro .card:hover{transform:translateY(-2px);border-color:var(--gl-line-hot)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 10px 22px -16px rgba(0,0,0,.9)!important}
+html.hp-pro .card:hover::after{opacity:1}
+
+/* buttons: no filter transitions (each one re-rasterizes the button every frame) */
+html.hp-pro .btn{transition:transform .16s var(--gl-ease),border-color .2s,background-color .2s,box-shadow .2s!important}
+html.hp-pro .btn:hover{filter:none!important}
+
+/* one page-enter animation, not two stacked on the same element */
+html.hp-pro section[data-v]:not([hidden]){animation:hpViewIn .32s var(--gl-ease) both}
+@media (prefers-reduced-motion:reduce){html.hp-pro section[data-v]:not([hidden]){animation:none}}
+
+/* ---------- 4. reduced motion ---------- */
+@media (prefers-reduced-motion:reduce){
+  html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col)::after,html.hp-pro .card::after{transition:none}
+  html.hp-pro .card:hover{transform:none}
+}

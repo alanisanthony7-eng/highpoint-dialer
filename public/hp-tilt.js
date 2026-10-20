@@ -5,7 +5,8 @@
   try {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (!matchMedia("(pointer: fine)").matches) return;
-    const SEL = ".panel, .hero, .kpis > div, .col, .rank-card, .tiles > *, .hph-card";
+    // cards and tiles only: big .panel surfaces don't follow the pointer (each move would repaint them)
+    const SEL = ".hero, .kpis > div, .col, .rank-card, .tiles > *, .hph-card";
     const TILT = ".kpis > div, .tiles > *, .rank-card";
     let cur = null, raf = 0, pending = null;
 

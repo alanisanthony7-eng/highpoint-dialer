@@ -959,22 +959,30 @@ $$("#scTabs .tab").forEach(b=>b.onclick=()=>{scTab=b.dataset.sc;renderScripts()}
 /* ---------- motion ---------- */
 const RM=matchMedia("(prefers-reduced-motion: reduce)").matches;
 function stagger(sec){if(!sec)return;[...sec.children].forEach((c,i)=>{c.style.setProperty("--i",Math.min(i,10));c.style.animation="none";void c.offsetWidth;c.style.animation=""})}
-(function sky(){if(RM)return;const cv=$("#sky"),x=cv.getContext("2d");let W,H,stars=[],t=0;
-  const size=()=>{W=cv.width=innerWidth*devicePixelRatio;H=cv.height=innerHeight*devicePixelRatio;cv.style.width=innerWidth+"px";cv.style.height=innerHeight+"px";
-    stars=Array.from({length:0},()=>({x:Math.random()*W,y:Math.random()*H*.75,r:(Math.random()*1.1+.3)*devicePixelRatio,p:Math.random()*6.28,s:.4+Math.random()*1.2,v:(Math.random()*.06+.02)*devicePixelRatio}))};
+/* the distant jets: a decorative canvas, so it runs at 30fps, caps its pixel density, clears only the
+   strip it drew last frame, and goes to sleep (one timer, no drawing) while the sky is empty or the desk is hidden */
+(function sky(){if(RM)return;const cv=$("#sky"),x=cv.getContext("2d");let W,H,D=1,last=0,dirty=null;
+  const size=()=>{D=Math.min(1.5,devicePixelRatio||1);W=cv.width=Math.round(innerWidth*D);H=cv.height=Math.round(innerHeight*D);cv.style.width=innerWidth+"px";cv.style.height=innerHeight+"px";dirty=null};
   size();addEventListener("resize",size);
-  const frame=()=>{t+=.016;x.clearRect(0,0,W,H);
-    for(const s of stars){s.x+=s.v;if(s.x>W)s.x=0;const a=.25+.55*(.5+.5*Math.sin(t*s.s+s.p));x.globalAlpha=a*.7;x.fillStyle=s.r>1.1*devicePixelRatio?"#FFD1EC":"#FFFFFF";x.beginPath();x.arc(s.x,s.y,s.r,0,6.283);x.fill()}
-    if(Math.random()<.004&&jets.length<2){jets.push({x:-60*devicePixelRatio,y:H*(.3+Math.random()*.4),a:-(.18+Math.random()*.16),v:(2.2+Math.random()*1.2)*devicePixelRatio,trail:[]})}
-    if(false){shoot.push({x:Math.random()*W*.7,y:Math.random()*H*.3,l:0})}
-    for(const j of jets){j.x+=Math.cos(j.a)*j.v;j.y+=Math.sin(j.a)*j.v;j.a-=.0004;j.trail.push([j.x,j.y]);if(j.trail.length>220)j.trail.shift();
-      for(let k=1;k<j.trail.length;k++){x.globalAlpha=(k/j.trail.length)*.35;x.strokeStyle="rgba(255,255,255,.8)";x.lineWidth=(1+k/j.trail.length*1.6)*devicePixelRatio;x.beginPath();x.moveTo(j.trail[k-1][0],j.trail[k-1][1]+2*devicePixelRatio);x.lineTo(j.trail[k][0],j.trail[k][1]+2*devicePixelRatio);x.stroke()}
-      x.save();x.globalAlpha=.95;x.translate(j.x,j.y);x.rotate(j.a);const u=devicePixelRatio;if(JET_IMG.complete)x.drawImage(JET_IMG,-30*u,-11*u,60*u,22*u);x.restore()}
-    jets=jets.filter(j=>j.x<W+80*devicePixelRatio&&j.y>-80*devicePixelRatio);
-    for(const m of shoot){m.l+=1;const k=m.l*14*devicePixelRatio;x.globalAlpha=Math.max(0,1-m.l/40);const g=x.createLinearGradient(m.x+k,m.y+k*.35,m.x+k-120*devicePixelRatio,m.y+k*.35-42*devicePixelRatio);g.addColorStop(0,"#E9F0FC");g.addColorStop(1,"rgba(233,240,252,0)");x.strokeStyle=g;x.lineWidth=1.4*devicePixelRatio;x.beginPath();x.moveTo(m.x+k,m.y+k*.35);x.lineTo(m.x+k-120*devicePixelRatio,m.y+k*.35-42*devicePixelRatio);x.stroke()}
-    shoot=shoot.filter(m=>m.l<40);x.globalAlpha=1;
-    if(!document.hidden)requestAnimationFrame(frame);else setTimeout(()=>requestAnimationFrame(frame),500)};
-  let shoot=[],jets=[{x:W*.05,y:H*.6,a:-.24,v:2.6*devicePixelRatio,trail:[]}];requestAnimationFrame(frame)})();
+  const spawn=()=>({x:-60*D,y:H*(.3+Math.random()*.4),a:-(.18+Math.random()*.16),v:(2.2+Math.random()*1.2)*D,trail:[]});
+  let jets=[{x:W*.05,y:H*.6,a:-.24,v:2.6*D,trail:[]}];
+  const asleep=()=>document.hidden||document.documentElement.classList.contains("gated");
+  const frame=(now)=>{
+    if(asleep()){setTimeout(()=>requestAnimationFrame(frame),600);return}
+    const el=now-last;if(el<30){requestAnimationFrame(frame);return}
+    const k=Math.min(3,el/16.67)||1;last=now;
+    if(dirty){x.clearRect(dirty[0],dirty[1],dirty[2]-dirty[0],dirty[3]-dirty[1]);dirty=null}
+    if(!jets.length){if(Math.random()<.004*k)jets.push(spawn());else{setTimeout(()=>requestAnimationFrame(frame),250);return}}
+    else if(Math.random()<.004*k&&jets.length<2)jets.push(spawn());
+    const keep=Math.round(220/k);let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    for(const j of jets){j.x+=Math.cos(j.a)*j.v*k;j.y+=Math.sin(j.a)*j.v*k;j.a-=.0004*k;j.trail.push([j.x,j.y]);while(j.trail.length>keep)j.trail.shift();
+      for(let i=1;i<j.trail.length;i++){x.globalAlpha=(i/j.trail.length)*.35;x.strokeStyle="rgba(255,255,255,.8)";x.lineWidth=(1+i/j.trail.length*1.6)*D;x.beginPath();x.moveTo(j.trail[i-1][0],j.trail[i-1][1]+2*D);x.lineTo(j.trail[i][0],j.trail[i][1]+2*D);x.stroke()}
+      x.save();x.globalAlpha=.95;x.translate(j.x,j.y);x.rotate(j.a);if(JET_IMG.complete)x.drawImage(JET_IMG,-30*D,-11*D,60*D,22*D);x.restore();
+      for(const p of j.trail){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}}
+    x.globalAlpha=1;const m=48*D;dirty=[Math.max(0,x0-m),Math.max(0,y0-m),Math.min(W,x1+m),Math.min(H,y1+m)];
+    jets=jets.filter(j=>j.x<W+80*D&&j.y>-80*D);
+    requestAnimationFrame(frame)};
+  requestAnimationFrame(frame)})();
 function celebrate(label){if(RM)return;const cv=$("#burst"),x=cv.getContext("2d");const d=devicePixelRatio;cv.width=innerWidth*d;cv.height=innerHeight*d;cv.style.width=innerWidth+"px";cv.style.height=innerHeight+"px";
   const cols=["#FF2E88","#FF9E3D","#FFFFFF","#FF4FA3","#FFC27E"];const P=Array.from({length:140},(_,i)=>({x:innerWidth*d/2,y:innerHeight*d*.42,vx:(Math.random()-.5)*16*d,vy:(-Math.random()*14-4)*d,r:(Math.random()*5+3)*d,c:cols[i%cols.length],a:Math.random()*6.28,va:(Math.random()-.5)*.3,bill:i%9===0}));
   let f=0;const step=()=>{f++;x.clearRect(0,0,cv.width,cv.height);for(const p of P){p.vy+=.35*d;p.vx*=.99;p.x+=p.vx;p.y+=p.vy;p.a+=p.va;x.save();x.translate(p.x,p.y);x.rotate(p.a);x.globalAlpha=Math.max(0,1-f/110);
@@ -1244,15 +1252,21 @@ function makeJetSlider(rng){
 
 /* ----- segmented controls with sliding thumb (spring) ----- */
 const segPos=new Map();
-function updateSegs(){document.querySelectorAll(".bigseg,.seg2").forEach(seg=>{
-  const on=seg.querySelector('button[aria-pressed="true"]');let th=seg.querySelector(":scope>.segthumb");
-  if(!on||!seg.offsetParent){return}
-  if(!th){th=document.createElement("span");th.className="segthumb";seg.prepend(th);const p=segPos.get(seg.id||seg);if(p){th.style.transition="none";th.style.width=p.w+"px";th.style.transform=`translateX(${p.x}px)`;void th.offsetWidth;th.style.transition=""}}
-  seg.classList.add("has-thumb");const x=on.offsetLeft,w=on.offsetWidth;
-  th.style.width=w+"px";th.style.transform=`translateX(${x}px)`;segPos.set(seg.id||seg,{x,w});
-  if(!seg._ro&&window.ResizeObserver){seg._ro=new ResizeObserver(()=>{if(!segQ)segQ=requestAnimationFrame(()=>{segQ=0;updateSegs()})});seg._ro.observe(seg)}})}
+// all layout reads first, then all writes: one layout pass for every control instead of one per control
+function updateSegs(){const segs=[];
+  document.querySelectorAll(".bigseg,.seg2").forEach(seg=>{const on=seg.querySelector('button[aria-pressed="true"]');if(!on||!seg.offsetParent)return;segs.push({seg,th:seg.querySelector(":scope>.segthumb"),x:on.offsetLeft,w:on.offsetWidth})});
+  for(const s of segs){let {seg,th,x,w}=s;
+    if(!th){th=document.createElement("span");th.className="segthumb";seg.prepend(th);const p=segPos.get(seg.id||seg);if(p){th.style.transition="none";th.style.width=p.w+"px";th.style.transform=`translateX(${p.x}px)`;void th.offsetWidth;th.style.transition=""}}
+    seg.classList.add("has-thumb");th.style.width=w+"px";th.style.transform=`translateX(${x}px)`;segPos.set(seg.id||seg,{x,w});
+    if(!seg._ro&&window.ResizeObserver){seg._ro=new ResizeObserver(()=>queueSegs());seg._ro.observe(seg)}}}
 addEventListener("load",()=>setTimeout(updateSegs,60));document.fonts&&document.fonts.ready.then(()=>updateSegs());
-let segQ=0;const segMO=new MutationObserver(()=>{if(!segQ)segQ=requestAnimationFrame(()=>{segQ=0;updateSegs()})});
+let segQ=0;const queueSegs=()=>{if(!segQ)segQ=requestAnimationFrame(()=>{segQ=0;updateSegs()})};
+const SEGSEL=".bigseg,.seg2",touchesSeg=n=>n.nodeType===1&&(n.matches(SEGSEL)||!!n.querySelector(SEGSEL));
+// only mutations that can move a thumb: a pressed button, something shown or hidden, or a control added/removed
+// (a clock tick or a toast somewhere else on the page used to re-measure every control)
+const segMO=new MutationObserver(muts=>{if(segQ)return;for(const m of muts){
+  if(m.type==="attributes"){if(m.attributeName==="aria-pressed"||touchesSeg(m.target)){queueSegs();return}continue}
+  if(m.target.closest?.(SEGSEL)||[...m.addedNodes].some(touchesSeg)||[...m.removedNodes].some(touchesSeg)){queueSegs();return}}});
 segMO.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:["aria-pressed","hidden"]});
 addEventListener("resize",()=>{segPos.clear();document.querySelectorAll(".segthumb").forEach(t=>t.remove());updateSegs()});
 
