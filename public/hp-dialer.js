@@ -1,5 +1,5 @@
 /* Highpoint Dialer — browser phone, multi-line power dialing, numbers, analytics, inbox.
-   Talks to /api/dialer/* (Netlify Functions + Twilio). Runs in demo mode when the backend isn't there. */
+   Talks to /api/dialer/* (Cloudflare Pages Functions + Twilio). Demo mode is explicit or used for a missing API route. */
 (() => {
   "use strict";
   const API = "/api/dialer";
@@ -44,17 +44,16 @@
   };
 
   /* ================= API ================= */
-  function authHeader() {
-    try { const u = JSON.parse(localStorage.getItem("gotrue.user") || "null"); const t = u?.token?.access_token; return t ? { authorization: "Bearer " + t } : {}; } catch { return {}; }
-  }
   async function api(path, { method = "GET", body, raw } = {}) {
     if (S.demo) return Demo.api(path, { method, body });
-    const headers = { ...authHeader() };
+    const headers = {};
     let b = body;
     if (body !== undefined && !raw) { headers["content-type"] = "application/json"; b = JSON.stringify(body); }
-    const r = await fetch(API + path, { method, headers, body: b, credentials: "same-origin" });
+    let r;
+    try { r = await fetch(API + path, { method, headers, body: b, credentials: "same-origin" }); }
+    catch { throw Object.assign(new Error("The dialer couldn't reach the server. Check your connection and try again."), { status: 0, code: "network" }); }
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) { const e = new Error(j.error || `Request failed (${r.status})`); e.status = r.status; throw e; }
+    if (!r.ok) { const e = new Error(j.error || `Request failed (${r.status})`); e.status = r.status; e.code = j.code; e.feature = j.feature; throw e; }
     return j;
   }
 
@@ -68,12 +67,13 @@
     buildUI(); buildBar();
     if (!addPadButton()) { const mo = new MutationObserver(() => { if (addPadButton()) mo.disconnect(); }); mo.observe(document.body, { childList: true, subtree: true }); }
     try {
+      if (new URLSearchParams(location.search).get("dialerDemo") === "1") throw Object.assign(new Error("Demo requested"), { status: 404 });
       const st = await api("/setup");
       Object.assign(S, { provider: st.provider || "twilio", ready: st.ready, twilio: st.twilio, me: st.me, settings: st.settings, trust: st.trust || {}, prefs: { ...S.prefs, ...(st.prefs || {}) } });
     } catch (e) {
       if (e.status === 401) { setChip("err", "Sign in"); note("Sign in to use the dialer."); return; }
-      // no backend (preview / not deployed yet) → demo mode
-      S.demo = true; Object.assign(S, Demo.boot());
+      if (e.status === 404) { S.demo = true; Object.assign(S, Demo.boot()); }
+      else { setChip("err", "Unavailable"); note(e.message || "The dialer is unavailable. Try again or ask your admin to check the phone setup."); return; }
     }
     S.lines = Math.min(S.lines, S.settings.maxLines || 3);
     if (S.ready || S.demo) document.body.classList.add("hpd-on");
@@ -84,7 +84,8 @@
     buildHome(); renderPhone();
     if (S.ready) startDevice();
     refreshNumbers(); loadGreetings(); inboxBadge();
-    setInterval(inboxBadge, 60000);
+    setInterval(() => { if (!document.hidden) inboxBadge(); }, 60000);
+    dock();
   }
 
   /* ================= UI scaffolding ================= */
@@ -1098,7 +1099,7 @@
     catch { el.innerHTML = `<p class="hpd-sm">Automatic texts couldn't load.</p>`; return; }
     const s = st.settings, when = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
     el.innerHTML = `<div class="hpd-flex" style="justify-content:space-between"><h2 style="margin:0">Automatic texts</h2><label class="hpd-fu-sw"><input type="checkbox" id="fuOn" ${s.on ? "checked" : ""}><span>${s.on ? "On" : "Off"}</span></label></div>
-      <p class="hpd-sm" style="margin:0">Follow-up texts from your local number. They only go out during the client's calling hours, never to Do Not Call numbers, and they stop when the client texts back, gets reached on a call, or moves on.</p>
+      <p class="hpd-sm" style="margin:0">Optional. Each text is billed by Twilio or Telnyx at your carrier rate, so this stays off until you turn it on. Texts go out from your local number during the client's calling hours, never to Do Not Call numbers, and they stop when the client texts back, gets reached on a call, or moves on.</p>
       <div class="hpd-fu-list">${FU_KINDS.map(([k, t]) => `<div class="hpd-fu-row"><label class="hpd-fu-h"><input type="checkbox" data-fuon="${k}" ${s[k].on ? "checked" : ""}> <b>${t}</b>${k === "noAnswer" ? ` · <input type="number" min="1" max="240" id="fuDelay" value="${esc(s.noAnswer.delayMin)}" aria-label="Minutes later"> min later` : ""}${k === "newLead" ? ` · <input type="number" min="0" max="120" id="fuNlDelay" value="${esc(s.newLead?.delayMin ?? 0)}" aria-label="Minutes later"> min later (0 = right away)` : ""}</label>${k === "newLead" ? `<span class="hpd-sm">Only turn this on if your vendors collect consent to text (most real-time lead forms do).</span>` : ""}<textarea data-futxt="${k}" rows="2" maxlength="480">${esc(s[k].text)}</textarea><div class="hpd-sm hpd-fu-pv" data-fupv="${k}"></div></div>`).join("")}</div>
       <p class="hpd-sm" style="margin:0">Use {first}, {agent}, {company}, {when} and {time}. "Reply STOP to opt out." is added to every automatic text.</p>
       <div class="hpd-flex"><button class="btn primary" id="fuSave" type="button">Save automatic texts</button><span class="hpd-sm" id="fuMsg"></span></div>
@@ -1363,7 +1364,15 @@
     const D = window.hpDesk, P = S.power, tiles = S.lastTiles || [];
     let f = document.getElementById("hpdDock");
     const active = S.call || P || S.ps || S.phoneLead;
-    if (!active) { f?.remove(); clearInterval(S.dockTick); S.dockLiveAt = 0; document.body.classList.remove("hpd-bar"); return; }
+    if (!active) {
+      clearInterval(S.dockTick); S.dockLiveAt = 0;
+      if (!S.ready) { f?.remove(); document.body.classList.remove("hpd-bar"); return; }
+      if (!f) { f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Dialer ready"); document.body.append(f); }
+      f.className = "hpd hpdk callbar idle-ready"; document.body.classList.add("hpd-bar");
+      f.innerHTML = `<div class="hpdk-row"><span class="hpdk-state" data-tone="idle"><i></i>Dialer ready</span><span class="hpdk-prog">${esc(S.provider === "telnyx" ? "Telnyx line" : "Browser line")}</span><span class="hpdk-sp"></span><button type="button" class="hpdk-bcall" id="hpdkOpenDialer">${I.phone}<span>Open dialer</span></button></div>`;
+      $("#hpdkOpenDialer", f).onclick = () => window.hpDesk?.go?.("dialer");
+      return;
+    }
     if (!f) {
       f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Call controls"); document.body.append(f);
       const pos = lsGet("hpd.dockPos", null); if (pos) { f.style.left = Math.max(4, Math.min(pos[0], innerWidth - 340)) + "px"; f.style.top = Math.max(4, Math.min(pos[1], innerHeight - 160)) + "px"; f.style.right = "auto"; f.style.bottom = "auto"; }
@@ -1416,7 +1425,7 @@
     } else {
       f.innerHTML = `
       <div class="hpdk-head" id="hpdkDrag">
-        <span class="hpdk-mk" role="img" aria-label="Highpoint Dialer"><svg viewBox="0 0 132 96" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="#FFFFFF"/><path d="M104 22 L128 12 L118 30 L113 24 Z" fill="#FFFFFF"/><path d="M113 24 L118 30 L112 31Z" fill="#9CC3F0"/></svg><b>Dialer</b></span>
+        <span class="hpdk-mk" role="img" aria-label="Highpoint Dialer"><svg viewBox="0 0 132 96" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="#FFFFFF"/><g class="hp-jet" transform="translate(111.2 14.8) rotate(-38)"><path fill="#FFFFFF" d="M-2 4.15 H13.4 C16 4.15 17.7 3.55 18.6 4.15 17.7 4.75 16 5.25 13.4 5.25 H-2Z"/><path fill="#FFFFFF" d="M6.2 4.7 9.7-.5 11.8 4.7 9.7 9.9Z"/><path fill="#9CC3F0" d="M-2.4 4.7 2.2 1.7v6Z"/><path fill="#FFFFFF" d="M16.4 4.15 19.6 3.15v2Z"/></g></svg><b>Dialer</b></span>
         <span class="hpdk-state" data-tone="${tone}"><i></i>${esc(state)}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>
         ${prog ? `<span class="hpdk-prog">${prog}</span>` : ""}
         <button type="button" class="hpdk-ic" id="hpdkMin" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>

@@ -29,6 +29,19 @@
   }
   const clone = (v) => (v == null ? v : structuredClone(v));
   const visible = () => document.visibilityState === "visible";
+  const deskShell = () => [document.querySelector(".rail"), document.querySelector("main"), document.querySelector("#drawer"), document.querySelector("#scrim")].filter(Boolean);
+  function setDeskAvailable(on) {
+    deskShell().forEach((el) => {
+      el.inert = !on;
+      if (on) {
+        el.removeAttribute("aria-hidden");
+        if (el.dataset.hpGateHidden) { el.hidden = false; delete el.dataset.hpGateHidden; }
+      } else {
+        el.setAttribute("aria-hidden", "true");
+        if (!el.hidden) { el.hidden = true; el.dataset.hpGateHidden = "1"; }
+      }
+    });
+  }
 
   /* ---------- saved data ---------- */
   class Col {
@@ -129,7 +142,7 @@
   #hpGate .gx-bg .vscene{display:block!important;position:absolute!important;inset:0}
   #hpGate .gx-bg::after{content:"";position:absolute;inset:0;z-index:2;background:linear-gradient(90deg,rgba(5,6,16,.84) 0%,rgba(5,6,16,.5) 46%,rgba(5,6,16,.06) 100%),linear-gradient(0deg,rgba(5,6,16,.55) 0%,rgba(5,6,16,0) 35%)}
   #hpGate .gx-content{position:relative;z-index:1;min-height:100%}
-  #hpGate .gx{min-height:100vh;min-height:100dvh;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,440px);gap:48px;align-items:center;padding:48px clamp(20px,6vw,96px)}
+  #hpGate .gx{min-height:100vh;min-height:100dvh;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,440px);gap:48px;align-items:center;padding:calc(48px + env(safe-area-inset-top)) max(clamp(20px,6vw,96px),env(safe-area-inset-right)) calc(48px + env(safe-area-inset-bottom)) max(clamp(20px,6vw,96px),env(safe-area-inset-left))}
   #hpGate .gx-hero{display:flex;flex-direction:column;gap:22px;max-width:620px;animation:gxIn .7s cubic-bezier(.2,.8,.2,1) both}
   #hpGate .gx-lock{display:flex;align-items:center;gap:16px}
   #hpGate .gx-lock svg{width:96px;height:auto;filter:drop-shadow(0 6px 18px rgba(0,0,0,.5))}
@@ -169,10 +182,13 @@
   #hpGate .g-fine a,#hpGate .g-forgot{color:#C9CDD5;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
   #hpGate .g-fine a:hover{color:#fff}
   #hpGate .g-ok{margin:0;padding:10px 12px;border-radius:10px;background:rgba(59,211,139,.12);border:1px solid rgba(59,211,139,.4);font-size:13.5px;color:#C9F5DD}
-  #hpGate .gx-foot{position:fixed;left:clamp(20px,6vw,96px);bottom:18px;font-size:12px;color:rgba(255,255,255,.55)}
+  #hpGate .gx-foot{position:fixed;left:max(clamp(20px,6vw,96px),env(safe-area-inset-left));bottom:calc(18px + env(safe-area-inset-bottom));font-size:12px;color:rgba(255,255,255,.55)}
   @keyframes gxIn{from{opacity:0;transform:translateY(14px)}}
   @media (max-width:900px){#hpGate .gx-bg::after{background:rgba(5,6,16,.6)}#hpGate .gx{grid-template-columns:1fr;gap:26px;padding:32px 18px 60px;align-content:start}
     #hpGate h1{font-size:clamp(38px,11vw,56px)}#hpGate .gx-sub{font-size:15px}#hpGate .gx-lock svg{width:72px}#hpGate .gx-lock b{font-size:24px}#hpGate .gx-foot{position:static;padding:0 18px 20px}}
+  @media (max-width:480px){#hpGate .gx{padding:calc(18px + env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));gap:14px}
+    #hpGate .gx-hero{gap:8px}#hpGate .gx-hero .gx-lock{justify-content:center}#hpGate .gx-hero h1{font-size:clamp(30px,10vw,42px);text-align:center}#hpGate .gx-hero .gx-sub{display:none}#hpGate .gx-hero .gx-chips{display:none}
+    #hpGate .g-card{padding:24px 18px 20px;border-radius:20px}#hpGate .gx-foot{padding:0 14px calc(14px + env(safe-area-inset-bottom));text-align:center}}
   @media (prefers-reduced-motion:reduce){#hpGate .gx-hero,#hpGate .g-card{animation:none}}
   .hp-net{position:fixed;left:50%;bottom:22px;z-index:2000;transform:translate(-50%,30px);opacity:0;pointer-events:none;display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:999px;font:600 13px var(--f-ui,system-ui);color:#fff;background:rgba(14,10,24,.92);border:1px solid rgba(255,79,163,.45);box-shadow:0 12px 30px rgba(0,0,0,.5),0 0 18px -6px rgba(255,46,136,.7);transition:transform .3s cubic-bezier(.2,.8,.2,1),opacity .3s}
   .hp-net.show{transform:translate(-50%,0);opacity:1}
@@ -195,24 +211,25 @@
   @media (max-width:1100px){.hp-acct-b span,.hp-acct-b svg{display:none}.hp-acct-b{padding:2px}}`;
   const st = document.createElement("style"); st.textContent = css; document.head.append(st);
 
-  const MARK = `<svg viewBox="0 0 132 96" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="#FFFFFF"/><path d="M104 22 L128 12 L118 30 L113 24 Z" fill="#FFFFFF"/><path d="M113 24 L118 30 L112 31Z" fill="#FF9E3D"/></svg>`;
+  const MARK = `<svg viewBox="0 0 132 96" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="#FFFFFF"/><g class="hp-jet" transform="translate(111.2 14.8) rotate(-38)"><path fill="#FFFFFF" d="M-2 4.15 H13.4 C16 4.15 17.7 3.55 18.6 4.15 17.7 4.75 16 5.25 13.4 5.25 H-2Z"/><path fill="#FFFFFF" d="M6.2 4.7 9.7-.5 11.8 4.7 9.7 9.9Z"/><path fill="#FF9E3D" d="M-2.4 4.7 2.2 1.7v6Z"/><path fill="#FFFFFF" d="M16.4 4.15 19.6 3.15v2Z"/></g></svg>`;
   function gate(msg, opts = {}) {
     const inviteToken = new URLSearchParams(location.search).get("invite") || "";
     let mode = opts.mode || (inviteToken ? "up" : "in"), showPw = false, inviteInfo = null, ticket = null, info = "", recov = false;
     const resetToken = opts.reset || "";
     if (inviteToken) call("/api/auth/invite?code=" + encodeURIComponent(inviteToken)).then((r) => { inviteInfo = r; draw(""); }).catch((e) => { inviteInfo = { error: e.message }; draw(""); });
     const keep = {};
-    const g = document.createElement("div"); g.id = "hpGate"; g.setAttribute("role", "dialog"); g.setAttribute("aria-label", "Sign in to Highpoint");
-    g.innerHTML = `<div class="gx-bg"></div><div class="gx-content"></div>`;
+    const g = document.createElement("div"); g.id = "hpGate"; g.setAttribute("role", "dialog"); g.setAttribute("aria-modal", "true"); g.setAttribute("aria-label", "Sign in to Highpoint");
+    g.innerHTML = `<div class="gx-bg"></div><button class="g-theme" type="button" aria-label="Choose appearance">Appearance</button><div class="gx-content"></div>`;
     // borrow the desk's live sunset scene (its gradients only paint when it isn't inside the hidden desk)
     const scene = document.querySelector(".vscene"), home = scene && { parent: scene.parentNode, next: scene.nextSibling };
     if (scene) $(".gx-bg", g).append(scene);
     g.giveBack = () => { if (scene && home) home.parent.insertBefore(scene, home.next); };
     document.body.append(g);
+    $(".g-theme", g).onclick = (e) => window.hpTheme?.openPicker(e.currentTarget);
     const box = $(".gx-content", g);
     const HERO = `        <section class="gx-hero">
           <div class="gx-lock">${MARK}<div><b>HIGHPOINT</b><span>FINANCIAL</span></div></div>
-          <h1>Elevate your future.</h1>
+          <h1>Elevate Your Future.</h1>
           <p class="gx-sub">The Highpoint agent desk. Your leads, your dialer, your quotes and follow-ups for Final Expense, Mortgage Protection and IUL, in one place.</p>
           <div class="gx-chips"><span><i></i>3-line power dialer</span><span><i></i>Local caller ID</span><span><i></i>Private lead CRM</span><span><i></i>FE · MP · IUL quotes</span></div>
         </section>`;
@@ -302,7 +319,10 @@ ${HERO}
         const btn = $(".g-go", g); btn.disabled = true; btn.textContent = up ? "Creating your account…" : "Signing in…";
         const pw = $("#gPw").value;
         try {
-          const body = { email: $("#gEmail").value, password: pw };
+          const email = $("#gEmail").value.trim();
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { draw("Enter a valid email address."); return; }
+          if (up && pw.length < 8) { draw("Use at least 8 characters for your password."); return; }
+          const body = { email, password: pw };
           if (up) {
             if (!$("#gAgree").checked) { draw("Please agree to the Terms of Service and Privacy Policy."); return; }
             Object.assign(body, { name: $("#gName").value, invite: $("#gCode")?.value || "", inviteToken, agree: true });
@@ -322,7 +342,7 @@ ${HERO}
     const row = document.querySelector(".topbar .row"); if (!row || row.querySelector(".hp-acct")) return;
     const a = document.createElement("div"); a.className = "hp-acct";
     a.innerHTML = `<button type="button" class="hp-acct-b" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu"><i aria-hidden="true">${esc((u.name || u.email)[0].toUpperCase())}</i><span>${esc((u.name || u.email).split(" ")[0])}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-      <div class="hp-acct-m" role="menu" hidden><div class="hp-acct-who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}</span></div>${u.admin ? `<button type="button" role="menuitem" data-team>Team</button>` : ""}<button type="button" role="menuitem" data-sec>Security<small>${u.twofa ? "Two-step verification is on" : "Password and two-step verification"}</small></button><button type="button" role="menuitem" data-bill>Billing</button><button type="button" role="menuitem" data-look>Look: ${window.hpTheme?.look === "classic" ? "Highpoint Classic" : "Miami"}<small>Switch to ${window.hpTheme?.look === "classic" ? "Miami" : "Highpoint Classic"}</small></button><button type="button" role="menuitem" data-out>Sign out</button></div>`;
+      <div class="hp-acct-m" role="menu" hidden><div class="hp-acct-who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}</span></div>${u.admin ? `<button type="button" role="menuitem" data-team>Team</button>` : ""}<button type="button" role="menuitem" data-sec>Security<small>${u.twofa ? "Two-step verification is on" : "Password and two-step verification"}</small></button><button type="button" role="menuitem" data-bill>Billing</button><button type="button" role="menuitem" data-look>Appearance<small>${esc(window.hpTheme?.label || "Executive")} theme</small></button><button type="button" role="menuitem" data-out>Sign out</button></div>`;
     const btn = a.querySelector(".hp-acct-b"), menu = a.querySelector(".hp-acct-m");
     const open = (on) => { menu.hidden = !on; btn.setAttribute("aria-expanded", on); if (on) menu.querySelector("[role=menuitem]")?.focus(); };
     btn.onclick = (e) => { e.stopPropagation(); open(menu.hidden); };
@@ -330,7 +350,7 @@ ${HERO}
     a.addEventListener("keydown", (e) => { if (e.key === "Escape") { open(false); btn.focus(); } });
     a.querySelector("[data-bill]").onclick = () => { open(false); window.hpTeam?.openBilling(); };
     a.querySelector("[data-sec]").onclick = () => { open(false); window.hpTeam?.openSecurity(); };
-    a.querySelector("[data-look]").onclick = () => { open(false); window.hpTheme?.toggle(); }; // Miami ↔ Highpoint Classic colors (this browser)
+    a.querySelector("[data-look]").onclick = (e) => { open(false); window.hpTheme?.openPicker(e.currentTarget); };
     const tb = a.querySelector("[data-team]"); if (tb) tb.onclick = () => { open(false); window.hpTeam?.openTeam(); };
     a.querySelector("[data-out]").onclick = async () => { try { await call("/api/auth/logout", { method: "POST" }); } finally { location.reload(); } };
     row.append(a);
@@ -341,20 +361,23 @@ ${HERO}
     await loadTeam();
     if (window.hpTeam) u = await window.hpTeam.ready(u);
     ME = u; window.hpUser = u;
+    window.hpTheme?.syncAccess?.(u);
     document.documentElement.classList.remove("gated");
+    setDeskAvailable(true);
     account(u);
     call("/api/room/presence", { method: "POST", body: { status: "Online", at: Date.now() } }).catch(() => {});
     // characters load right after sign-in (not on the sign-in screen), then the desk, in order
-    for (const src of ["/hp-avatar.js", "/hp-rates.js", "/hp-est.js", "/hp-drugs.js", "/hp-fex-script.js", "/desk-app.js", "/hp-leadpost.js", "/hp-booking.js", "/hp-pop.js"]) { if (src === "/hp-avatar.js" && window.hpAvatar) continue; const s = document.createElement("script"); s.src = src; s.async = false; document.body.append(s); }
+    for (const src of ["/hp-avatar.js", "/hp-rates.js", "/hp-est.js", "/hp-drugs.js", "/hp-fex-script.js", "/desk-app.js", "/hp-pop.js"]) { if (src === "/hp-avatar.js" && window.hpAvatar) continue; const s = document.createElement("script"); s.src = src; s.async = false; document.body.append(s); }
   }
 
   async function boot() {
     document.documentElement.classList.add("gated");
+    setDeskAvailable(false);
     window.hpNeon?.intro();
     const rt = new URLSearchParams(location.search).get("reset");
     if (rt) { gate("", { mode: "reset", reset: rt }); return; } // a password reset link
     try { const r = await call("/api/auth/me"); start(r.user); }
-    catch (e) { gate(e.status === 401 ? "" : e.status === 503 ? e.message : ""); }
+    catch (e) { gate(e.status === 401 ? "" : e.message || "Highpoint couldn't reach the server. Try again in a moment."); }
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();

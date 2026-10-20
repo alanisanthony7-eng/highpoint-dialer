@@ -45,12 +45,51 @@ function addNoteObj(l,text){ return [...(l.notes||[]),{t:Date.now(),text}] }
 let view=(location.hash||"").slice(1);
 if(!["pipeline","contacts","import","dialer","quoter","iul","assistant","screen","scripts","calendar","crew"].includes(view)) view=ls.get("hp.view","pipeline");
 const CRUMB={crew:"Crew lobby",calendar:"Calendar",quoter:"Quote & compare",iul:"IUL illustrator",pipeline:"My CRM",contacts:"Clients",screen:"Screen a client",assistant:"Highpoint Bot",scripts:"Scripts",dialer:"Highpoint Dialer",import:"Import leads"};
-function syncNav(){ $$(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.view===view?"page":"false")); $("#crumb").textContent=CRUMB[view]||""; }
+function syncNav(){ $$(".nav").forEach(b=>{if(b.dataset.view===view)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current")}); $("#crumb").textContent=CRUMB[view]||""; }
 let goReady=false;
+let dialerLoad=null;
+const featureLoads=new Map();
+function ensureFeature(src){
+  if(featureLoads.has(src))return featureLoads.get(src);
+  const ready=new Promise((resolve,reject)=>{
+    const found=document.querySelector(`script[src="${src}"]`);
+    if(found){if(found.dataset.loaded)return resolve();found.addEventListener("load",resolve,{once:true});found.addEventListener("error",reject,{once:true});return}
+    const sc=document.createElement("script");sc.src=src;sc.onload=()=>{sc.dataset.loaded="1";resolve()};sc.onerror=()=>{featureLoads.delete(src);reject(new Error("This page couldn't finish loading."))};document.body.append(sc);
+  });
+  featureLoads.set(src,ready);return ready;
+}
+function ensureDialer(){
+  if(window.hpDialer)return Promise.resolve(window.hpDialer);
+  if(dialerLoad)return dialerLoad;
+  dialerLoad=new Promise((resolve,reject)=>{
+    if(!document.querySelector('link[href="/hp-dialer.css"]')){const c=document.createElement("link");c.rel="stylesheet";c.href="/hp-dialer.css";document.head.append(c)}
+    const found=document.querySelector('script[src="/hp-dialer.js"]');
+    if(found){found.addEventListener("load",()=>resolve(window.hpDialer),{once:true});found.addEventListener("error",reject,{once:true});return}
+    const sc=document.createElement("script");sc.src="/hp-dialer.js";sc.onload=()=>resolve(window.hpDialer);sc.onerror=()=>{dialerLoad=null;reject(new Error("The dialer couldn't load."))};document.body.append(sc);
+  });
+  return dialerLoad;
+}
 function go(v){ if(!document.getElementById("v-"+v))v="pipeline";
   {const T=window.hpTeam;if(T?.viewLocked?.(v)){if(goReady){T.upgrade(T.viewFeature(v));return}v="pipeline"}} // a page your plan doesn't include
-  view=v; {const g=ls.get("hp.gs",{});if(!g[v]){g[v]=Date.now();ls.set("hp.gs",g)}} ls.set("hp.view",v); $$("section[data-v]").forEach(s=>s.hidden=s.id!=="v-"+v); syncNav(); renderAll(); if(typeof crewPresence==="function")crewPresence(v); window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
+  view=v; {const g=ls.get("hp.gs",{});if(!g[v]){g[v]=Date.now();ls.set("hp.gs",g)}} ls.set("hp.view",v);
+  $$("section[data-v]").forEach(s=>{const on=s.id==="v-"+v;s.hidden=!on;s.inert=!on;if(on)s.removeAttribute("aria-hidden");else s.setAttribute("aria-hidden","true")});
+  syncNav(); renderAll();
+  if(v==="dialer")ensureDialer().catch(e=>toast(e.message));
+  if(v==="import")ensureFeature("/hp-leadpost.js").catch(e=>toast(e.message));
+  if(v==="calendar")ensureFeature("/hp-booking.js").catch(e=>toast(e.message));
+  if(typeof crewPresence==="function")crewPresence(v); window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
 $$(".nav").forEach(b=>b.onclick=()=>{if(b.dataset.view)go(b.dataset.view)});
+$("#navMore").onclick=()=>{
+  document.querySelector(".hpn-more")?.remove();
+  const primary=new Set(["pipeline","contacts","dialer","calendar"]);
+  const items=$$(".rail .nav[data-view]").filter(b=>!primary.has(b.dataset.view));
+  const el=document.createElement("div");el.className="hpn-more";el.setAttribute("role","dialog");el.setAttribute("aria-modal","true");el.setAttribute("aria-label","More pages");
+  el.innerHTML=`<button class="hpn-shade" aria-label="Close"></button><div class="hpn-sheet"><div class="hpn-head"><b>More tools</b><button aria-label="Close">×</button></div><div class="hpn-grid">${items.map(b=>`<button data-more-view="${b.dataset.view}">${b.querySelector("svg")?.outerHTML||""}<span>${esc(b.textContent.trim())}</span></button>`).join("")}<button data-more-games>${$("#navGames")?.querySelector("svg")?.outerHTML||""}<span>Games</span></button></div></div>`;
+  const close=()=>{el.remove();$("#navMore")?.focus()};el.querySelector(".hpn-shade").onclick=close;el.querySelector(".hpn-head button").onclick=close;
+  el.querySelectorAll("[data-more-view]").forEach(b=>b.onclick=()=>{close();go(b.dataset.moreView)});
+  el.querySelector("[data-more-games]").onclick=()=>{close();$("#navGames")?.click()};
+  el.onkeydown=e=>{if(e.key==="Escape")close()};document.body.append(el);el.querySelector("[data-more-view]")?.focus();
+};
 $$("[data-new]").forEach(b=>b.onclick=()=>openDrawer(null));
 $$("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
 
@@ -75,6 +114,18 @@ function renderStart(){const host=$("#v-pipeline");if(!host)return;let card=$("#
   card.querySelectorAll("[data-gs]").forEach(b=>b.onclick=()=>go(b.dataset.gs));
   $("#gsHide",card).onclick=()=>{const x=ls.get("hp.gs",{});x._hide=1;ls.set("hp.gs",x);card.remove()};
 }
+function renderToday(){
+  const host=$("#todayStrip");if(!host)return;
+  const now=Date.now(),today=new Date().toDateString(),end=new Date();end.setHours(23,59,59,999);
+  const callbacks=[...leads.values()].filter(l=>l.callbackAt&&l.callbackAt<=end.getTime()&&!["sold","lost"].includes(l.stage)).sort((a,b)=>a.callbackAt-b.callbackAt).slice(0,4);
+  const meetings=typeof appts!=="undefined"?[...appts.values()].filter(a=>!a.done&&new Date(a.at).toDateString()===today).sort((a,b)=>a.at-b.at).slice(0,4):[];
+  const ready=[...leads.values()].filter(l=>normPhone(l.phone)&&!["sold","lost"].includes(l.stage)&&!l.dnc&&!l.scrub?.blocked).sort((a,b)=>(a.lastCallAt||0)-(b.lastCallAt||0)).slice(0,4);
+  const list=(items,empty,draw)=>items.length?items.map(draw).join(""):`<span class="today-empty">${empty}</span>`;
+  host.innerHTML=`<article><header><span>Callbacks</span><b>${callbacks.length}</b></header>${list(callbacks,"Nothing due today",l=>`<button data-today-lead="${esc(l.id)}"><span><b>${esc(fullName(l))}</b><small>${l.callbackAt<now?"Overdue · ":""}${new Date(l.callbackAt).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</small></span><i>→</i></button>`)}</article>
+    <article><header><span>Appointments</span><b>${meetings.length}</b></header>${list(meetings,"Your calendar is clear",a=>`<button data-today-lead="${esc(a.leadId||"")}" data-today-view="calendar"><span><b>${esc(a.leadName||a.title||"Appointment")}</b><small>${new Date(a.at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})} · ${esc(a.type||"Call")}</small></span><i>→</i></button>`)}</article>
+    <article><header><span>Ready to call</span><b>${ready.length}</b></header>${list(ready,"Import leads to build a queue",l=>`<button data-today-lead="${esc(l.id)}"><span><b>${esc(fullName(l))}</b><small>${esc(stageName(l.stage))} · ${esc(fmtPhone(l.phone))}</small></span><i>→</i></button>`)}</article>`;
+  host.querySelectorAll("[data-today-lead]").forEach(b=>b.onclick=()=>{const id=b.dataset.todayLead;if(b.dataset.todayView==="calendar"){go("calendar");return}if(id)openDrawer(id)});
+}
 function renderPipeline(){renderStart();
   const pf=$("#pipeProduct").value; const all=filteredLeads().filter(l=>!pf||l.product===pf);
   const all2=filteredLeads(), mStart=new Date(new Date().getFullYear(),new Date().getMonth(),1).getTime();
@@ -82,6 +133,7 @@ function renderPipeline(){renderStart();
   $("#kpis").innerHTML=`<div><span class="label">Leads in book</span><span class="num" data-count="${all2.length}" data-key="k1" data-fmt="int">${all2.length.toLocaleString()}</span></div><div><span class="label">Appointments</span><span class="num" data-count="${all2.filter(l=>l.stage==="appointment").length}" data-key="k2" data-fmt="int">${all2.filter(l=>l.stage==="appointment").length}</span></div><div><span class="label">Sold this month</span><span class="num gold" data-count="${soldM}" data-key="k3" data-fmt="int">${soldM}</span></div><div><span class="label">Close rate</span><span class="num">${closed?Math.round(all2.filter(l=>l.stage==="sold").length/closed*100)+"%":"—"}</span></div>`;
   setTimeout(()=>countUp($("#kpis")));
   $("#strip").innerHTML=STAGES.map(([id,n,c])=>`<div><span class="label"><i style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${c};margin-right:5px"></i>${n}</span><span class="num">${all.filter(l=>(l.stage||"new")===id).length}</span></div>`).join("");
+  renderToday();
   $("#board").innerHTML=STAGES.map(([id,n,c])=>{
     const items=all.filter(l=>(l.stage||"new")===id).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
     return `<div class="col" data-stage="${id}"><header><h3><i style="background:${c}"></i>${n}</h3><span class="muted num">${items.length}</span></header>
@@ -229,7 +281,8 @@ function openDrawer(id){
      ${id?`<div class="stack"><span class="label">Notes & activity</span>
        <div class="row" style="flex-wrap:nowrap"><input id="d_note" placeholder="Add a note"><button class="btn" id="dAddNote">Add</button></div>
        <div class="log">${(l.notes||[]).slice().reverse().map(n=>`<div><time>${new Date(n.t).toLocaleString()}</time>${esc(n.text)}</div>`).join("")||`<span class="muted">No notes yet.</span>`}</div></div>
-     ${(l.quotes||[]).length?`<div class="stack"><span class="label">Quotes</span><div class="log">${l.quotes.slice().reverse().map(q=>`<div><time>${new Date(q.t).toLocaleDateString()} · ${esc(PROD[q.product]||q.product)}</time><b class="num">${money(q.monthly,2)}/mo</b> · ${esc(q.summary)}</div>`).join("")}</div></div>`:""}`:""}
+     ${(l.quotes||[]).length?`<div class="stack"><span class="label">Quotes</span><div class="log">${l.quotes.slice().reverse().map(q=>`<div class="qrow"><time>${new Date(q.t).toLocaleDateString()} · ${esc(PROD[q.product]||q.product)}</time><b class="num">${money(q.monthly,2)}/mo</b> · ${esc(q.summary)}<span class="qshare"><button class="btn sm" type="button" data-qshare="${esc(q.t)}">Share</button></span></div>`).join("")}</div><p class="hint" style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">Share copies a private link. Texting it is optional and uses 1 SMS only if you send it.</p></div>`:""}
+     ${id?appSheetHtml(l):""}`:""}
    </div>
    <div class="df">${id?`<button class="btn danger" id="dDel">Delete lead</button>`:"<span></span>"}<div class="row"><button class="btn" id="dCancel">Cancel</button><button class="btn primary" id="dSave">${id?"Save changes":"Add lead"}</button></div></div>`;
   if(id)showDock(id);
@@ -247,10 +300,21 @@ function openDrawer(id){
     $("#dAddNote").onclick=async()=>{const t=$("#d_note").value.trim();if(!t)return;try{await patchLead(id,{notes:addNoteObj(leads.get(id),t)});openDrawer(id)}catch(e){toast("Couldn't add note")}};
     $("#d_note").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();$("#dAddNote").click()}};
     $("#dDel").onclick=()=>{const b=$("#dDel");if(b.dataset.armed){removeLead(id).then(()=>{toast("Lead deleted");closeDrawer()})}else{b.dataset.armed="1";b.textContent="Click again to delete"}};
+    $$("[data-qshare]").forEach(b=>b.onclick=()=>offerShare(id,+b.dataset.qshare));
+    if($("#aSave"))$("#aSave").onclick=async()=>{
+      const cur=leads.get(id); if(!cur)return;
+      const app=collectApp();
+      const patch={app};
+      if($("#a_move")?.checked&&!["sold","lost","application"].includes(cur.stage||"")){patch.stage="application";patch.notes=addNoteObj(cur,"Took the app")}
+      else patch.notes=addNoteObj(cur,"Updated the close sheet");
+      try{await patchLead(id,patch);toast("Close sheet saved");openDrawer(id)}catch(e){toast("Couldn't save: "+e.message)}
+    };
+    if($("#aCopy"))$("#aCopy").onclick=()=>copyText(appPacket(leads.get(id)||l,collectApp()));
   }
 }
 function closeDrawer(){$("#drawer").hidden=true;$("#scrim").hidden=true;drawerId=null}
-$("#scrim").onclick=closeDrawer; document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#drawer").hidden)closeDrawer()});
+$("#scrim").onclick=()=>{if($("#hpShare")&&!$("#hpShare").hidden){hideShare();return}closeDrawer()};
+document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("#hpShare")&&!$("#hpShare").hidden){hideShare();return}if(!$("#drawer").hidden)closeDrawer()});
 
 /* ---------- dialer ---------- */
 let dCurId=null; const sess=ls.get("hp.sess",{d:0,c:0,a:0,day:""}); const today=new Date().toDateString(); if(sess.day!==today){sess.d=sess.c=sess.a=0;sess.day=today}
@@ -319,7 +383,7 @@ $("#wavvCsv")?.addEventListener("click",()=>{const q=dialQueue();if(!q.length){t
   offerFile(`queue-${$("#dqStage").value}-${new Date().toISOString().slice(0,10)}.csv`,toCSV(["First Name","Last Name","Phone","Email","State","Notes"],q.map(l=>[l.first||"",l.last||"",normPhone(l.phone),l.email||"",l.state||"",[PROD[l.product],l.source].filter(Boolean).join(" · ")])))});
 
 /* ---------- Highpoint Dialer hooks ---------- */
-window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLead,renderDialer,openDrawer,
+window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLead,renderDialer,openDrawer,ensureDialer,
   currentId:()=>dCurId,setCurrent(id){dCurId=id;if(view==="dialer")renderDialer()},
   get calls(){return calls},get appts(){return appts},putAppt,addNoteObj,stageName,STAGES,PROD,go,
   async dispoDirect(id,kind,o={}){const l=leads.get(id);if(!l)return;const note=o.note||"";
@@ -341,7 +405,6 @@ window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLe
     if(lab==="Bad number"||lab==="Do not call")patch.stage="lost";sess.d++;saveSess();
     logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur:0,note:"",transcript:"",summary:"",...meta});
     try{await patchLead(id,patch)}catch{}if(view==="dialer"&&dTab==="dial")renderDialer()}};
-if(!window.hpDialer&&!document.querySelector('script[src="/hp-dialer.js"]')){const c=document.createElement("link");c.rel="stylesheet";c.href="/hp-dialer.css";document.head.append(c);const sc=document.createElement("script");sc.src="/hp-dialer.js";document.body.append(sc)}
 
 /* ---------- quoting engines (illustrative) ---------- */
 function interp(xs,ys,x){if(x<=xs[0])return ys[0];for(let i=1;i<xs.length;i++)if(x<=xs[i]){const t=(x-xs[i-1])/(xs[i]-xs[i-1]);return ys[i-1]+t*(ys[i]-ys[i-1])}const n=xs.length-1;return ys[n]+(x-xs[n])*(ys[n]-ys[n-1])/(xs[n]-xs[n-1])}
@@ -419,8 +482,72 @@ function amountCtl(id,{get,set,min,max,step,fmt,suffix}){
 function leadOptions(sel){const cur=sel.value;const l=[...leads.values()].sort((a,b)=>fullName(a).localeCompare(fullName(b)));
   sel.innerHTML=`<option value="">${l.length?"No client selected":"No clients yet"}</option>`+l.slice(0,1000).map(x=>`<option value="${esc(x.id)}" ${x.id===cur?"selected":""}>${esc(fullName(x))}${x.age?" · "+esc(x.age):""}</option>`).join("")}
 async function attachQuote(leadId,q){const l=leads.get(leadId);if(!l){toast("Pick a client first, then add the quote");return false}
-  try{await patchLead(leadId,{quotes:[...(l.quotes||[]),{...q,t:Date.now()}],product:l.product||q.product,notes:addNoteObj(l,`Quoted ${q.carrier?q.carrier+" · ":""}${q.summary}: ${money(q.monthly,2)}/mo (${q.exact?"carrier rate":"estimate"})`)});toast(`Quote added to ${fullName(l)}`);awardXP(5,"quote saved");return true}catch(e){toast("Couldn't save: "+e.message);return false}}
+  const rec={...q,t:Date.now()};
+  try{await patchLead(leadId,{quotes:[...(l.quotes||[]),rec],product:l.product||q.product,notes:addNoteObj(l,`Quoted ${q.carrier?q.carrier+" · ":""}${q.summary}: ${money(q.monthly,2)}/mo (${q.exact?"carrier rate":"estimate"})`)});toast(`Quote added to ${fullName(l)}`);awardXP(5,"quote saved");offerShare(leadId,rec.t);return true}catch(e){toast("Couldn't save: "+e.message);return false}}
 async function copyText(t){try{await navigator.clipboard.writeText(t);toast("Copied")}catch{toast("Copy isn't available here")}}
+async function deskApi(path,body){
+  const r=await fetch(path,{method:body?"POST":"GET",credentials:"same-origin",headers:body?{"content-type":"application/json"}:{},body:body?JSON.stringify(body):undefined});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.error||"Request failed");
+  return j;
+}
+function hideShare(){const el=$("#hpShare");if(el)el.hidden=true}
+async function offerShare(leadId,t){
+  try{showShare(await deskApi("/api/quote/share",{leadId,t}))}catch(e){toast(e.message)}
+}
+function showShare(r){
+  let el=$("#hpShare");
+  if(!el){el=document.createElement("div");el.id="hpShare";el.className="hp-share";el.setAttribute("role","dialog");el.setAttribute("aria-label","Share quote");document.body.append(el)}
+  el.hidden=false;
+  const smsHint=r.canSms?"A text uses 1 SMS from your local number (carrier rates). Nothing sends until you tap Text.":r.hasPhone?"Texting needs the dialer on this plan. Copy the link instead.":"Add a phone number to text the link. Copying it is free.";
+  el.innerHTML=`<h3>Quote link ready</h3>
+    <p>Copy is always free. Email and text only go out if you send them.</p>
+    <input id="hpShareUrl" readonly value="${esc(r.url)}">
+    <div class="row">
+      <button class="btn sm primary" type="button" id="hpShareCopy">Copy link</button>
+      ${r.canEmail?`<button class="btn sm" type="button" id="hpShareEmail">Email</button>`:r.emailOn?`<button class="btn sm" type="button" disabled title="Add an email on this client">Email</button>`:""}
+      ${r.canSms?`<button class="btn sm" type="button" id="hpShareSms">Text (1 SMS)</button>`:`<button class="btn sm" type="button" disabled title="${esc(smsHint)}">Text</button>`}
+      <button class="btn sm" type="button" id="hpShareX">Done</button>
+    </div>
+    <p class="warn" id="hpShareNote">${esc(smsHint)}</p>`;
+  $("#hpShareUrl").onclick=()=>{$("#hpShareUrl").select()};
+  $("#hpShareCopy").onclick=()=>copyText(r.url);
+  $("#hpShareX").onclick=hideShare;
+  if($("#hpShareEmail"))$("#hpShareEmail").onclick=async()=>{try{await deskApi("/api/quote/send",{token:r.token,via:"email"});toast("Quote emailed");hideShare()}catch(e){toast(e.message)}};
+  if($("#hpShareSms"))$("#hpShareSms").onclick=async()=>{const b=$("#hpShareSms");if(!b.dataset.armed){b.dataset.armed="1";b.textContent="Tap again to send 1 text";$("#hpShareNote").textContent="This uses your Twilio/Telnyx rate. Copy the link if you don't want to pay for a text.";return}try{b.disabled=true;await deskApi("/api/quote/send",{token:r.token,via:"sms"});toast("Quote texted (1 SMS)");hideShare()}catch(e){b.disabled=false;toast(e.message)}};
+}
+const PAY_APP=[["checking","Checking draft"],["savings","Savings draft"],["ssc","Direct Express / SSC"],["other","Other"]];
+function appVals(l){
+  const q=(l.quotes||[]).slice(-1)[0]||{},a=l.app||{};
+  return{carrier:a.carrier||q.carrier||"",plan:a.plan||(PROD[q.product]||q.product||""),face:a.face||"",monthly:a.monthly??(q.monthly!=null?q.monthly:""),draftDay:a.draftDay||"1",payType:a.payType||"checking",bankName:a.bankName||"",routing:a.routing||"",account:a.account||"",ownerName:a.ownerName||fullName(l),beneName:a.beneName||"",beneRel:a.beneRel||"",doctors:a.doctors||"",meds:a.meds||"",height:a.height||"",weight:a.weight||"",notes:a.notes||""};
+}
+function collectApp(){
+  const v=k=>($("#a_"+k)?.value||"").trim();
+  return{carrier:v("carrier"),plan:v("plan"),face:v("face"),monthly:v("monthly"),draftDay:v("draftDay"),payType:v("payType")||"checking",bankName:v("bankName"),routing:v("routing"),account:v("account"),ownerName:v("ownerName"),beneName:v("beneName"),beneRel:v("beneRel"),doctors:v("doctors"),meds:v("meds"),height:v("height"),weight:v("weight"),notes:v("notes")};
+}
+function appPacket(l,a){
+  const q=(l.quotes||[]).slice(-1)[0];
+  const pay=(PAY_APP.find(x=>x[0]===a.payType)||[])[1]||a.payType;
+  return [`APPLICATION PACKET — ${fullName(l)}`,`Phone: ${fmtPhone(l.phone)}   Email: ${l.email||""}`,`DOB: ${l.dob||""}   Age: ${l.age||""}   State: ${l.state||""}   ZIP: ${l.zip||""}`,"",`Carrier: ${a.carrier}`,`Plan / product: ${a.plan}`,`Face amount: ${a.face}`,`Monthly premium: ${a.monthly}`,`Draft date: ${a.draftDay}`,`Payment: ${pay}`,`Bank: ${a.bankName}`,`Routing: ${a.routing}`,`Account: ${a.account}`,"",`Policy owner: ${a.ownerName}`,`Beneficiary: ${a.beneName} (${a.beneRel})`,`Doctors: ${a.doctors}`,`Medications: ${a.meds}`,`Height / weight: ${a.height} / ${a.weight}`,"",a.notes,q?`Last quote: ${q.carrier||""} · ${q.summary||""} · ${money(q.monthly,2)}/mo`:""].filter(x=>x!==undefined).join("\n");
+}
+function appSheetHtml(l){
+  const a=appVals(l),inp=(k,lab,extra="")=>`<label class="field"><span>${lab}</span><input id="a_${k}" value="${esc(a[k]??"")}" ${extra}></label>`;
+  return `<details class="appsheet" ${l.app?"open":""}><summary>Take the app</summary>
+    <div class="appbody">
+      <p class="hint">Fill this while you're on the carrier e-app. Copy it in one tap. Bank details stay on this client's file — they are never put on the quote link or sent unless you paste them yourself.</p>
+      <div class="grid2">${inp("carrier","Carrier")}${inp("plan","Plan / product")}</div>
+      <div class="grid3">${inp("face","Face amount")}${inp("monthly","Monthly premium")}<label class="field"><span>Draft day</span><input id="a_draftDay" type="number" min="1" max="28" value="${esc(a.draftDay)}"></label></div>
+      <div class="grid2"><label class="field"><span>Payment</span><select id="a_payType">${PAY_APP.map(([k,n])=>`<option value="${k}" ${a.payType===k?"selected":""}>${n}</option>`).join("")}</select></label>${inp("bankName","Bank")}</div>
+      <div class="grid2">${inp("routing","Routing")}${inp("account","Account")}</div>
+      <div class="grid2">${inp("ownerName","Policy owner")}${inp("beneName","Beneficiary")}</div>
+      <div class="grid2">${inp("beneRel","Relationship")}${inp("height","Height")}</div>
+      <div class="grid2">${inp("weight","Weight")}${inp("doctors","Doctor")}</div>
+      <label class="field"><span>Medications</span><input id="a_meds" value="${esc(a.meds)}"></label>
+      <label class="field"><span>Notes for the e-app</span><textarea id="a_notes">${esc(a.notes)}</textarea></label>
+      ${!["sold","lost","application"].includes(l.stage||"")?`<label class="consent" style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="a_move" checked> Move this client to Application</label>`:""}
+      <div class="row"><button class="btn sm primary" type="button" id="aSave">Save close sheet</button><button class="btn sm" type="button" id="aCopy">Copy for carrier e-app</button></div>
+    </div></details>`;
+}
 
 /* ---------- Quote & compare ---------- */
 const Q=ls.get("hp.q",{tab:"FE",age:65,sex:"M",tob:"0",state:"CA",cls:"1",FE:{amt:15000,plan:"level"},TERM:{amt:250000,term:20},IUL:{amt:250000,focus:"protection"},sort:null});
@@ -964,23 +1091,23 @@ function stagger(sec){if(!sec)return;[...sec.children].forEach((c,i)=>{c.style.s
 (function sky(){if(RM)return;const cv=$("#sky"),x=cv.getContext("2d");let W,H,D=1,last=0,dirty=null;
   const size=()=>{D=Math.min(1.5,devicePixelRatio||1);W=cv.width=Math.round(innerWidth*D);H=cv.height=Math.round(innerHeight*D);cv.style.width=innerWidth+"px";cv.style.height=innerHeight+"px";dirty=null};
   size();addEventListener("resize",size);
-  const spawn=()=>({x:-60*D,y:H*(.3+Math.random()*.4),a:-(.18+Math.random()*.16),v:(2.2+Math.random()*1.2)*D,trail:[]});
-  let jets=[{x:W*.05,y:H*.6,a:-.24,v:2.6*D,trail:[]}];
+  const spawn=()=>{const close=Math.random()<.34;return{x:-80*D,y:H*(.22+Math.random()*.42),a:-(.16+Math.random()*.18),v:(close?3.8:2.2+Math.random()*1.2)*D,trail:[],s:close?1.9:1}};
+  let jets=[{x:W*.05,y:H*.6,a:-.24,v:2.6*D,trail:[],s:1}];
   const asleep=()=>document.hidden||document.documentElement.classList.contains("gated");
   const frame=(now)=>{
     if(asleep()){setTimeout(()=>requestAnimationFrame(frame),600);return}
     const el=now-last;if(el<30){requestAnimationFrame(frame);return}
     const k=Math.min(3,el/16.67)||1;last=now;
     if(dirty){x.clearRect(dirty[0],dirty[1],dirty[2]-dirty[0],dirty[3]-dirty[1]);dirty=null}
-    if(!jets.length){if(Math.random()<.004*k)jets.push(spawn());else{setTimeout(()=>requestAnimationFrame(frame),250);return}}
-    else if(Math.random()<.004*k&&jets.length<2)jets.push(spawn());
+    if(!jets.length){if(Math.random()<.006*k)jets.push(spawn());else{setTimeout(()=>requestAnimationFrame(frame),250);return}}
+    else if(Math.random()<.006*k&&jets.length<3)jets.push(spawn());
     const keep=Math.round(220/k);let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
-    for(const j of jets){j.x+=Math.cos(j.a)*j.v*k;j.y+=Math.sin(j.a)*j.v*k;j.a-=.0004*k;j.trail.push([j.x,j.y]);while(j.trail.length>keep)j.trail.shift();
-      for(let i=1;i<j.trail.length;i++){x.globalAlpha=(i/j.trail.length)*.35;x.strokeStyle="rgba(255,255,255,.8)";x.lineWidth=(1+i/j.trail.length*1.6)*D;x.beginPath();x.moveTo(j.trail[i-1][0],j.trail[i-1][1]+2*D);x.lineTo(j.trail[i][0],j.trail[i][1]+2*D);x.stroke()}
-      x.save();x.globalAlpha=.95;x.translate(j.x,j.y);x.rotate(j.a);if(JET_IMG.complete)x.drawImage(JET_IMG,-30*D,-11*D,60*D,22*D);x.restore();
+    for(const j of jets){const sc=j.s||1;j.x+=Math.cos(j.a)*j.v*k;j.y+=Math.sin(j.a)*j.v*k;j.a-=.0004*k;j.trail.push([j.x,j.y]);while(j.trail.length>keep)j.trail.shift();
+      for(let i=1;i<j.trail.length;i++){x.globalAlpha=(i/j.trail.length)*(.32+sc*.12);x.strokeStyle="rgba(255,255,255,.85)";x.lineWidth=(1+i/j.trail.length*1.6)*D*Math.min(1.5,sc);x.beginPath();x.moveTo(j.trail[i-1][0],j.trail[i-1][1]+2*D);x.lineTo(j.trail[i][0],j.trail[i][1]+2*D);x.stroke()}
+      x.save();x.globalAlpha=.96;x.translate(j.x,j.y);x.rotate(j.a);if(JET_IMG.complete)x.drawImage(JET_IMG,-30*D*sc,-11*D*sc,60*D*sc,22*D*sc);x.restore();
       for(const p of j.trail){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}}
-    x.globalAlpha=1;const m=48*D;dirty=[Math.max(0,x0-m),Math.max(0,y0-m),Math.min(W,x1+m),Math.min(H,y1+m)];
-    jets=jets.filter(j=>j.x<W+80*D&&j.y>-80*D);
+    x.globalAlpha=1;const m=90*D;dirty=[Math.max(0,x0-m),Math.max(0,y0-m),Math.min(W,x1+m),Math.min(H,y1+m)];
+    jets=jets.filter(j=>j.x<W+120*D&&j.y>-100*D);
     requestAnimationFrame(frame)};
   requestAnimationFrame(frame)})();
 function celebrate(label){if(RM)return;const cv=$("#burst"),x=cv.getContext("2d");const d=devicePixelRatio;cv.width=innerWidth*d;cv.height=innerHeight*d;cv.style.width=innerWidth+"px";cv.style.height=innerHeight+"px";
@@ -1052,7 +1179,7 @@ function awardXP(n,why){const before=rankOf(XP.xp);XP.xp+=n;ls.set("hp.xp",XP);i
 
 /* ---------- calendar ---------- */
 const appts=new Map(); let acol=null; const CAL={y:new Date().getFullYear(),m:new Date().getMonth(),sel:new Date().toDateString()};
-async function initAppts(){if(!db)return;acol=db.collection("appts");acol.onSnapshot(s=>{appts.clear();s.docs.forEach(d=>{const v=d.data();if(v)appts.set(d.id,{...v,id:d.id})});if(view==="calendar")renderCalendar()},()=>{})}
+async function initAppts(){if(!db)return;acol=db.collection("appts");acol.onSnapshot(s=>{appts.clear();s.docs.forEach(d=>{const v=d.data();if(v)appts.set(d.id,{...v,id:d.id})});if(view==="calendar")renderCalendar();else if(view==="pipeline")renderToday()},()=>{})}
 async function putAppt(a){const id=a.id||uid();const b={...a};delete b.id;if(acol)await acol.doc(id).set(b);else{appts.set(id,{...b,id});renderCalendar()}return id}
 async function delAppt(id){if(acol)await acol.doc(id).delete();else{appts.delete(id);renderCalendar()}}
 const sameDay=(t,ds)=>new Date(t).toDateString()===ds;

@@ -180,6 +180,7 @@ curl -X POST '${url}' \\
   // a toast when a posted lead arrives (the CRM syncs on its own)
   let since = Date.now(), timer = 0;
   function watch() {
+    if (document.hidden) return;
     const L = window.hpDesk?.leads; if (!L) return;
     const fresh = [...L.values()].filter((l) => l.posted?.at > since && !l.posted.test).sort((a, b) => a.posted.at - b.posted.at);
     if (!fresh.length) return;

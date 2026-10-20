@@ -1,4 +1,5 @@
 // Automatic text follow-ups, and the small job runner behind them.
+// Off until the agent turns them on: each text is billed by Twilio/Telnyx.
 //  - No answer / voicemail: a text a few minutes later, and another the next morning (at most once a day per client).
 //  - Appointments: a reminder the day before and an hour before.
 // Texts only go out inside the client's calling hours, never to Do Not Call (or flagged) numbers, and they're

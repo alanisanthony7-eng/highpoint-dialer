@@ -33,6 +33,7 @@
     };
 
     document.addEventListener("pointermove", (e) => {
+      if (document.documentElement.classList.contains("gated")) return;
       const t = e.target;
       let el = t && t.closest ? t.closest(SEL) : null;
       if (el === document.body || el === document.documentElement) el = null;

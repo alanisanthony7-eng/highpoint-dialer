@@ -22,6 +22,30 @@ Twilio carries the calls.
 | `src/lib/spotify.mjs` | Spotify per agent: each login connects its own Spotify account |
 | `test/cf-sim.mjs`, `test/billing.mjs` | End-to-end checks run locally (`npm test`) |
 
+## Local development
+
+Use Node 22 or newer (`node:sqlite` is required), then:
+
+```powershell
+npm install
+npx playwright install chromium
+npm run local
+```
+
+The desk prints its local URL. It starts at port 8788 and automatically tries the next free port; set `PORT` to require a specific one. Local data is stored in `.local/highpoint.sqlite` and survives restarts. To start an empty database with the development login `boss@hp.com` / `password2`, run `npm run local:demo`. The seed is local-only and never runs in Cloudflare.
+
+Spotify and Stripe stay in the desk (Music in the top bar, Billing under Account). They only connect when the matching keys are in the environment you start `npm run local` from: `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, and `STRIPE_SECRET_KEY`. Without those keys, Music and Billing still open, but they show as not set up. On Cloudflare, add the same names as Pages secrets and redeploy. `/api/health` reports `spotify` and `stripe` as true once they are present.
+
+Delete `.local/highpoint.sqlite` (and its `-wal`/`-shm` companions) to reset local data. Run `npm test` for the fast API suite, `npm run test:smoke` for the real Chromium sign-in/navigation checks, or `npm run test:all` for both. Browser smoke tests use a disposable database and never touch your local account.
+
+### Appearance
+
+Use **Account → Appearance** to switch instantly between Midnight (default), Modern Light, Miami and Halloween. Executive is the owner look and only appears for admins. The choice is saved in the browser and restored before the desk renders. For previews and screenshot automation, append `?theme=midnight`, `?theme=modern-light`, `?theme=miami`, `?theme=halloween` or `?theme=executive` to the local URL.
+
+Run `npm run test:themes` to verify every theme at desktop and mobile sizes and write screenshots to `test/artifacts/`.
+
+Locally, put Cloudflare-style keys in `.dev.vars` (same names as Pages secrets). `npm run local` loads that file automatically. On the machine where Wrangler is signed in, `npx wrangler pages secret list --project-name highpoint-dialer` lists the live secret names.
+
 ## One-time setup (about 10 minutes, free)
 
 1. **Create a Cloudflare account** at dash.cloudflare.com/sign-up. The free plan is enough.
@@ -141,6 +165,19 @@ Setup, once:
 - D1: 5 million reads and 100,000 writes a day, and 5 GB of storage.
 
 A small agency stays well inside these.
+
+## Production checks, logs and backups
+
+- Open `/api/health` after each deploy. `ok: true` and `db: "ok"` mean D1 answered a query. The other booleans only report whether optional service settings are present; they never expose secrets.
+- Read server errors in Cloudflare **Workers & Pages → highpoint-dialer → Logs**. API failures include the method, route and status without request bodies or credentials.
+- Before schema or billing changes, export D1:
+
+```powershell
+npx wrangler d1 export highpoint --remote --output backup-YYYY-MM-DD.sql
+```
+
+- Keep exports encrypted and access-controlled because they contain client and account data. Cloudflare secrets are not stored in D1; keep a separate inventory of required secret names.
+- To restore after a database loss, create a new D1 database, import the reviewed SQL export with Wrangler, update `database_id` in `wrangler.toml`, and redeploy. Test that process against a non-production database first.
 
 ## Moving leads over
 Leads saved in the old Netlify site can't be read while that account is paused. Re-import your CSVs in **Import leads**. Every column in a CSV is kept on the lead's profile.

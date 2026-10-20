@@ -3,8 +3,18 @@
   "private": true,
   "type": "module",
   "description": "Highpoint Desk + Highpoint Dialer on Cloudflare Pages (Functions + D1) with Twilio",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "test": "node test/cf-sim.mjs && node test/billing.mjs && node test/auth.mjs && node test/scrub.mjs && node test/followups.mjs && node test/leadpost.mjs && node test/booking.mjs",
-    "local": "node test/serve.mjs"
+    "test": "node test/cf-sim.mjs && node test/billing.mjs && node test/auth.mjs && node test/scrub.mjs && node test/followups.mjs && node test/leadpost.mjs && node test/booking.mjs && node test/quoteshare.mjs",
+    "test:smoke": "node test/smoke-browser.mjs",
+    "test:themes": "node test/smoke-browser.mjs --shots",
+    "test:all": "npm test && npm run test:smoke",
+    "local": "node test/serve.mjs",
+    "local:demo": "node test/serve.mjs --seed"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1"
   }
 }

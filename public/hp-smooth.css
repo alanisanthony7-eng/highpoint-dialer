@@ -10,28 +10,26 @@
 /* ---------- 0. glass tokens ---------- */
 html.hp-pro{
   /* frosted body: a lavender-white tint over deep plum, so panels read as glass, not dark boxes */
-  --gl-base:linear-gradient(180deg,rgba(60,34,86,.42),rgba(22,12,38,.70));
-  --gl-base-2:linear-gradient(180deg,rgba(48,26,72,.50),rgba(16,9,28,.78));
-  /* a diagonal light streak across the top-left, like light through a pane */
-  --gl-sheen:linear-gradient(115deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,.07) 22%,rgba(255,255,255,0) 46%,rgba(255,255,255,0) 72%,rgba(255,255,255,.05) 100%);
-  --gl-edge:linear-gradient(180deg,rgba(255,255,255,.34) 0,rgba(255,255,255,0) 2px);
-  /* iridescent 1px edge: pink → white → sky, drawn once by a masked ::before ring */
-  --gl-ring:linear-gradient(135deg,rgba(255,79,163,.75) 0%,rgba(255,255,255,.55) 28%,rgba(255,255,255,.18) 50%,rgba(61,184,255,.45) 78%,rgba(255,158,61,.55) 100%);
-  --gl-ring-dim:linear-gradient(135deg,rgba(255,255,255,.34),rgba(255,255,255,.10) 45%,rgba(255,255,255,.06) 60%,rgba(255,255,255,.26));
-  --gl-line:rgba(255,255,255,.14);
-  --gl-line-hot:rgba(255,79,163,.55);
-  --gl-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.30),inset 0 0 0 1px rgba(255,255,255,.03),0 30px 60px -30px rgba(0,0,0,.95),0 18px 44px -30px rgba(255,46,136,.40);
-  --gl-glow:0 30px 56px -26px rgba(255,46,136,.5),0 0 0 1px rgba(255,79,163,.28);
-  --gl-r:24px;
+  --gl-base:linear-gradient(180deg,rgba(92,54,132,.46),rgba(30,16,52,.72));
+  --gl-base-2:linear-gradient(180deg,rgba(74,40,112,.54),rgba(20,11,36,.80));
+  /* a diagonal light streak across the top-left, like light through a pane, plus a specular spot in the corner */
+  --gl-sheen:radial-gradient(60% 50% at 8% 0%,rgba(255,255,255,.22),transparent 70%),
+    linear-gradient(115deg,rgba(255,255,255,.20) 0%,rgba(255,255,255,.09) 22%,rgba(255,255,255,0) 46%,rgba(255,255,255,0) 70%,rgba(255,255,255,.07) 100%);
+  --gl-edge:linear-gradient(180deg,rgba(255,255,255,.45) 0,rgba(255,255,255,0) 2px);
+  /* iridescent 1px edge: pink → white → sky → gold, drawn once by a masked ::before ring */
+  --gl-ring:linear-gradient(135deg,rgba(255,79,163,.95) 0%,rgba(255,255,255,.80) 26%,rgba(255,255,255,.28) 48%,rgba(61,184,255,.70) 76%,rgba(255,158,61,.85) 100%);
+  --gl-ring-dim:linear-gradient(135deg,rgba(255,120,190,.55),rgba(255,255,255,.42) 30%,rgba(255,255,255,.12) 52%,rgba(120,200,255,.35) 78%,rgba(255,255,255,.40));
+  --gl-line:rgba(255,255,255,.18);
+  --gl-line-hot:rgba(255,79,163,.7);
+  --gl-shadow:inset 0 1px 0 rgba(255,255,255,.26),inset 0 -1px 0 rgba(0,0,0,.32),inset 0 0 0 1px rgba(255,255,255,.04),inset 0 0 60px -30px rgba(255,255,255,.10),0 34px 70px -30px rgba(0,0,0,.95),0 22px 56px -28px rgba(255,46,136,.55);
+  --gl-glow:0 30px 60px -24px rgba(255,46,136,.65),0 0 0 1px rgba(255,79,163,.40);
+  --gl-r:26px;
   --gl-ease:cubic-bezier(.2,.8,.2,1);
 }
 
-/* ---------- 1. the backdrop is a still ---------- */
-/* The sunset SVG is full-screen; animating its children repaints the whole screen every frame. */
-html.hp-pro .vsvg *{animation:none!important}
+/* ---------- 1. living backdrop, cheap motion only ---------- */
 html.hp-pro .vscene{contain:layout paint}
-/* light rays and sparks stay, but they no longer drift (a full-screen moving layer under blurred chrome) */
-html.hp-pro .vscene::after{animation:none!important;opacity:.8}
+html.hp-pro .vscene::after{opacity:.9}
 /* the old scanline/grid pseudo-element animated background-position (a repaint per frame) */
 html.hp-pro body::after{display:none!important;animation:none!important}
 
@@ -40,7 +38,7 @@ html.hp-pro body::after{display:none!important;animation:none!important}
   transform:perspective(520px) rotateX(64deg);transform-origin:50% 100%;opacity:.85;
   -webkit-mask-image:linear-gradient(0deg,#000 8%,transparent 88%);mask-image:linear-gradient(0deg,#000 8%,transparent 88%)}
 .hp-floor>i{position:absolute;left:0;right:0;top:-72px;height:calc(100% + 144px);display:block;will-change:transform;
-  background:linear-gradient(90deg,rgba(255,79,163,.6) 1px,transparent 1px) 0 0/72px 72px,linear-gradient(0deg,rgba(255,158,61,.55) 1px,transparent 1px) 0 0/72px 72px;
+  background:linear-gradient(90deg,rgba(255,79,163,.8) 1px,transparent 1px) 0 0/72px 72px,linear-gradient(0deg,rgba(255,158,61,.7) 1px,transparent 1px) 0 0/72px 72px;
   animation:hpFloor 8s linear infinite}
 @keyframes hpFloor{from{transform:translateY(0)}to{transform:translateY(72px)}}
 html.gated .hp-floor,html:not(.hp-pro) .hp-floor{display:none}
@@ -80,24 +78,28 @@ html.hp-pro :is(.hero,.panel,.col,.tablewrap,.chat,.queue)::before{background:va
 html.hp-pro :is(.kpis>div,.tiles>*,.hstats>div,.hpd-kpis>div,.rank-card){border-radius:18px!important}
 html.hp-pro .col{border-top:0!important}
 html.hp-pro .col::before{background:linear-gradient(135deg,rgba(255,79,163,.85) 0%,rgba(255,255,255,.5) 30%,rgba(255,255,255,.12) 55%,rgba(255,158,61,.5) 100%)}
-html.hp-pro .hero{border-radius:28px!important;
+html.hp-pro .hero{border-radius:30px!important;
   background:var(--gl-edge),
-    radial-gradient(70% 90% at 100% 0%,rgba(255,46,136,.30),transparent 60%),
-    radial-gradient(60% 70% at 0% 100%,rgba(61,184,255,.16),transparent 60%),
-    linear-gradient(115deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.05) 26%,rgba(255,255,255,0) 50%),
+    radial-gradient(60% 100% at 100% 0%,rgba(255,46,136,.48),transparent 62%),
+    radial-gradient(50% 80% at 0% 100%,rgba(61,184,255,.28),transparent 62%),
+    radial-gradient(40% 60% at 60% 110%,rgba(255,158,61,.22),transparent 65%),
+    radial-gradient(60% 50% at 8% 0%,rgba(255,255,255,.24),transparent 70%),
+    linear-gradient(115deg,rgba(255,255,255,.18) 0%,rgba(255,255,255,.06) 26%,rgba(255,255,255,0) 50%),
     var(--gl-base-2)!important;
-  box-shadow:var(--gl-shadow),0 0 0 6px rgba(255,255,255,.025),0 40px 90px -40px rgba(255,46,136,.55)!important}
+  box-shadow:var(--gl-shadow),0 0 0 7px rgba(255,255,255,.035),0 0 0 8px rgba(255,79,163,.10),0 50px 110px -40px rgba(255,46,136,.75)!important}
 html.hp-pro .hero::before{inset:-1px!important;height:auto!important;background:var(--gl-ring)!important;box-shadow:none!important}
+html.hp-pro .hero h1{text-shadow:0 0 18px rgba(255,79,163,.9),0 0 48px rgba(255,46,136,.55),0 2px 0 rgba(0,0,0,.4)!important}
 
 /* the side rail: deep glass with a soft pink light leaking from the content side */
-html.hp-pro .rail{background:linear-gradient(180deg,rgba(22,12,38,.96),rgba(8,5,14,.98))!important;border-right:1px solid rgba(255,255,255,.08)!important;
-  box-shadow:inset -1px 0 0 rgba(255,255,255,.04),12px 0 50px -30px rgba(255,46,136,.45)!important}
+html.hp-pro .rail{background:radial-gradient(80% 30% at 50% 0%,rgba(255,79,163,.16),transparent 70%),linear-gradient(180deg,rgba(34,18,58,.97),rgba(9,5,16,.99))!important;border-right:1px solid rgba(255,255,255,.10)!important;
+  box-shadow:inset -1px 0 0 rgba(255,255,255,.05),14px 0 60px -30px rgba(255,46,136,.6)!important}
 html.hp-pro .rail .nav{border-radius:14px!important;border:1px solid transparent!important;transition:background-color .18s,border-color .18s,transform .18s var(--gl-ease)!important}
-html.hp-pro .rail .nav:hover{background:rgba(255,255,255,.055)!important;border-color:rgba(255,255,255,.08)!important}
+html.hp-pro .rail .nav:hover{background:rgba(255,255,255,.07)!important;border-color:rgba(255,255,255,.12)!important;transform:translateX(2px)}
 html.hp-pro .rail .nav[aria-current=page]{
-  background:linear-gradient(90deg,rgba(255,79,163,.22),rgba(255,255,255,.05) 55%,rgba(255,255,255,.03))!important;
-  border-color:rgba(255,255,255,.14)!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 3px 0 0 #FF4FA3,0 12px 28px -18px rgba(255,46,136,.7)!important}
+  background:linear-gradient(90deg,rgba(255,79,163,.34),rgba(255,255,255,.08) 55%,rgba(255,255,255,.04))!important;
+  border-color:rgba(255,255,255,.22)!important;color:#fff!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 3px 0 0 #FF4FA3,0 0 24px -6px rgba(255,79,163,.55),0 14px 32px -18px rgba(255,46,136,.9)!important}
+html.hp-pro .rail .nav[aria-current=page] svg{filter:drop-shadow(0 0 6px rgba(255,79,163,.9))}
 
 /* segmented controls, toasts, inputs */
 html.hp-pro :is(.bigseg,.seg2,.seg){background:linear-gradient(180deg,rgba(0,0,0,.30),rgba(0,0,0,.18))!important;border:1px solid rgba(255,255,255,.12)!important;box-shadow:inset 0 2px 6px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)!important}
@@ -109,18 +111,31 @@ html.hp-pro :is(input,select,textarea).field:focus,html.hp-pro .field :is(input,
 
 /* big numbers: pink → gold → white, lit from above */
 html.hp-pro :is(.kpis>div .num,.hstats>div b,.hpd-kpis>div b){
-  background:linear-gradient(180deg,#fff 0%,#ffd9ec 45%,#FF4FA3 100%);-webkit-background-clip:text;background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent;
-  text-shadow:none!important;filter:drop-shadow(0 0 14px rgba(255,79,163,.45))}
+  background:linear-gradient(180deg,#fff 0%,#fff 35%,#ffc6e2 100%);-webkit-background-clip:text;background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent;
+  text-shadow:none!important;filter:drop-shadow(0 4px 14px rgba(255,79,163,.55))}
 html.hp-pro .kpis>div .label{letter-spacing:.14em;color:rgba(255,255,255,.62)!important}
 
 /* glass pill buttons: lit top edge, deeper base, no filter() on hover */
 html.hp-pro .btn:not(.primary):not([data-new]):not(.hph-go){
-  background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,.05))!important;border:1px solid rgba(255,255,255,.16)!important;color:#F4F1FA!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(0,0,0,.25),0 8px 20px -14px rgba(0,0,0,.9)!important}
-html.hp-pro .btn:not(.primary):not([data-new]):not(.hph-go):hover{background:linear-gradient(180deg,rgba(255,255,255,.20),rgba(255,255,255,.08))!important;border-color:rgba(255,255,255,.28)!important;transform:translateY(-1px)}
-html.hp-pro .topbar .btn:not(.primary):not([data-new]){background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.045))!important;border-color:rgba(255,255,255,.15)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)!important}
-html.hp-pro .topbar .btn:not(.primary):not([data-new]):hover{background:linear-gradient(180deg,rgba(255,255,255,.19),rgba(255,255,255,.08))!important}
-html.hp-pro .topbar{background:linear-gradient(180deg,rgba(26,14,44,.78),rgba(10,6,18,.72))!important}
+  background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.06))!important;border:1px solid rgba(255,255,255,.22)!important;color:#FBF8FF!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.32),inset 0 -1px 0 rgba(0,0,0,.28),0 10px 24px -14px rgba(0,0,0,.95)!important}
+html.hp-pro .btn:not(.primary):not([data-new]):not(.hph-go):hover{background:linear-gradient(180deg,rgba(255,255,255,.27),rgba(255,255,255,.10))!important;border-color:rgba(255,255,255,.40)!important;transform:translateY(-1px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.38),inset 0 -1px 0 rgba(0,0,0,.28),0 12px 26px -14px rgba(0,0,0,.95),0 0 18px -4px rgba(255,255,255,.18)!important}
+html.hp-pro .topbar .btn:not(.primary):not([data-new]){background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.055))!important;border-color:rgba(255,255,255,.20)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.26)!important}
+html.hp-pro .topbar .btn:not(.primary):not([data-new]):hover{background:linear-gradient(180deg,rgba(255,255,255,.25),rgba(255,255,255,.10))!important;border-color:rgba(255,255,255,.36)!important}
+/* primary buttons: a hot neon ring and under-glow (static, no filter on hover) */
+html.hp-pro .btn.primary,html.hp-pro .topbar [data-new],html.hp-pro .hph-go{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 -1px 0 rgba(0,0,0,.25),0 0 0 1px rgba(255,255,255,.18),0 0 26px -4px rgba(255,61,127,.75),0 16px 34px -14px rgba(255,61,127,.95)!important}
+html.hp-pro .btn.primary:hover,html.hp-pro .topbar [data-new]:hover,html.hp-pro .hph-go:hover{filter:none!important;transform:translateY(-1px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.25),0 0 0 1px rgba(255,255,255,.28),0 0 34px -2px rgba(255,61,127,.9),0 20px 40px -14px rgba(255,61,127,1)!important}
+html.hp-pro .topbar{background:linear-gradient(180deg,rgba(44,22,74,.80),rgba(12,7,22,.74))!important;border-bottom:1px solid rgba(255,255,255,.14)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 1px 0 rgba(255,79,163,.18),0 14px 36px -24px rgba(0,0,0,.95)!important}
+
+/* glass scrollbars */
+html.hp-pro ::-webkit-scrollbar{width:10px;height:10px}
+html.hp-pro ::-webkit-scrollbar-track{background:transparent}
+html.hp-pro ::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.10));border:2px solid transparent;background-clip:padding-box;border-radius:999px}
+html.hp-pro ::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,rgba(255,120,190,.55),rgba(255,255,255,.18));background-clip:padding-box}
 
 /* table headers and rows read through the glass */
 html.hp-pro .tablewrap thead th{background:rgba(255,255,255,.04)!important;border-bottom:1px solid rgba(255,255,255,.10)!important;letter-spacing:.14em}
@@ -131,23 +146,25 @@ html.hp-pro .tablewrap tbody tr:hover{background:rgba(255,79,163,.07)!important}
 html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col){position:relative;isolation:isolate}
 html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col)::after{content:"";position:absolute;inset:0;width:auto;height:auto;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;
   transition:opacity .3s var(--gl-ease);will-change:opacity;
-  background:radial-gradient(440px circle at var(--mx,50%) var(--my,0%),rgba(255,79,163,.24),rgba(255,158,61,.07) 42%,transparent 66%)}
+  background:radial-gradient(480px circle at var(--mx,50%) var(--my,0%),rgba(255,79,163,.38),rgba(255,158,61,.12) 40%,transparent 66%)}
 html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col).hp3-hot::after{opacity:1}
 html.hp-pro .hp3-hot{background:var(--gl-edge),var(--gl-sheen),var(--gl-base)!important;box-shadow:var(--gl-shadow)!important;border-color:transparent!important}
 html.hp-pro :is(.kpis>div,.tiles>*,.rank-card,.hph-card).hp3-hot::before{background:var(--gl-ring)}
 html.hp-pro .hero.hp3-hot{background:var(--gl-edge),
-    radial-gradient(70% 90% at 100% 0%,rgba(255,46,136,.30),transparent 60%),
-    radial-gradient(60% 70% at 0% 100%,rgba(61,184,255,.16),transparent 60%),
-    linear-gradient(115deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.05) 26%,rgba(255,255,255,0) 50%),
+    radial-gradient(60% 100% at 100% 0%,rgba(255,46,136,.48),transparent 62%),
+    radial-gradient(50% 80% at 0% 100%,rgba(61,184,255,.28),transparent 62%),
+    radial-gradient(40% 60% at 60% 110%,rgba(255,158,61,.22),transparent 65%),
+    radial-gradient(60% 50% at 8% 0%,rgba(255,255,255,.24),transparent 70%),
+    linear-gradient(115deg,rgba(255,255,255,.18) 0%,rgba(255,255,255,.06) 26%,rgba(255,255,255,0) 50%),
     var(--gl-base-2)!important;
-  box-shadow:var(--gl-shadow),0 0 0 6px rgba(255,255,255,.025),0 40px 90px -40px rgba(255,46,136,.55)!important}
+  box-shadow:var(--gl-shadow),0 0 0 7px rgba(255,255,255,.035),0 0 0 8px rgba(255,79,163,.10),0 50px 110px -40px rgba(255,46,136,.75)!important}
 html.hp-pro :is(.kpis>div,.tiles>*,.rank-card){will-change:transform}
 html.hp-pro .kpis>div:hover{box-shadow:var(--gl-shadow)!important}
 
 /* pipeline cards: lift with transform, glow with an opacity-faded ring */
 html.hp-pro .card{position:relative;isolation:isolate;
-  background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.04))!important;border:1px solid rgba(255,255,255,.14)!important;border-radius:16px!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 12px 26px -16px rgba(0,0,0,.9)!important;
+  background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.05))!important;border:1px solid rgba(255,255,255,.20)!important;border-radius:16px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.26),0 12px 26px -16px rgba(0,0,0,.9)!important;
   transition:transform .22s var(--gl-ease),border-color .2s!important}
 html.hp-pro .card::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .25s var(--gl-ease);box-shadow:var(--gl-glow)}
 html.hp-pro .card:hover{transform:translateY(-2px);border-color:var(--gl-line-hot)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 10px 22px -16px rgba(0,0,0,.9)!important}

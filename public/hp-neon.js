@@ -15,7 +15,7 @@
   <text class="t" x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" stroke-width=".95">H</text>
   <text class="t" x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" stroke-width=".95">P</text>
   <path class="t" d="M4 80 C40 74 78 56 112 22" stroke-width="1.15"/>
-  <path class="t" d="M104 22 L128 12 L118 30 L113 24 Z" stroke-width=".95"/>
+  <g class="t" transform="translate(111.2 14.8) rotate(-38)" fill="none" stroke-width=".95"><path d="M-2 4.2 H13.6 L18.5 4.2"/><path d="M6.2 4.7 L9.7 -.4 L11.8 4.7 L9.7 9.8Z"/><path d="M-2.3 4.7 L2.2 1.8 V7.6Z"/></g>
 </g>
 <g id="nnWord" style="--core:#E8F6FF;--glow:#3DB8FF">
   <text class="t" x="500" y="392" text-anchor="middle" font-family="Montserrat, Arial Black, sans-serif" font-weight="900" font-style="italic" font-size="78" letter-spacing="9" stroke-width="2.3">HIGHPOINT</text>
@@ -25,7 +25,7 @@
   <text class="f" x="500" y="433" text-anchor="middle" font-family="Libre Caslon Text, Georgia, serif" font-size="25" letter-spacing="14">FINANCIAL</text>
 </g>
 <g id="nnTag" style="--core:#FFE1F0;--glow:#FF2E88">
-  <text class="f" x="500" y="510" text-anchor="middle" font-family="Kaushan Script, cursive" font-size="50">Elevate your future.</text>
+  <text class="f" x="500" y="510" text-anchor="middle" font-family="Kaushan Script, cursive" font-size="50">Elevate Your Future.</text>
 </g>`;
   async function intro({ force } = {}) {
     if (!force && ss.get("hpv.neon")) return;
@@ -102,7 +102,7 @@
   function stutterLoop() {
     if (RM) return;
     const next = () => setTimeout(() => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && !document.documentElement.classList.contains("gated")) {
         const vis = [...document.querySelectorAll(".nn-text,.nn-svg")].filter((el) => { const r = el.getBoundingClientRect(); return r.width && r.bottom > 0 && r.top < innerHeight && !el.closest("[hidden]"); });
         const el = vis[(Math.random() * vis.length) | 0];
         if (el && !el.classList.contains("nn-power")) { el.classList.add("nn-stutter"); setTimeout(() => el.classList.remove("nn-stutter"), 1000); }

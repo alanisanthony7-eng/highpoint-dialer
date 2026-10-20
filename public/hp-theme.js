@@ -1,4 +1,72 @@
-/* Highpoint looks: "classic" (Highpoint navy and blue, the default for everyone) and "miami" (pink and orange neon).
+/* Highpoint themes v3: Midnight default, owner-only Executive, seasonal Halloween.
+   This synchronous bootstrap runs before stylesheets, so the first paint already has the saved theme. */
+(() => {
+  "use strict";
+  if (window.hpTheme) return;
+  const KEY = "hp.theme", OWNER_KEY = "hp.theme.owner";
+  const DEFAULT = "midnight";
+  const THEMES = {
+    executive: { id: "executive", label: "Executive", note: "Owner look: black, navy and gold", color: "#070C18", owner: true },
+    "modern-light": { id: "modern-light", label: "Modern Light", note: "Daylight slate and cobalt glass", color: "#C5D4E8" },
+    midnight: { id: "midnight", label: "Midnight", note: "Near-black, indigo and electric blue", color: "#070A12" },
+    miami: { id: "miami", label: "Miami", note: "Pink, coral and sunset neon", color: "#12091C" },
+    halloween: { id: "halloween", label: "Halloween", note: "Haunted hangar night", color: "#12080A" },
+  };
+  const alias = (v) => v === "classic" ? "executive" : v;
+  const valid = (v) => Object.prototype.hasOwnProperty.call(THEMES, v);
+  const ownerSaved = () => { try { return localStorage.getItem(OWNER_KEY) === "1"; } catch { return false; } };
+  const allowed = (id, owner) => valid(id) && (id !== "executive" || owner);
+  const list = (owner) => Object.values(THEMES).filter((t) => !t.owner || owner);
+  const read = () => {
+    try {
+      const q = new URLSearchParams(location.search), requested = alias(q.get("theme") || q.get("look"));
+      const saved = alias(localStorage.getItem(KEY) || localStorage.getItem("hp.look"));
+      const owner = ownerSaved();
+      const id = allowed(requested, true) ? requested : allowed(saved, owner) ? saved : DEFAULT;
+      localStorage.setItem(KEY, id); localStorage.removeItem("hp.look");
+      if (q.has("theme") || q.has("look")) { q.delete("theme"); q.delete("look"); const tail = q.toString(); history.replaceState(null, "", location.pathname + (tail ? "?" + tail : "") + location.hash); }
+      return id;
+    } catch { return DEFAULT; }
+  };
+  const meta = () => document.querySelector('meta[name="theme-color"]');
+  const api = {
+    version: 3, owner: ownerSaved(), look: read(), label: "",
+    get themes() { return list(this.owner); },
+    set(id) {
+      id = alias(id);
+      if (!allowed(id, this.owner || ownerSaved())) id = this.look && allowed(this.look, this.owner) ? this.look : DEFAULT;
+      if (!valid(id)) id = DEFAULT;
+      this.look = id; this.label = THEMES[id].label;
+      document.documentElement.dataset.theme = id;
+      document.documentElement.style.colorScheme = id === "modern-light" ? "light" : "dark";
+      document.title = id === "miami" ? "Highpoint Miami Desk" : id === "halloween" ? "Highpoint Halloween Desk" : "Highpoint Desk";
+      try { localStorage.setItem(KEY, id); } catch {}
+      const m = meta(); if (m) m.content = THEMES[id].color;
+      document.dispatchEvent(new CustomEvent("hp:theme", { detail: THEMES[id] }));
+    },
+    syncAccess(user) {
+      this.owner = !!(user && user.admin);
+      try { if (this.owner) localStorage.setItem(OWNER_KEY, "1"); else localStorage.removeItem(OWNER_KEY); } catch {}
+      if (this.look === "executive" && !this.owner) this.set(DEFAULT);
+    },
+    toggle() { const ids = this.themes.map((t) => t.id), i = ids.indexOf(this.look); this.set(ids[(i + 1) % ids.length]); },
+    openPicker(anchor) {
+      document.querySelector(".hpt-picker")?.remove();
+      const d = document.createElement("div"); d.className = "hpt-picker"; d.setAttribute("role", "dialog"); d.setAttribute("aria-modal", "true"); d.setAttribute("aria-label", "Choose appearance");
+      d.innerHTML = `<button class="hpt-backdrop" aria-label="Close appearance picker"></button><div class="hpt-box"><div class="hpt-head"><div><b>Choose your look</b><span>Same desk and data, different atmosphere.</span></div><button class="hpt-close" aria-label="Close">×</button></div><div class="hpt-grid">${this.themes.map(t => `<button class="hpt-choice" data-theme-choice="${t.id}" aria-pressed="${t.id === this.look}"><i class="hpt-preview ${t.id}"><span></span><span></span><span></span></i><b>${t.label}</b><small>${t.note}</small></button>`).join("")}</div></div>`;
+      const close = () => { d.remove(); anchor?.focus?.(); };
+      d.querySelector(".hpt-backdrop").onclick = close; d.querySelector(".hpt-close").onclick = close;
+      d.querySelectorAll("[data-theme-choice]").forEach(b => b.onclick = () => { this.set(b.dataset.themeChoice); d.querySelectorAll("[data-theme-choice]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); setTimeout(close, 160); });
+      d.onkeydown = e => { if (e.key === "Escape") close(); };
+      document.body.append(d); d.querySelector('[aria-pressed="true"]')?.focus();
+    },
+  };
+  window.hpTheme = api;
+  api.set(api.look);
+})();
+
+/* Legacy recolor fallback retained below for old cached HTML. It exits immediately when v2 is present.
+   Highpoint looks: "classic" (Highpoint navy and blue, the default for everyone) and "miami" (pink and orange neon).
    Same desk, same code, same data. The classic look recolors the Miami brand colors as the page loads:
    pinks and magentas become Highpoint blue, purples become navy, oranges become sky blue.
    That covers stylesheets, inline styles and SVG, including anything the desk adds later.

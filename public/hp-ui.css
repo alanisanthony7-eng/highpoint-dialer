@@ -101,3 +101,22 @@ html.hp-pro .topbar #hpdBar .hpd-srch{flex:1 1 160px}
 .lfform span{color:var(--muted);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
 .lfform b{font-weight:600;overflow-wrap:anywhere}
 .lfform a{color:var(--accent-2)}
+
+/* take-the-app sheet + optional quote share (copy is free; texts never auto-send) */
+.appsheet{margin-top:4px;border:1px solid var(--line);border-radius:12px;background:var(--sunk,rgba(0,0,0,.18));overflow:hidden}
+.appsheet>summary{list-style:none;cursor:pointer;padding:12px 14px;font-weight:700;font-size:13.5px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.appsheet>summary::-webkit-details-marker{display:none}
+.appsheet>summary::after{content:"▾";font-weight:500;color:var(--muted)}
+.appsheet[open]>summary::after{content:"▴"}
+.appsheet .appbody{padding:0 14px 14px;display:grid;gap:10px}
+.appsheet .hint{margin:0;font-size:12.5px;color:var(--muted);line-height:1.45}
+.appsheet textarea{min-height:64px;resize:vertical;width:100%}
+.qshare{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.log .qrow{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px}
+.hp-share{position:fixed;right:16px;bottom:16px;z-index:9100;width:min(380px,calc(100vw - 24px));padding:16px;border-radius:16px;background:var(--surface,#0c121e);border:1px solid var(--line);box-shadow:0 22px 50px -20px rgba(0,0,0,.7);color:var(--ink)}
+.hp-share h3{margin:0 0 6px;font-size:16px}
+.hp-share p{margin:0 0 10px;font-size:13px;color:var(--muted);line-height:1.45}
+.hp-share input{width:100%;margin:0 0 10px}
+.hp-share .row{display:flex;flex-wrap:wrap;gap:8px}
+.hp-share .warn{color:var(--warn,#e2aa5e)}
+@media (max-width:640px){.hp-share{right:12px;left:12px;bottom:12px;width:auto}}
