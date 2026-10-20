@@ -43,8 +43,8 @@ function addNoteObj(l,text){ return [...(l.notes||[]),{t:Date.now(),text}] }
 
 /* ---------- navigation ---------- */
 let view=(location.hash||"").slice(1);
-if(!["pipeline","contacts","import","dialer","quoter","iul","assistant","screen","scripts","calendar","crew"].includes(view)) view=ls.get("hp.view","pipeline");
-const CRUMB={crew:"Crew lobby",calendar:"Calendar",quoter:"Quote & compare",iul:"IUL illustrator",pipeline:"My CRM",contacts:"Clients",screen:"Screen a client",assistant:"Highpoint Bot",scripts:"Scripts",dialer:"Highpoint Dialer",import:"Import leads"};
+if(!["pipeline","contacts","import","dialer","quoter","iul","assistant","screen","scripts","training","calendar","crew"].includes(view)) view=ls.get("hp.view","pipeline");
+const CRUMB={crew:"Crew lobby",calendar:"Calendar",quoter:"Quote & compare",iul:"IUL illustrator",pipeline:"My CRM",contacts:"Clients",screen:"Screen a client",assistant:"Highpoint Bot",scripts:"Scripts",training:"Training",dialer:"Highpoint Dialer",import:"Import leads"};
 function syncNav(){ $$(".nav").forEach(b=>{if(b.dataset.view===view)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current")}); $("#crumb").textContent=CRUMB[view]||""; }
 let goReady=false;
 let dialerLoad=null;
@@ -104,6 +104,7 @@ function renderStart(){const host=$("#v-pipeline");if(!host)return;let card=$("#
     ["screen","Screen a client","Enter health answers and meds to see which plan they likely qualify for.",!!g.screen],
     ["quoter","Run a quote","Compare carriers side by side and save the quote to the client.",quoted],
     ["scripts","Open your scripts","The call scripts and rebuttals for FE, MP and IUL.",!!g.scripts],
+    ["training","Run a training drill","Study client types and objections, then roleplay a call.",!!g.training],
     ...(u.access&&!u.access.dialer?[]:[["dialer","Set up the dialer","Get a local number and make your first call from the browser.",!!g.dialer]]),
     ["assistant","Ask Highpoint Bot","Ask an underwriting or product question, or have it write a follow-up text.",!!g.assistant]];
   const done=steps.filter(x=>x[3]).length;
@@ -1087,6 +1088,88 @@ function renderScripts(){
 }
 $$("#scTabs .tab").forEach(b=>b.onclick=()=>{scTab=b.dataset.sc;renderScripts()});
 
+/* ---------- training ---------- */
+const TRAIN={
+  play:[
+    {tag:"Final expense",t:"Packet follow-up",d:"Highpoint's default FE call. You already sent a packet. You are fixing a miss, not cold pitching.",say:"Hey {name}? This is {agent}. We spoke about a month ago and I sent a big white packet to {address}. Did you ever get a chance to look at that?"},
+    {tag:"Final expense",t:"Needs, then health, then three prices",d:"Who gets the money. Income vs expenses. Burial vs cremation. Then tobacco and the big conditions — one question, wait. Then three options in the monthly range they named.",say:"Out of these three — {p1}, {p2}, and {p3} — which one is comfortable for you month after month?"},
+    {tag:"Mortgage protection",t:"House first, then the loan",d:"Confirm they still have the mortgage. Years left. Who else is on the note. Work coverage. Then health. Term length matches years left on the loan.",say:"If something happened, could {spouse} keep that payment going alone, or would the house be at risk?"},
+    {tag:"IUL",t:"Insurance first, illustration second",d:"Goals and time horizon before any number. Name cap, floor, fees. Never treat the illustration as a promise. Run carrier software.",say:"This is life insurance that can build cash value. The illustration is a picture, not a guarantee. Want me to run it at a conservative rate?"},
+    {tag:"Cadence",t:"Slow on money and health",d:"Pause after every question. Smile in the voice. Match their energy, then lead. Do not stack three questions. Do not joke over a cancer answer.",say:"Take your time — what medications are you on, and what are they for?"}
+  ],
+  clients:[
+    {tag:"Fixed income",t:"Social Security book",d:"Budget first. Draft the day after the deposit. A smaller face that stays in force beats a big face that lapses.",say:"What day does the deposit hit, and what monthly amount would you not feel?"},
+    {tag:"Grief",t:"Widow or widower",d:"Slower and warmer. Ask who handles things now. Do not use the late spouse as a scare.",say:"Who would you want looking after this for you now?"},
+    {tag:"Service",t:"Veteran",d:"Plain talk. Ask about VA or other coverage before you stack another policy.",say:"Do you already have anything through the VA or an old work plan?"},
+    {tag:"Short window",t:"Working caregiver",d:"Agenda in one line. Offer their lunch as the callback.",say:"I can do this in two minutes now, or I can call you at lunch — which is easier?"},
+    {tag:"Burned before",t:"Skeptical shopper",d:"You are a broker. Name two or three carriers. Show Quote & compare. No 'best on the market' unless the quote is actually best.",say:"I work several companies. Let me run the same face on two or three and we'll pick the honest one."},
+    {tag:"Family help",t:"Adult child on the line",d:"The parent answers health. The child can sit in. Be clear who owns it and who pays.",say:"I'll need {parent} to answer the health questions. {child}, you can stay on."},
+    {tag:"Young family",t:"Mortgage + kids",d:"Term = years on the loan plus a little. Talk income replacement, not only the house.",say:"If the paycheck stopped, what would you want that check to cover besides the mortgage?"},
+    {tag:"Long horizon",t:"IUL accumulator",d:"Other retirement buckets first. If they need the money in five years, IUL is usually the wrong tool.",say:"What are you already doing in the 401(k), and when would you want to touch this?"}
+  ],
+  styles:[
+    {tag:"Highpoint default",t:"Packet follow-up",d:"Warm, a little surprised they never got the packet, then DOB and burial vs cremation. Use this on aged FE leads.",say:"You were eligible for a lower premium and I never got back to you — how much coverage do you have in place now?"},
+    {tag:"Skeptics & IUL",t:"Consultative",d:"Facts first, quote second. You earn the right to present.",say:"Let me ask the health and budget questions first so I'm not guessing at a number."},
+    {tag:"Social Security",t:"Budget-first",d:"Comfortable monthly before face amount. Then show what that monthly buys.",say:"Forget the face amount for a second. What monthly number is easy for the next ten years?"},
+    {tag:"After they pick",t:"Assumptive close",d:"Walk into the app. Stop the moment they object and isolate that one thing.",say:"Let me get this started — legal name as it is on your ID?"},
+    {tag:"Older or scared",t:"Soft / rapport",d:"Extra recap, extra small talk. Still ask every health question. Soft is not sloppy.",say:"I want to make sure I heard you. The money goes to {bene}, and {premium} a month is the number that feels right — did I get that?"}
+  ],
+  obj:[
+    {tag:"Stall",t:"I need to think about it",d:"Unfinished, not a no. Isolate price vs plan. If they truly need time, book a clock time.",say:"Of course. Usually that means the price or the plan isn't sitting right. Which one is it?"},
+    {tag:"Money",t:"I can't afford it",d:"Believe them. Ask the comfortable monthly. Shrink the face or change the plan. Do not cut until the policy no longer does the job.",say:"What monthly amount would you not feel? We'll build the face from that."},
+    {tag:"Delay",t:"Send me something in the mail",d:"The packet was the mail. Price depends on health.",say:"I can, but anything I mail without your health answers is a guess. Two minutes and you'll have a real number."},
+    {tag:"Family",t:"I need to talk to my kids",d:"Conference them or write the exact plan. Do not force an app 'to lock the rate' if they said no.",say:"Want me to jump them on with us, or write the exact plan so you have something real to show?"},
+    {tag:"Covered",t:"I already have insurance",d:"Ask type, face, premium, who it pays, work vs personal. Keep it if you cannot beat it honestly.",say:"That's good. What company, how much does it pay, and is it through work or your own?"},
+    {tag:"Bank",t:"The lender already offered this",d:"Lender plans often pay the bank and shrink. Ours pays the family and stays level. Ask to see what they have.",say:"Does that one pay the bank or your family, and does the coverage drop as the loan drops?"},
+    {tag:"IUL",t:"Isn't this the stock market?",d:"Index credit with a cap and a floor. Fees still apply. Show the illustration.",say:"No. It can follow an index with a cap and usually a 0% floor on the credited interest. It is still life insurance — I'll show you the carrier illustration."}
+  ]
+};
+const TRAIN_SCEN=[
+  {id:"fe-packet",p:"FE",t:"Packet follow-up",d:"Doris, 72, on Social Security. She requested info a month ago. She will say she already has a small policy.",open:"Hello?"},
+  {id:"fe-oxygen",p:"FE",t:"Oxygen and budget",d:"Ray, 68. Uses oxygen at night. He wants burial coverage but will say $80 a month is too much.",open:"Yeah?"},
+  {id:"fe-think",p:"FE",t:"Think about it",d:"Linda, 64, clean health. She likes the $15k idea, then stalls with 'I need to think about it.'",open:"This is Linda."},
+  {id:"mp-bank",p:"MP",t:"Bank already offered it",d:"Marcus, 41, $240k / 27 years left. The mortgage officer offered lender insurance.",open:"Marcus speaking."},
+  {id:"iul-market",p:"IUL",t:"Is this the market?",d:"Priya, 38, maxing a 401(k). She asked about cash value, then accuses you of selling stocks.",open:"Hi, what's this about?"},
+  {id:"kids",p:"FE",t:"Talk to my daughter",d:"Harold, 79. He wants the coverage. He will not decide until his daughter hears it.",open:"Who is this?"}
+];
+let trTab="play", trScene=TRAIN_SCEN[0], trTurns=[], trBusy=null, trSample=null;
+function renderTraining(){
+  $$("#trTabs .tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.tr===trTab));
+  const card=(x)=>`<article class="panel tr-card"><span class="tag">${esc(x.tag)}</span><h3>${esc(x.t)}</h3><p class="muted" style="margin:0">${esc(x.d)}</p><p class="tr-say">${esc(x.say)}</p></article>`;
+  if(trTab!=="role"){ $("#trBody").innerHTML=`<div class="tr-grid">${TRAIN[trTab].map(card).join("")}</div>`; return; }
+  const canBot=!(window.hpTeam?.viewLocked?.("assistant"));
+  $("#trBody").innerHTML=`<div class="tr-role">
+    <div class="tr-scen">${TRAIN_SCEN.map(s=>`<button type="button" data-sc="${s.id}" aria-pressed="${s.id===trScene.id}"><b>${esc(s.t)}</b><span class="muted">${esc(s.d)}</span></button>`).join("")}</div>
+    <div class="chat tr-chat">
+      <div class="msgs" id="trMsgs"><div class="msg ai">${canBot?`I'm ${trScene.d.split(".")[0]}. ${esc(trScene.open)}`:"Roleplay needs Highpoint Bot (Pro or Full Access). The other Training tabs still work."}</div></div>
+      <form class="composer" id="trForm"><textarea id="trIn" rows="1" placeholder="${canBot?"You are the agent. Talk like you are on the phone…":"Roleplay is locked on this plan"}" ${canBot?"":"disabled"}></textarea><button class="btn primary" id="trSend" ${canBot?"":"disabled"}>Send</button></form>
+    </div>
+  </div>
+  <p class="muted" style="font-size:12px;margin:10px 2px 0">Say "break" or "debrief" when you want the score. The bot stays in character as the client until then. It will not invent a premium.</p>`;
+  $$("#trBody [data-sc]").forEach(b=>b.onclick=()=>{trScene=TRAIN_SCEN.find(s=>s.id===b.dataset.sc)||trScene;trTurns=[];renderTraining()});
+  const form=$("#trForm"); if(form) form.onsubmit=e=>{e.preventDefault();if(trBusy){trBusy.abort();return}trainAsk($("#trIn").value)};
+  const box=$("#trIn"); if(box) box.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();form.requestSubmit()}};
+}
+async function trainAsk(text){
+  text=String(text||"").trim(); if(!text||trBusy)return;
+  if(!trSample){try{trSample=await window.claude?.use?.("sample")}catch{}}
+  const box=$("#trMsgs"); const add=(cls,t)=>{const d=document.createElement("div");d.className="msg "+cls;d.textContent=t;box.append(d);box.scrollTop=1e9;return d};
+  add("me",text); $("#trIn").value="";
+  if(!trSample){add("sys","The assistant isn't available right now.");return}
+  const sys=`Training roleplay. You are the client in this scene only: ${trScene.d} Product interest: ${trScene.p}. First line you already said: "${trScene.open}". Stay in character, short spoken lines, one objection at a time. If the agent says break or debrief, drop character and coach.`;
+  const turns=[...trTurns,{role:"user",content:text}];
+  const out=add("ai","Thinking…"); trBusy=new AbortController(); $("#trSend").textContent="Stop";
+  try{
+    const r=await trSample(turns,{system:sys,mode:"train",onText:({text})=>{out.textContent=text;box.scrollTop=1e9},signal:trBusy.signal,cache:false});
+    out.textContent=r.text; trTurns=[...turns,{role:"assistant",content:r.text}];
+    if(trTurns.length>20)trTurns=trTurns.slice(-16);
+  }catch(e){
+    if(e?.code==="cancelled"){out.textContent=e.text||"Stopped."}
+    else out.textContent="Couldn't finish: "+(e?.message||e?.code||"unknown error");
+  }finally{trBusy=null;$("#trSend").textContent="Send"}
+}
+$$("#trTabs .tab").forEach(b=>b.onclick=()=>{trTab=b.dataset.tr;renderTraining()});
+
 /* ---------- motion ---------- */
 const RM=matchMedia("(prefers-reduced-motion: reduce)").matches;
 function stagger(sec){if(!sec)return;[...sec.children].forEach((c,i)=>{c.style.setProperty("--i",Math.min(i,10));c.style.animation="none";void c.offsetWidth;c.style.animation=""})}
@@ -1613,7 +1696,7 @@ const CREW_ACH=[
  ["captain","Captain's Wings","Reach Captain rank","🎖",s=>s.xp>=2000],
  ["chief","Chief Pilot","Reach Chief Pilot rank","👑",s=>s.xp>=10000],
  ["styled","Fresh Fit","Create your character","🕶",(s,d)=>!!d.char]];
-const STATUS={pipeline:"In the CRM",contacts:"Browsing clients",dialer:"On the dialer",quoter:"Quoting",iul:"Running an IUL illustration",assistant:"Talking to Highpoint Bot",screen:"Screening a client",scripts:"Reading scripts",calendar:"Checking the calendar",import:"Importing leads",crew:"In the lobby"};
+const STATUS={pipeline:"In the CRM",contacts:"Browsing clients",dialer:"On the dialer",quoter:"Quoting",iul:"Running an IUL illustration",assistant:"Talking to Highpoint Bot",screen:"Screening a client",scripts:"Reading scripts",training:"In training",calendar:"Checking the calendar",import:"Importing leads",crew:"In the lobby"};
 let userApi=null,myId=null,roomApi=null,crewPeers=[],crewCol=null,crewSort="xp",crewQ=Promise.resolve(),crewTimer=0,crewReady=false;
 const crew=new Map(); var myDoc=null; const nameCache={};
 const emptyStats=()=>({xp:0,dials:0,appts:0,sales:0,quotes:0,imports:0,kept:0,reviews:0,night:0,early:0,words:0,wordWins:0,hands:0,bjWins:0});
@@ -2009,7 +2092,7 @@ function openCreator(){if(!myId){toast("Sign in to create your character");retur
 
 /* ---------- render ---------- */
 function renderAll(){
-  if(view==="crew")renderCrew(); else if(view==="calendar")renderCalendar(); else if(view==="screen")renderScreen(); else if(view==="scripts")renderScripts(); else if(view==="pipeline")renderPipeline(); else if(view==="contacts")renderContacts(); else if(view==="dialer")renderDialer(); else if(view==="quoter")renderQuoter(); else if(view==="iul")renderIul(); else if(view==="import")renderImport();
+  if(view==="crew")renderCrew(); else if(view==="calendar")renderCalendar(); else if(view==="screen")renderScreen(); else if(view==="scripts")renderScripts(); else if(view==="training")renderTraining(); else if(view==="pipeline")renderPipeline(); else if(view==="contacts")renderContacts(); else if(view==="dialer")renderDialer(); else if(view==="quoter")renderQuoter(); else if(view==="iul")renderIul(); else if(view==="import")renderImport();
   if(drawerId&&!leads.get(drawerId))closeDrawer();
 }
 go(view);goReady=true;

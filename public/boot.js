@@ -119,7 +119,7 @@
   async function sample(turns, opts = {}) {
     const msgs = (Array.isArray(turns) ? turns : [{ role: "user", content: String(turns) }]).map((t) => ({ role: t.role === "assistant" ? "assistant" : "user", content: typeof t.content === "string" ? t.content : JSON.stringify(t.content) }));
     try {
-      const r = await fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: msgs, system: opts.system }), signal: opts.signal });
+      const r = await fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: msgs, system: opts.system, mode: opts.mode }), signal: opts.signal });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw Object.assign(new Error(j.error || "Assistant unavailable"), { code: j.code || (r.status === 429 ? "rate_limited" : "error") });
       opts.onText?.({ text: j.text }); return { text: j.text };

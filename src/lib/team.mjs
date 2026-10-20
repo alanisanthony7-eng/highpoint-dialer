@@ -15,7 +15,7 @@ export const FEATURES = {
   clients: "Client list",
   quoter: "Quote & compare",
   screen: "Health screener",
-  scripts: "Call scripts",
+  scripts: "Call scripts and Training",
   bot: "Highpoint Bot",
   iul: "IUL illustrator",
   dialer: "Highpoint Dialer: power dialing, local numbers, texting, voicemail drop, recordings, live transcripts and Copilot",

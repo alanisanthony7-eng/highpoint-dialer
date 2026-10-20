@@ -19,9 +19,9 @@
 
   /* ---------- plans and what they include ---------- */
   const PLAN_NAME = { early: "Early Access", base: "Base", plus: "Pro", full: "Full Access" };
-  const FEAT = { crm: "CRM, calendar and lead import", clients: "Client list", quoter: "Quote & compare", screen: "Health screener", scripts: "Call scripts", bot: "Highpoint Bot", iul: "IUL illustrator", dialer: "Highpoint Dialer with live transcripts and Copilot", crew: "Crew lobby and games", music: "Spotify in the desk" };
-  const FEAT_SHORT = { crm: "the CRM", clients: "the client list", quoter: "the quoter", screen: "the health screener", scripts: "call scripts", bot: "Highpoint Bot", iul: "the IUL illustrator", dialer: "the Highpoint Dialer", crew: "the crew lobby and games", music: "Spotify" };
-  const VIEW_FEAT = { pipeline: "crm", calendar: "crm", import: "crm", contacts: "clients", quoter: "quoter", screen: "screen", scripts: "scripts", assistant: "bot", iul: "iul", dialer: "dialer", crew: "crew", games: "crew" };
+  const FEAT = { crm: "CRM, calendar and lead import", clients: "Client list", quoter: "Quote & compare", screen: "Health screener", scripts: "Call scripts and Training", bot: "Highpoint Bot", iul: "IUL illustrator", dialer: "Highpoint Dialer with live transcripts and Copilot", crew: "Crew lobby and games", music: "Spotify in the desk" };
+  const FEAT_SHORT = { crm: "the CRM", clients: "the client list", quoter: "the quoter", screen: "the health screener", scripts: "call scripts and Training", bot: "Highpoint Bot", iul: "the IUL illustrator", dialer: "the Highpoint Dialer", crew: "the crew lobby and games", music: "Spotify" };
+  const VIEW_FEAT = { pipeline: "crm", calendar: "crm", import: "crm", contacts: "clients", quoter: "quoter", screen: "screen", scripts: "scripts", training: "scripts", assistant: "bot", iul: "iul", dialer: "dialer", crew: "crew", games: "crew" };
   const planName = (k) => PLAN_NAME[k] || PLAN_NAME.full;
   const can = (f) => { const a = window.hpUser?.access; return !a || !Array.isArray(a.features) || a.features.includes(f); };
   const viewFeature = (v) => VIEW_FEAT[v] || null;

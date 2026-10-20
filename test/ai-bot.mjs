@@ -41,7 +41,7 @@ await call("rep", "/api/auth/signup", { email: "rep@hp.com", password: "password
 let r = await call("rep", "/api/ai", hi);
 ok(r.s === 200 && r.j.text === "Hello from Workers AI", "Workers AI answers when the AI binding is set");
 ok(cfAsked.at(-1).model === "@cf/google/gemma-4-26b-a4b-it" && asked.length === 0, "it uses Gemma 4 and does not call Anthropic");
-ok(cfAsked.at(-1).input.messages[0].role === "system" && /Highpoint Bot/.test(cfAsked.at(-1).input.messages[0].content) && /Heart attack/.test(cfAsked.at(-1).input.messages[0].content) && cfAsked.at(-1).input.messages[1].content === "hi", "the Highpoint knowledge prompt and the user's message both go to the model");
+ok(cfAsked.at(-1).input.messages[0].role === "system" && /Highpoint Bot/.test(cfAsked.at(-1).input.messages[0].content) && /Heart attack/.test(cfAsked.at(-1).input.messages[0].content) && /packet/.test(cfAsked.at(-1).input.messages[0].content) && cfAsked.at(-1).input.messages[1].content === "hi", "the Highpoint knowledge prompt and the user's message both go to the model");
 ok(cfAsked.at(-1).input.temperature === 0.2 && cfAsked.at(-1).input.chat_template_kwargs?.enable_thinking === true, "answers stay conservative so rates are not invented");
 
 env.ANTHROPIC_API_KEY = "sk-ant-should-not-be-used";
@@ -58,6 +58,9 @@ env.HP_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 await call("rep", "/api/ai", hi);
 ok(cfAsked.at(-1).model === "@cf/google/gemma-4-26b-a4b-it", "the retired Llama 3.1 8B id is remapped to Gemma 4");
 delete env.HP_AI_MODEL;
+
+await call("rep", "/api/ai", { messages: [{ role: "user", content: "What is Transamerica FE Express at age 80?" }], mode: "train" });
+ok(/training coach/.test(cfAsked.at(-1).input.messages[0].content) && /FE Express/.test(cfAsked.at(-1).input.messages[0].content), "training mode adds the coach and the matching carrier chapter");
 
 cfReply = () => ({ response: "<think>internal notes</think>Typical after 2 years is Standard / level. Confirm in the guide." });
 r = await call("rep", "/api/ai", { messages: [{ role: "user", content: "heart attack 3 years ago" }] });

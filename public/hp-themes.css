@@ -455,6 +455,17 @@ html[data-theme="miami"] #sky{opacity:.95!important}
   #v-pipeline>.hero .top{align-items:flex-start!important}#v-pipeline>.hero .top>.row{width:100%}
   .hpt-grid{grid-template-columns:1fr}.hpt-box{padding:16px;max-height:min(88vh,820px)}.hpt-choice{grid-template-columns:68px 1fr}.hpt-preview{width:68px}
 }
+.tr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:4px}
+.tr-card h3{margin:0 0 6px;font:700 16px var(--f-ui,system-ui)}
+.tr-card .tag{display:inline-block;margin-bottom:8px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2,#a9c1ec)}
+.tr-say{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--sunk,#080d17);border:1px solid var(--line,#1c2638);font-size:13.5px;line-height:1.5}
+.tr-role{display:grid;grid-template-columns:minmax(240px,320px) minmax(0,1fr);gap:14px;align-items:start}
+.tr-scen{display:grid;gap:8px}
+.tr-scen button{all:unset;cursor:pointer;padding:12px 14px;border-radius:12px;background:var(--surface-2,#111a2a);border:1px solid var(--line,#1c2638);font-size:13.5px;line-height:1.4}
+.tr-scen button[aria-pressed=true]{border-color:var(--accent,#3a5f9f);background:var(--accent-soft,#141d30)}
+.tr-scen button b{display:block;margin-bottom:3px}
+.tr-chat{min-height:440px;display:flex;flex-direction:column}
+@media (max-width:860px){.tr-role{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){
   .hpt-picker *{animation:none!important;transition:none!important}
   html.hp-pro .vscene::after,html.hp-pro .vsvg *{animation:none!important}

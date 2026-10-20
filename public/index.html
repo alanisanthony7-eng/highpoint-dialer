@@ -34,6 +34,7 @@
     <button class="nav" data-view="quoter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M4 20h16"/><path d="M8 16v-4M12 16V8M16 16v-6"/></svg>Quote &amp; compare</button>
     <button class="nav" data-view="screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6l1 2h3v16H5V5h3z"/><path d="M9 12l2 2 4-4"/></svg>Screen a client</button>
     <button class="nav" data-view="scripts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 12h6M10 16h6"/></svg>Scripts</button>
+    <button class="nav" data-view="training"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5h10l6 6v8z"/><path d="M14 5v6h6M8 13h6M8 17h4"/></svg>Training</button>
     <button class="nav" data-view="assistant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 11v9h16v-9z"/><path d="M9 15h.01M15 15h.01"/><path d="M12 3V1"/></svg>Highpoint Bot</button>
     <button class="nav" data-view="iul"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>IUL illustrator</button>
     <span class="group" style="margin-top:12px">Crew lounge</span>
@@ -317,6 +318,19 @@
       <div class="scgrid" id="scBody"></div>
     </section>
 
+    <!-- TRAINING -->
+    <section id="v-training" data-v hidden>
+      <div class="head"><div><h1>Training</h1><p>Study the call, the client, and the objection — then roleplay it with Highpoint Bot. Rates still come from Quote &amp; compare, not from a guess.</p></div></div>
+      <div class="tabs" role="tablist" id="trTabs">
+        <button class="tab" role="tab" data-tr="play" aria-selected="true">Call playbook</button>
+        <button class="tab" role="tab" data-tr="clients" aria-selected="false">Client types</button>
+        <button class="tab" role="tab" data-tr="styles" aria-selected="false">Sell styles</button>
+        <button class="tab" role="tab" data-tr="obj" aria-selected="false">Objections</button>
+        <button class="tab" role="tab" data-tr="role" aria-selected="false">Roleplay</button>
+      </div>
+      <div id="trBody"></div>
+    </section>
+
     <!-- ASSISTANT -->
     <section id="v-assistant" data-v hidden>
       <div class="head"><div><h1 class="withicon"><svg class="ticon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 6 L10 20 V40 H38 V20 Z" fill="#16295A" stroke="#7E9FDB" stroke-width="2"/><circle cx="18" cy="28" r="3" fill="#A9C1EC"/><circle cx="30" cy="28" r="3" fill="#A9C1EC"/><path d="M19 35 h10" stroke="#A9C1EC" stroke-width="2" stroke-linecap="round"/><path d="M24 6 V2" stroke="#7E9FDB" stroke-width="2"/><circle cx="24" cy="2.5" r="2" fill="#A9C1EC"/></svg>Highpoint Bot</h1><p>Underwriting help and sales support. Ask about a client, a condition, a carrier, or your book. It can read your clients, update leads and run the quoter.</p></div><button class="btn" id="aiClear">New chat</button></div>
@@ -335,7 +349,7 @@
           <button class="btn primary" id="aiSend">Send</button>
         </form>
       </div>
-      <p class="muted" style="font-size:12px;margin:8px 2px 0">Underwriting guidance is general and carrier guidelines change. Confirm with the carrier's current guide before you quote a rate class. Answers are powered by Claude.</p>
+      <p class="muted" style="font-size:12px;margin:8px 2px 0">Underwriting guidance is general and carrier guidelines change. Confirm with the carrier's current guide before you quote a rate class. Answers use Highpoint's product pack on Workers AI.</p>
     </section>
   </main>
 </div>
