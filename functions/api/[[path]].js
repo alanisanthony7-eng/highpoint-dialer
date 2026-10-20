@@ -13,6 +13,7 @@ import calls from "../../src/dialer/dialer-calls.mjs";
 import sms from "../../src/dialer/dialer-sms.mjs";
 import { telnyxRoute } from "../../src/telnyx/tx.mjs";
 import { spotifyRoute } from "../../src/lib/spotify.mjs";
+import { followupsRoute, poke } from "../../src/lib/followups.mjs";
 
 const DIALER = { setup, token, voice, events, power, numbers, vm, calls, sms };
 const json = (b, s) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -23,6 +24,8 @@ export async function onRequest(ctx) {
   globalThis.__ORIGIN = new URL(req.url).origin;
   const parts = new URL(req.url).pathname.replace(/^\/api\/?/, "").split("/").filter(Boolean);
   const c = { waitUntil: (p) => ctx.waitUntil(p) };
+  // background jobs (automatic texts) run while the desk is in use, at most once a minute
+  if (parts[0] !== "cron" && ctx.env?.DB) { try { ctx.waitUntil(poke().catch((e) => console.error("jobs", e))); } catch {} }
   try {
     switch (parts[0]) {
       case "auth": return await authRoute(req, parts[1]);
@@ -35,6 +38,8 @@ export async function onRequest(ctx) {
       case "dialer": { const h = DIALER[parts[1]]; if (h) return await h(req, c); break; }
       case "telnyx": return await telnyxRoute(req, parts[1]);
       case "spotify": return await spotifyRoute(req, parts[1]);
+      case "followups": return await followupsRoute(req, parts[1]);
+      case "cron": return await followupsRoute(req, "cron");
       case "config": return json({ snapClientId: ctx.env.HP_SNAP_CLIENT_ID || "" }, 200);
       case "health": return json({ ok: true, db: !!ctx.env.DB, twilio: !!(ctx.env.TWILIO_ACCOUNT_SID && ctx.env.TWILIO_AUTH_TOKEN), telnyx: !!ctx.env.TELNYX_API_KEY }, 200);
     }

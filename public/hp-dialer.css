@@ -647,3 +647,20 @@ html.hp-pro .hpdk.callbar{border-radius:0;border-width:1px 0 0;border-color:rgba
 .hpd-scrubset label{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;font-size:13px;cursor:pointer}
 .hpd-scrubset input{width:16px!important;height:16px;flex:none;margin:0}
 .hpf-scrub{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#ffb3a3;background:rgba(232,140,118,.14);border:1px solid rgba(232,140,118,.45);width:max-content}
+/* automatic texts */
+.hpd-fu{margin-bottom:14px}
+.hpd-fu-sw{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:8px;font-weight:700;font-size:13px;cursor:pointer}
+.hpd-fu-sw input{width:16px!important;height:16px;margin:0}
+.hpd-fu-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px}
+.hpd-fu-row{display:grid;gap:6px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.02)}
+.hpd-fu-h{display:flex!important;flex-direction:row!important;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px}
+.hpd-fu-h input[type=checkbox]{width:15px!important;height:15px;margin:0}
+.hpd-fu-h input[type=number]{width:58px!important;padding:3px 6px!important;height:auto!important}
+.hpd-fu-row textarea{resize:vertical;min-height:52px;font-size:13px}
+.hpd-fu-pv{font-style:italic;line-height:1.4}
+.hpd-fu-h3{margin:6px 0 0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted,#8c97ab)}
+.hpd-fu-q{display:grid;gap:4px}
+.hpd-fu-q>div{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:6px 10px;border-radius:10px;background:rgba(255,255,255,.03);font-size:13px}
+.hpd-fu-q .btn{padding:4px 10px;font-size:12px}
+.hpd-fu-st{font-style:normal;font-weight:700;font-size:11px;padding:1px 7px;border-radius:999px;background:rgba(255,255,255,.08)}
+.hpd-fu-st.sent{color:#86c28a;background:rgba(134,194,138,.14)}.hpd-fu-st.failed{color:#e88c76;background:rgba(232,140,118,.14)}

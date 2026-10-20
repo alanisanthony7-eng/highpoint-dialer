@@ -268,6 +268,12 @@ async function inboundEnded(sess) { // the caller's leg ended
 }
 
 async function handleTelnyx(type, p) {
+  if (type === "message.received") { // a text to one of our numbers
+    const { receiveText } = await import("../lib/sms.mjs");
+    await receiveText({ from: p.from?.phone_number, line: p.to?.[0]?.phone_number, body: p.text });
+    return "text received";
+  }
+  if (type.startsWith("message.")) return "text status";
   const ccid = p.call_control_id || "", sess = p.call_session_id || ccid;
   const inb = sess ? await getJ("txin", sess) : null; // set when this is an inbound call we're routing
   if (type === "call.initiated") {

@@ -1088,6 +1088,34 @@
   /* ================= inbox + voicemail drops + settings ================= */
   async function inboxBadge() { try { const r = await api("/calls/inbox"); const sms = await api("/sms").catch(() => ({ threads: [] })); const n = r.items.length + sms.threads.filter((t) => t.unread).length; const b = $("#hpdInboxN"); if (b) { b.hidden = !n; b.textContent = n; } } catch {} }
   async function loadGreetings() { try { S.greetings = (await api("/vm")).greetings; } catch {} }
+  /* ---------- automatic texts ---------- */
+  const FU_KINDS = [["noAnswer", "After no answer or voicemail"], ["nextMorning", "The next morning (9:30 their time)"], ["apptDayBefore", "Appointment reminder, the day before"], ["apptHourBefore", "Appointment reminder, an hour before"]];
+  const FU_NAME = Object.fromEntries(FU_KINDS.map(([k, t]) => [k, t.replace(/ \(.*\)$/, "")]));
+  async function renderFollowups() {
+    const el = $("#hpdFu"); if (!el) return;
+    let st, q, pv;
+    try { [st, q] = await Promise.all([fetch("/api/followups/settings", { credentials: "same-origin" }).then((r) => r.json()), fetch("/api/followups/queue", { credentials: "same-origin" }).then((r) => r.json())]); }
+    catch { el.innerHTML = `<p class="hpd-sm">Automatic texts couldn't load.</p>`; return; }
+    const s = st.settings, when = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+    el.innerHTML = `<div class="hpd-flex" style="justify-content:space-between"><h2 style="margin:0">Automatic texts</h2><label class="hpd-fu-sw"><input type="checkbox" id="fuOn" ${s.on ? "checked" : ""}><span>${s.on ? "On" : "Off"}</span></label></div>
+      <p class="hpd-sm" style="margin:0">Follow-up texts from your local number. They only go out during the client's calling hours, never to Do Not Call numbers, and they stop when the client texts back, gets reached on a call, or moves on.</p>
+      <div class="hpd-fu-list">${FU_KINDS.map(([k, t]) => `<div class="hpd-fu-row"><label class="hpd-fu-h"><input type="checkbox" data-fuon="${k}" ${s[k].on ? "checked" : ""}> <b>${t}</b>${k === "noAnswer" ? ` · <input type="number" min="1" max="240" id="fuDelay" value="${esc(s.noAnswer.delayMin)}" aria-label="Minutes later"> min later` : ""}</label><textarea data-futxt="${k}" rows="2" maxlength="480">${esc(s[k].text)}</textarea><div class="hpd-sm hpd-fu-pv" data-fupv="${k}"></div></div>`).join("")}</div>
+      <p class="hpd-sm" style="margin:0">Use {first}, {agent}, {company}, {when} and {time}. "Reply STOP to opt out." is added to every automatic text.</p>
+      <div class="hpd-flex"><button class="btn primary" id="fuSave" type="button">Save automatic texts</button><span class="hpd-sm" id="fuMsg"></span></div>
+      ${q.queue?.length ? `<h3 class="hpd-fu-h3">Scheduled · ${q.queue.length}</h3><div class="hpd-fu-q">${q.queue.slice(0, 30).map((j) => `<div><span><b>${esc(j.name)}</b> · ${esc(FU_NAME[j.kind] || j.kind)}</span><span class="hpd-sm">${esc(when(j.due))}</span><button class="btn" type="button" data-fux="${esc(j.key)}" data-fun="${esc(j.name)}">Cancel</button></div>`).join("")}</div>` : ""}
+      ${q.log?.length ? `<h3 class="hpd-fu-h3">Recent</h3><div class="hpd-fu-q">${q.log.slice(0, 12).map((x) => `<div><span><b>${esc(x.name)}</b> · ${esc(FU_NAME[x.kind] || x.kind)}</span><span class="hpd-sm" title="${esc(x.note || "")}"><i class="hpd-fu-st ${esc(x.status)}">${x.status === "sent" ? "Sent" : x.status === "failed" ? "Didn't send" : "Skipped"}</i> ${x.status === "sent" ? "" : esc(x.note || "")} · ${esc(when(x.at))}</span><span></span></div>`).join("")}</div>` : ""}`;
+    const collect = () => { const o = { on: $("#fuOn").checked }; for (const [k] of FU_KINDS) o[k] = { on: $(`[data-fuon="${k}"]`, el).checked, text: $(`[data-futxt="${k}"]`, el).value }; o.noAnswer.delayMin = +$("#fuDelay").value || 10; return o; };
+    let pt = 0;
+    const preview = () => { clearTimeout(pt); pt = setTimeout(async () => { try { pv = (await (await fetch("/api/followups/preview", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ settings: collect() }) })).json()).preview; for (const [k] of FU_KINDS) { const d = $(`[data-fupv="${k}"]`, el); if (d) d.textContent = "Preview: " + pv[k]; } } catch {} }, 250); };
+    $$("[data-futxt]", el).forEach((t) => (t.oninput = preview)); preview();
+    $("#fuOn").onchange = (e) => { e.target.nextElementSibling.textContent = e.target.checked ? "On" : "Off"; };
+    $("#fuSave").onclick = async () => {
+      try { const r = await fetch("/api/followups/settings", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(collect()) }); if (!r.ok) throw new Error((await r.json()).error || "Couldn't save"); toast("Automatic texts saved"); renderFollowups(); }
+      catch (e) { $("#fuMsg").textContent = e.message; }
+    };
+    $$("[data-fux]", el).forEach((b) => (b.onclick = async () => { await fetch("/api/followups/cancel", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: b.dataset.fux, name: b.dataset.fun }) }); renderFollowups(); }));
+  }
+
   async function renderInbox() {
     const el = $("#hpdInbox"); el.innerHTML = `<div class="panel">Loading…</div>`;
     let items = [], threads = [];
@@ -1096,6 +1124,7 @@
     const nm = (n) => { const l = leadBy(n); return l ? window.hpDesk.fullName(l) : fmt(n); };
     const set = S.settings;
     el.innerHTML = `
+      <div class="panel stack hpd-fu" id="hpdFu"><p class="hpd-sm" style="margin:0">Loading automatic texts…</p></div>
       <div class="hpd-grid2">
         <div class="panel stack" style="gap:10px"><h2>Missed calls &amp; voicemails</h2>
           <div class="hpd-inbox">${items.map((it) => `<div class="hpd-item"><span class="ic">${it.kind === "voicemail" ? I.vm : I.phone}</span><span><b>${esc(nm(it.from))}</b><br><span class="hpd-sm">${it.kind === "voicemail" ? `Voicemail · ${dur(it.sec)}` : "Missed call"} · ${new Date(it.at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>${it.kind === "voicemail" ? `<br><button class="btn" data-vmplay="${esc(it.key)}" type="button" style="margin-top:6px">Play</button>` : ""}</span><span class="hpd-flex"><button class="btn primary" data-cb="${esc(it.from)}" type="button">Call back</button><button class="btn" data-done="${esc(it.key)}" type="button">Done</button></span></div>`).join("") || `<span class="hpd-sm">Nothing waiting. Calls to your numbers ring here while you're signed in; missed ones land in this list.</span>`}</div>
@@ -1104,7 +1133,7 @@
           <div class="hpd-inbox">${threads.map((t) => `<button class="hpd-item" style="all:unset;cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:12px;border-radius:14px;border:1px solid var(--hp-line)" data-thread="${esc(t.with)}"><span class="ic">${I.sms}</span><span><b>${esc(nm(t.with))}</b><br><span class="hpd-sm">${esc(t.preview)}</span></span>${t.unread ? `<span class="hpd-pill good">${t.unread}</span>` : ""}</button>`).join("") || `<span class="hpd-sm">No texts yet. Text a lead from the box below.</span>`}</div>
           <div id="hpdThread"></div>
           <div class="hpd-flex"><input id="hpdSmsTo" placeholder="Number" style="width:150px" inputmode="tel" value="${esc(currentLead() ? d10(currentLead().phone) : "")}"><input id="hpdSmsBody" placeholder="Message" style="flex:1;min-width:160px"><button class="btn primary" id="hpdSmsSend" type="button">Send</button></div>
-          <span class="hpd-sm">Texting needs your business registered for A2P 10DLC in Twilio. Leads who reply STOP are added to Do Not Call automatically.</span>
+          <span class="hpd-sm">Texting needs your business registered for A2P 10DLC with your phone provider (Twilio or Telnyx). Leads who reply STOP are added to Do Not Call automatically.</span>
         </div>
       </div>
       <div class="hpd-grid2">
@@ -1117,6 +1146,7 @@
         </div>
         ${S.me?.admin ? settingsCard(set) : `<div class="panel stack"><h2>Do Not Call</h2><p class="hpd-sm" style="margin:0">Numbers on the list can't be called or texted by anyone on the team.</p><div class="hpd-flex"><input id="hpdDncN" placeholder="Number to block" inputmode="tel" style="flex:1"><button class="btn" id="hpdDncAdd" type="button">Add to Do Not Call</button></div></div>`}
       </div>`;
+    renderFollowups();
     // actions
     $$("[data-cb]", el).forEach((b) => (b.onclick = () => { const l = leadBy(b.dataset.cb); if (l) { window.hpDesk.setCurrent(l.id); $('#dTabs [data-dt="dial"]').click(); dialLead(l); } else { dialLead({ id: "", phone: b.dataset.cb, first: fmt(b.dataset.cb) }); } }));
     $$("[data-done]", el).forEach((b) => (b.onclick = async () => { await api("/calls/inbox", { method: "POST", body: { key: b.dataset.done, done: true } }); renderInbox(); inboxBadge(); }));

@@ -72,6 +72,14 @@ Before every call, the dialer can check the number against the National Do Not C
 - If the check can't run, the call doesn't go through. Your own Do Not Call list, calling hours and the 24-hour attempt cap still apply on top.
 - This isn't legal advice. Whether consented leads may be called despite the National DNC is a question for your compliance advisor.
 
+## Automatic text follow-ups
+Each agent can turn these on in **Highpoint Dialer → Inbox & settings → Automatic texts** and edit the wording:
+- After a no-answer or voicemail, a text a few minutes later (10 by default) and another at 9:30 the next morning, in the client's time zone. Each client gets this at most once a day.
+- Appointment reminders, the day before and an hour before.
+- Texts go out from the agent's local number. They only send during the client's calling hours, never to Do Not Call or flagged numbers, and "Reply STOP to opt out." is added to every one. They're skipped when the client texts back, is reached on a later call, or the appointment moves.
+- Texts work on Twilio or Telnyx. Your business needs A2P 10DLC registration with that provider, or US carriers block business texts.
+- Scheduled texts send while anyone has the desk open. To send them on time overnight too, add a secret `HP_CRON_SECRET` in Cloudflare. Then have a free cron service (for example cron-job.org) call `https://highpoint-dialer.pages.dev/api/cron?key=YOUR_SECRET` every 5 minutes.
+
 ## Email
 Password reset links and emailed invites go through Resend (resend.com, free for small volumes).
 1. Create a Resend account and add your domain (for example highpointfinancial.co) under **Domains**, then add the DNS records it shows.

@@ -31,9 +31,13 @@ export async function docsRoute(req, parts) {
   if (req.method === "PUT") {
     const body = await req.text();
     if (body.length > 900_000) return json({ error: "That record is too big." }, 413);
-    JSON.parse(body);
+    const next = JSON.parse(body);
+    const prev = col === "leads" ? await D1().prepare("SELECT data FROM docs WHERE scope=?1 AND col=?2 AND id=?3").bind(scope, col, id).first().then((r) => (r ? JSON.parse(r.data) : null)).catch(() => null) : null;
     await D1().prepare("INSERT OR REPLACE INTO docs (scope, col, id, data, updated) VALUES (?1, ?2, ?3, ?4, ?5)").bind(scope, col, id, body, Date.now()).run();
-    await bump(scope, col); return json({ ok: true });
+    await bump(scope, col);
+    // automatic text follow-ups (no-answer texts, appointment reminders)
+    if (col === "leads" || col === "appts") { try { const fu = await import("./lib/followups.mjs"); if (col === "leads") await fu.onLeadSaved(user, id, prev, next); else await fu.onApptSaved(user, id, next); } catch (e) { console.error("follow-ups", e); } }
+    return json({ ok: true });
   }
   if (req.method === "DELETE") {
     await D1().prepare("DELETE FROM docs WHERE scope=?1 AND col=?2 AND id=?3").bind(scope, col, id).run();
