@@ -93,3 +93,11 @@ html.hp-pro .topbar #hpdBar .hpd-srch{flex:1 1 160px}
 .gs-list li.ok .gs-dot{border-color:transparent;background:linear-gradient(135deg,#2BE3A0,#1AAE7A);color:#04140D}
 .gs-list li.ok b{opacity:.65;text-decoration:line-through;text-decoration-color:rgba(255,255,255,.35)}
 @media (max-width:640px){.gs-bar{display:none}}
+
+/* lead drawer: extra fields and consent from a posted lead form */
+.lfform{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--sunk,rgba(0,0,0,.2))}
+.lfform div{display:flex;flex-direction:column;min-width:0;font-size:12.5px}
+.lfform div.wide{grid-column:1/-1}
+.lfform span{color:var(--muted);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
+.lfform b{font-weight:600;overflow-wrap:anywhere}
+.lfform a{color:var(--accent-2)}

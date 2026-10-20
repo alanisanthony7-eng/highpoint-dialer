@@ -80,6 +80,18 @@ Each agent can turn these on in **Highpoint Dialer → Inbox & settings → Auto
 - Texts work on Twilio or Telnyx. Your business needs A2P 10DLC registration with that provider, or US carriers block business texts.
 - Scheduled texts send while anyone has the desk open. To send them on time overnight too, add a secret `HP_CRON_SECRET` in Cloudflare. Then have a free cron service (for example cron-job.org) call `https://highpoint-dialer.pages.dev/api/cron?key=YOUR_SECRET` every 5 minutes.
 
+## Lead posting URLs (real-time leads from vendors)
+
+On **Import leads**, each agent can make a secret posting URL per lead vendor (or for their own website form) and send it to the vendor with **Copy setup for the vendor**. Leads posted there land in that agent's CRM within seconds:
+
+- JSON (one lead, an array, or `{"leads": [...]}`, up to 100 per request), form posts, XML, or a GET with a query string. Common field names (`first_name`, `phone_number`, `cell`, `dob`, `zip`...) are matched automatically; anything else is kept on the lead under **From the lead form**.
+- TrustedForm certificate, Jornaya LeadiD, consent language and IP address are saved with the lead.
+- A lead whose phone is already in the CRM isn't added twice; it's reported to the vendor as `duplicate` and a note goes on the existing client.
+- With scrubbing on, every posted number is checked against the National DNC, state DNC and litigator lists on arrival and flagged so it can't be dialed.
+- Admins can make team URLs that hand leads out round robin between the agents they pick.
+- Agents can turn on a **New lead** automatic text (Highpoint Dialer → Inbox & settings → Automatic texts) that goes out right away. Only use it for vendors that collect consent to text.
+- Each URL takes up to 600 leads an hour. **New secret URL** replaces a leaked URL; the old one stops working at once.
+
 ## Email
 Password reset links and emailed invites go through Resend (resend.com, free for small volumes).
 1. Create a Resend account and add your domain (for example highpointfinancial.co) under **Domains**, then add the DNS records it shows.

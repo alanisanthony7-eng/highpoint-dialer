@@ -18,8 +18,11 @@ export const FU_DEFAULTS = {
   nextMorning: { on: true, text: "Good morning {first}, it's {agent} again. I'll try you again today, or reply with a time that works and I'll call you then." },
   apptDayBefore: { on: true, text: "Hi {first}, it's {agent} with {company}. Just confirming our call {when}. Reply here if you need a different time." },
   apptHourBefore: { on: true, text: "Hi {first}, {agent} here. I'll be calling you in about an hour, at {time}. Talk soon!" },
+  // leads that arrive on a lead posting URL (off until the agent turns it on: only for leads that agreed to texts)
+  newLead: { on: false, delayMin: 0, text: "Hi {first}, this is {agent} with {company}. I just got your request for life insurance information. Is now a good time for a quick call?" },
 };
-const merge = (s = {}) => { const o = { ...FU_DEFAULTS, on: !!s.on }; for (const k of ["noAnswer", "nextMorning", "apptDayBefore", "apptHourBefore"]) o[k] = { ...FU_DEFAULTS[k], ...(s[k] || {}) }; return o; };
+export const FU_KINDS = ["noAnswer", "nextMorning", "apptDayBefore", "apptHourBefore", "newLead"];
+const merge = (s = {}) => { const o = { ...FU_DEFAULTS, on: !!s.on }; for (const k of FU_KINDS) o[k] = { ...FU_DEFAULTS[k], ...(s[k] || {}) }; return o; };
 export async function fuSettings(uid) { return merge(await kv().get("s:" + uid, { type: "json" }).catch(() => null) || {}); }
 
 const tzOf = (phone, state) => zonesOf(phone, state)[0];
@@ -76,6 +79,13 @@ export async function onApptSaved(user, id, appt) {
   if (s.apptHourBefore.on && appt.at - 36e5 > Date.now() + 5 * 60_000) await schedule({ ...base, kind: "apptHourBefore", due: appt.at - 36e5 }, `ah:${user.id}:${id}:${appt.at}`);
 }
 
+// a lead arrived on a lead posting URL: a "new lead" text right away (or a few minutes later)
+export async function onLeadPosted(user, id, lead) {
+  const s = await fuSettings(user.id); if (!s.on || !s.newLead.on) return false;
+  const phone = to10(lead?.phone); if (!phone || lead.dnc || lead.scrub?.blocked) return false;
+  return schedule({ kind: "newLead", uid: user.id, identity: user.identity, leadId: id, to: phone, due: Date.now() + Math.max(0, +s.newLead.delayMin || 0) * 60_000 }, `nl:${user.id}:${id}`);
+}
+
 async function logFor(uid, entry) {
   const key = "log:" + uid, cur = (await kv().get(key, { type: "json" }).catch(() => null)) || [];
   await kv().setJSON(key, [{ at: Date.now(), ...entry }, ...cur].slice(0, 60));
@@ -90,6 +100,9 @@ async function stale(job, lead) {
   if (job.kind === "noAnswer" || job.kind === "nextMorning") {
     if ((lead.lastCallAt || 0) > job.callAt + 1000 && !NOANSWER.test(lead.lastDisposition || "")) return "The client was reached on a later call";
     if (["appointment", "sold", "lost"].includes(lead.stage)) return "The client already moved on";
+  } else if (job.kind === "newLead") {
+    if ((lead.lastCallAt || 0) > job.createdAt - 1000) return "You already called the client";
+    if (["appointment", "application", "sold", "lost"].includes(lead.stage)) return "The client already moved on";
   } else {
     const a = await apptDoc(job.uid, job.apptId);
     if (!a || a.done || a.at !== job.apptAt) return "The appointment changed";
@@ -150,13 +163,13 @@ export async function followupsRoute(req, action) {
   const user = await requireUser(req);
   const b = req.method === "POST" ? await req.json().catch(() => ({})) : {};
   if (action === "settings") {
-    if (req.method === "POST") { const s = merge({ ...(await fuSettings(user.id)), ...b }); for (const k of ["noAnswer", "nextMorning", "apptDayBefore", "apptHourBefore"]) s[k].text = String(s[k].text || "").slice(0, 480); s.noAnswer.delayMin = Math.min(240, Math.max(1, Math.round(+s.noAnswer.delayMin || 10))); await kv().setJSON("s:" + user.id, s); }
+    if (req.method === "POST") { const s = merge({ ...(await fuSettings(user.id)), ...b }); for (const k of FU_KINDS) s[k].text = String(s[k].text || "").slice(0, 480); s.noAnswer.delayMin = Math.min(240, Math.max(1, Math.round(+s.noAnswer.delayMin || 10))); s.newLead.delayMin = Math.min(120, Math.max(0, Math.round(+s.newLead.delayMin || 0))); await kv().setJSON("s:" + user.id, s); }
     return json({ settings: await fuSettings(user.id) });
   }
   if (action === "preview") {
     const s = merge({ ...(await fuSettings(user.id)), ...(b.settings || {}) }), cfg = await loadConfig();
     const sample = { first: "Margaret" }, at = nextMorning("America/New_York") + 4.5 * 36e5; // tomorrow at 2:00 PM
-    const out = {}; for (const k of ["noAnswer", "nextMorning", "apptDayBefore", "apptHourBefore"]) out[k] = fill(s[k].text, { lead: sample, agent: user, company: cfg.settings.company, at, tz: "America/New_York" });
+    const out = {}; for (const k of FU_KINDS) out[k] = fill(s[k].text, { lead: sample, agent: user, company: cfg.settings.company, at, tz: "America/New_York" });
     return json({ preview: out });
   }
   if (action === "queue") {

@@ -92,6 +92,12 @@ export async function requireFeature(req, ...keys) {
   return u;
 }
 export const requireDialer = (req) => requireFeature(req, "dialer");
+// someone's account and access, without a request (lead posting, background jobs)
+export async function userById(id) {
+  await ensureSchema();
+  const u = await D1().prepare("SELECT id, email, name FROM users WHERE id=?1").bind(String(id || "")).first();
+  return u ? withMember(u) : null;
+}
 export const clearUserCache = () => cache.clear();
 
 // POST /api/auth/{signup|login|logout|password}, GET /api/auth/me
