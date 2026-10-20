@@ -246,7 +246,7 @@
     if (lines.length < s.rawLen) return;
     s.rawLen = lines.length; // until the client agrees we only count lines: nothing is read or kept
     if (s.consent !== "agreed") { schedule(); return; }
-    ingest(s, lines.slice(s.from)); schedule();
+    ingest(s, lines.slice(s.from)); aiNotes(s); schedule();
   });
   window.addEventListener("hp:callend", () => {
     const s = CP.cur; if (!s) return;
@@ -265,7 +265,9 @@
     s.ex.tasks.forEach((t, i) => (s.sel["t:" + i] = !!t.at));
     s.ex.mem.forEach((m, i) => (s.sel["m:" + i] = true));
     s.summary = localSummary(s);
+    clearTimeout(s.aiNotes?.timer); if (s.aiNotes) s.aiNotes.busy = false;
     CP.pending = [...CP.pending.filter((x) => x.id !== s.id), s]; savePending();
+    if (s.lines.length >= 6) aiPass(s); // Highpoint Bot writes the summary (the local one stays if it can't)
     schedule();
     setTimeout(() => { if (!DL()?.busy && DL()?.profileId === s.leadId && !CP.modal && s.state === "review") openModal(s.id); }, 300);
   }
@@ -284,24 +286,69 @@
     return bits.join(" ");
   }
 
+  // Highpoint Bot on the server (/api/ai); only ever sees the redacted transcript
+  async function bot(system, prompt) {
+    const r = await fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ system, messages: [{ role: "user", content: prompt }] }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(j.error || "Highpoint Bot isn't available"), { code: j.code, status: r.status });
+    return JSON.parse((String(j.text || "").match(/\{[\s\S]*\}/) || ["{}"])[0]);
+  }
   async function aiPass(s) {
-    let sample = null; try { sample = await window.claude?.use?.("sample"); } catch {}
-    if (!sample || !s.lines.length) return;
+    if (!s.lines.length || s.ai === "running") return;
     s.ai = "running"; schedule();
-    const tx = s.lines.map((l) => `${l.who}: ${l.text}`).join("\n").slice(0, 20000);
+    const tx = s.lines.map((l) => `${l.who === "Agent" ? "Agent" : "Client"}: ${l.text}`).join("\n").slice(-20000);
     try {
-      const r = await sample(`You are the call copilot for a licensed life insurance agent at Highpoint Financial (final expense, mortgage protection, IUL). Read this call transcript and return ONLY a JSON object, no prose, with:
+      const j = await bot("You write CRM notes for a licensed life insurance agent. Reply with JSON only.", `You are the call copilot for a licensed life insurance agent at Highpoint Financial (final expense, mortgage protection, IUL). Read this call transcript and return ONLY a JSON object, no prose, with:
 "summary": 2-3 plain sentences for the CRM (client's situation, what they want, objections, the agreed next step),
 "memory": up to 4 short personal details worth remembering for rapport next call (hobbies, family, life events), never health, SSN or bank details,
 "next_step": one short line.
 Never include Social Security, bank, card or account numbers. Transcript:
-"""${tx}"""`, { cache: false, modelTier: "quick" });
-      const j = JSON.parse((r.text.match(/\{[\s\S]*\}/) || ["{}"])[0]);
+"""${tx}"""`);
       if (j.summary) s.summary = redact(String(j.summary).trim());
       if (Array.isArray(j.memory)) j.memory.slice(0, 4).forEach((t) => { const text = redact(String(t)).trim(); if (text && !s.ex.mem.some((m) => m.text.toLowerCase() === text.toLowerCase())) { s.ex.mem.push({ text, ai: true }); s.sel["m:" + (s.ex.mem.length - 1)] = true; } });
       s.ai = "done";
-    } catch { s.ai = ""; }
+    } catch (e) { s.ai = ["unavailable", "bad_key", "no_credit", "plan", "billing"].includes(e.code) ? "off" : ""; }
     savePending(); schedule();
+  }
+
+  /* ============ notes during the call: suggestions you add with one tap ============
+     From the call itself (what the copilot heard: needs, coverage, beneficiary, objections, callbacks, personal
+     details) and from Highpoint Bot, which reads the redacted conversation every so often and writes short notes. */
+  const NOTE_KEYS = ["concern", "coverage", "budget", "beneficiary", "existing", "decision", "health", "meds", "tobacco", "age", "hw", "draft", "mortgageBalance", "mortgagePayment", "lender", "goal"];
+  const nid = (t) => { let h = 0; for (const c of String(t).toLowerCase()) h = (h * 31 + c.charCodeAt(0)) | 0; return "n" + (h >>> 0).toString(36); };
+  function suggestions(s, l) {
+    if (!s?.ex) return [];
+    const out = [], add = (text, src) => { text = redact(String(text || "").trim()); if (text && !out.some((x) => x.text.toLowerCase() === text.toLowerCase())) out.push({ id: nid(text), text, src }); };
+    for (const t of s.aiNotes?.items || []) add(t, "ai");
+    for (const k of NOTE_KEYS) { const f = s.ex.F[k]; if (f && FIELDS[k] && f.value != null && f.value !== "") add(`${FIELDS[k].label}: ${f.value}`, "call"); }
+    for (const o of s.ex.objs || []) add(`Objection: ${o.label.toLowerCase()}`, "call");
+    for (const t of s.ex.tasks || []) { const k = { callback: "Callback", promise: "You promised", followup: "Follow-up", reminder: "Reminder" }[t.kind] || "To-do", lab = String(t.label || ""); add(`${k}${lab && lab.toLowerCase() !== k.toLowerCase() ? ": " + lab : ""}${t.at ? " · " + fmtWhen(t.at) : ""}`, "call"); }
+    for (const m of s.ex.mem || []) add(m.text, "call");
+    const st = (s.noteState = s.noteState || {});
+    return out.filter((x) => !st[x.id]);
+  }
+  function addNotes(s, items) {
+    const st = (s.noteState = s.noteState || {});
+    const lines = items.map((x) => { st[x.id] = "added"; return "• " + x.text; });
+    if (!lines.length) return;
+    s.notes = (s.notes ? s.notes.replace(/\s*$/, "") + "\n" : "") + lines.join("\n");
+    if (s.state !== "live") savePending();
+  }
+  // Highpoint Bot reads along: after enough new talk, at most every 25 seconds, up to 30 times a call
+  function aiNotes(s) {
+    const a = (s.aiNotes = s.aiNotes || { at: 0, seen: 0, busy: false, n: 0, items: [], status: "" });
+    if (s.consent !== "agreed" || s.state !== "live" || a.busy || a.status === "off" || a.n >= 30) return;
+    if (s.lines.filter((x) => x.who === "Lead").length < 2 || s.lines.length - a.seen < 4) return;
+    const wait = 25000 - (Date.now() - a.at);
+    if (wait > 0) { clearTimeout(a.timer); a.timer = setTimeout(() => aiNotes(s), wait + 100); return; }
+    a.busy = true; a.at = Date.now(); a.n++; const upto = s.lines.length;
+    const tx = s.lines.slice(-90).map((l) => `${l.who === "Agent" ? "Agent" : "Client"}: ${l.text}`).join("\n").slice(-9000);
+    const prod = { FE: "final expense", MP: "mortgage protection", IUL: "IUL" }[s.product] || "life insurance";
+    bot("You write short CRM notes for a licensed life insurance agent during a live call. Reply with JSON only.",
+      `This is a ${prod} call with ${s.first || "the client"}. Write up to 6 short notes (each under 120 characters) the agent would want in the client's file: who they are, what they want and why, money and coverage details, health and lifestyle facts the client stated, objections, and agreed next steps. Only what the client actually said or agreed to. Never include Social Security, bank, card, Medicare or account numbers.\nReturn {"notes":["..."]}.\n\nTranscript so far:\n"""${tx}"""`)
+      .then((j) => { if (Array.isArray(j.notes)) { a.items = j.notes.map((t) => redact(String(t || "").replace(/^[-•*\s]+/, "").trim())).filter((t) => t && t.length <= 200).slice(0, 6); a.status = "ok"; a.seen = upto; } })
+      .catch((e) => { a.status = ["unavailable", "bad_key", "no_credit", "plan", "billing"].includes(e.code) ? "off" : "err"; a.seen = upto; })
+      .finally(() => { a.busy = false; schedule(); if (s.state === "live" && s.lines.length - upto >= 4) aiNotes(s); });
   }
 
   /* ============ saving to the client ============ */
@@ -320,7 +367,8 @@ Never include Social Security, bank, card or account numbers. Transcript:
     const memNew = s.ex.mem.filter((m, i) => s.sel["m:" + i]).map((m) => ({ text: m.text, at: s.endedAt }));
     const old = l.copilot || {};
     patch.copilot = { memory: [...(old.memory || []), ...memNew].filter((m, i, a) => a.findIndex((x) => x.text.toLowerCase() === m.text.toLowerCase()) === i).slice(-30), lastSummary: s.summary, lastCallAt: s.endedAt, calls: (old.calls || 0) + 1, consentAt: s.consentAt || null, consentNote: s.imported ? "Agent confirmed the disclosure on an imported call" : (s.consentAt ? "Client agreed on a live call" : ""), audit: [...(old.audit || []), ...audit].slice(-200) };
-    patch.notes = d.addNoteObj(l, "Copilot summary: " + s.summary);
+    const notes = redact(String(s.notes || "").trim());
+    patch.notes = d.addNoteObj(l, "Copilot summary: " + s.summary + (notes ? "\n\nCall notes:\n" + notes : ""));
     let appts = 0;
     for (const [i, t] of s.ex.tasks.entries()) {
       if (!s.sel["t:" + i]) continue; const at = s.edits["t:" + i] ?? t.at; if (!at) continue;
@@ -395,7 +443,8 @@ Never include Social Security, bank, card or account numbers. Transcript:
     const st = !s ? ["idle", "Idle"] : s.paused ? ["paused", "Paused"] : s.state === "ending" ? ["review", "Wrapping up"] : ["live", "Listening"];
     const ex = s?.ex || { F: {}, tasks: [], objs: [], mem: [], conflicts: {} };
     const tab = CP.tab;
-    const tabs = [["live", "Live", Object.keys(ex.F).length], ["mem", "Memory", (l.copilot?.memory?.length || 0) + ex.mem.length], ["tasks", "Tasks", ex.tasks.length]];
+    const sugg = suggestions(s, l);
+    const tabs = [["live", "Live", Object.keys(ex.F).length], ["notes", "Notes", sugg.length], ["mem", "Memory", (l.copilot?.memory?.length || 0) + ex.mem.length], ["tasks", "Tasks", ex.tasks.length]];
     let body = "";
     if (tab === "live") {
       if (s && prod === "FE" && window.HP_FEX && window.HP_FEX_TRACK) body += stageHTML(s.fex || window.HP_FEX_TRACK.track([], window.HP_FEX.stages), l);
@@ -418,6 +467,16 @@ Never include Social Security, bank, card or account numbers. Transcript:
         CP.lastKeys = new Set(keys.map((k) => k + ex.F[k].value));
       } else if (s) body += `<p class="hpc-empty">Listening. Client details show up here as they come up in the conversation.</p>`;
       else body += `<p class="hpc-empty">Copilot starts listening when the call connects. It fills in the profile, catches callbacks and promises, and flags objections as you talk.</p><button type="button" class="btn" data-import style="justify-self:start">Paste a transcript from another dialer</button>`;
+    } else if (tab === "notes") {
+      if (!s) body += `<p class="hpc-empty">Notes for the call start here when it connects: type your own, and add the ones Copilot suggests from what the client says with one tap.</p>`;
+      else {
+        const a = s.aiNotes || {};
+        body += `<div class="hpc-sec">Your notes</div><textarea class="hpc-notes" data-notes rows="5" placeholder="Type notes for this call, or add suggestions below" aria-label="Notes for this call">${esc(s.notes || "")}</textarea>`;
+        body += `<div class="hpc-sec">Suggested from this call <span style="display:flex;gap:8px;align-items:center">${a.busy ? "<em>Highpoint Bot is reading…</em>" : ""}${sugg.length > 1 ? `<button type="button" class="hpc-addall" data-addall>Add all</button>` : ""}</span></div>`;
+        body += sugg.length ? `<ul class="hpc-sugg">${sugg.map((x) => `<li><button type="button" class="ok" data-nadd="${x.id}" aria-label="Add to notes" title="Add to notes">✓</button><span>${esc(x.text)}</span>${x.src === "ai" ? `<i title="Written by Highpoint Bot from the conversation">AI</i>` : ""}<button type="button" data-nno="${x.id}" aria-label="Dismiss" title="Dismiss">✕</button></li>`).join("")}</ul>`
+          : `<p class="hpc-empty">${Object.keys(s.noteState || {}).length ? "All caught up. New suggestions show up as the client talks." : "Listening. Suggestions show up here as the client talks."}${a.status === "off" ? " (Highpoint Bot is off, so these come from what Copilot heard.)" : ""}</p>`;
+        body += `<p class="hpc-empty">Your notes save to the client's file with the call summary.</p>`;
+      }
     } else if (tab === "mem") {
       const old = (l.copilot?.memory || []).slice().reverse();
       body += ex.mem.length ? `<div class="hpc-sec">New this call</div><ul class="hpc-mem">${ex.mem.map((m) => `<li class="new">${esc(m.text)}</li>`).join("")}</ul>` : "";
@@ -451,8 +510,9 @@ Never include Social Security, bank, card or account numbers. Transcript:
     return `<div class="hpc-h"><b>${ICON}Call complete</b>${modal ? `<button class="hpc-x" type="button" data-close aria-label="Close">✕</button>` : `<span class="hpc-st" data-s="review"><i></i>Review</span>`}</div>
       ${modal ? `<div style="font-weight:700">${esc(s.name)} <span class="hpc-ai">· ${new Date(s.endedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span></div>` : ""}
       <div class="hpc-stats"><div><b>${s.imported ? "—" : Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0")}</b><span>${s.imported ? "Imported" : "Talk time"}</span></div><div><b>${keys.length}</b><span>Fields</span></div><div><b>${ex.tasks.length}</b><span>To-dos</span></div></div>
-      <div class="hpc-sec">Summary ${s.ai === "running" ? "<em>Highpoint Bot is polishing…</em>" : s.ai === "done" ? "<em>by Highpoint Bot</em>" : s.lines.length && window.claude?.use ? `<button type="button" class="hpc-ai" data-act="polish" title="Sends the redacted transcript to Highpoint Bot" style="cursor:pointer;background:none;border:0;color:inherit;font:inherit;text-decoration:underline">Polish with Highpoint Bot</button>` : ""}</div>
+      <div class="hpc-sec">Summary ${s.ai === "running" ? "<em>Highpoint Bot is writing…</em>" : s.ai === "done" ? "<em>by Highpoint Bot</em>" : s.ai !== "off" && s.lines.length ? `<button type="button" class="hpc-ai" data-act="polish" title="Sends the redacted transcript to Highpoint Bot" style="cursor:pointer;background:none;border:0;color:inherit;font:inherit;text-decoration:underline">Polish with Highpoint Bot</button>` : ""}</div>
       <textarea class="hpc-sum" data-sum rows="4" aria-label="Call summary">${esc(s.summary)}</textarea>
+      ${(() => { const left = suggestions(s, l); return `<div class="hpc-sec">Your notes ${left.length ? `<button type="button" class="hpc-addall" data-addall>Add ${left.length} suggestion${left.length === 1 ? "" : "s"}</button>` : ""}</div><textarea class="hpc-notes" data-revnotes rows="${Math.min(10, Math.max(3, (s.notes || "").split("\n").length + 1))}" placeholder="Notes for the client's file" aria-label="Your notes">${esc(s.notes || "")}</textarea>`; })()}
       <p class="hpc-empty">Recording consent: ${s.imported ? "the agent confirmed the disclosure on an imported call" : s.consentAt ? "the client agreed on this call at " + new Date(s.consentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "not recorded"}.</p>
       ${(s.ex.flags || []).length ? `<div class="hpc-alert bad"><b>Compliance check</b><ul>${s.ex.flags.map((f) => `<li><b>${esc(f.label)}.</b> ${esc(f.tip)}${f.quote ? ` <em>"${esc(f.quote.slice(0, 160))}"</em>` : ""}</li>`).join("")}</ul>Review the wording before saving. Flags do not block anything.</div>` : ""}
       ${keys.length ? `<div class="hpc-sec">Save to client file <em>${keys.filter((k) => s.sel["f:" + k]).length}/${keys.length}</em></div><div class="hpc-fields" style="gap:0">${keys.map((k) => { const f = ex.F[k]; const was = onFile(l, k); const v = s.edits[k] ?? (FIELDS[k].num ? f.value : f.value); return `<div class="hpc-pick"><input type="checkbox" data-sel="f:${k}" ${s.sel["f:" + k] ? "checked" : ""} aria-label="Save ${esc(FIELDS[k].label)}"><span>${esc(FIELDS[k].label)}${f.conf === "med" ? " ·<br>check" : ""}</span><input type="text" data-ed="${k}" value="${esc(v)}">${was && was !== String(v) && !(FIELDS[k].num && money(v) === was) ? `<span class="was">Replaces: ${esc(was)}</span>` : ""}</div>`; }).join("")}</div>` : ""}
@@ -467,6 +527,13 @@ Never include Social Security, bank, card or account numbers. Transcript:
     $$("[data-q]", slot).forEach((b) => (b.onclick = () => { CP.openQuote = CP.openQuote === b.dataset.q ? null : b.dataset.q; schedule(true); }));
     $$("[data-consent]", slot).forEach((b) => (b.onclick = () => (b.dataset.consent === "agreed" ? agree(s) : decline(s))));
     const im = $("[data-import]", slot); if (im) im.onclick = () => openImport(l);
+    if (s) {
+      const ta = $("[data-notes]", slot); if (ta) { ta.oninput = () => { s.notes = ta.value; }; ta.onblur = () => schedule(true); }
+      const list = () => suggestions(s, l);
+      $$("[data-nadd]", slot).forEach((b) => (b.onclick = () => { const x = list().find((y) => y.id === b.dataset.nadd); if (x) { addNotes(s, [x]); schedule(true); } }));
+      $$("[data-nno]", slot).forEach((b) => (b.onclick = () => { (s.noteState = s.noteState || {})[b.dataset.nno] = "no"; schedule(true); }));
+      const all = $("[data-addall]", slot); if (all) all.onclick = () => { addNotes(s, list()); schedule(true); };
+    }
     const p = $("#hpcPause", slot);
     if (p) p.onclick = () => { s.paused = !s.paused; if (s.paused) s.skips.push([s.lines.length, null]); else { const last = s.skips[s.skips.length - 1]; if (last) last[1] = s.lines.length; } toast(s.paused ? "Copilot paused. Nothing is captured until you resume." : "Copilot listening again"); schedule(true); };
   }
@@ -475,6 +542,8 @@ Never include Social Security, bank, card or account numbers. Transcript:
     $$("[data-ed]", box).forEach((c) => (c.onchange = () => { s.edits[c.dataset.ed] = c.value.trim(); s.sel["f:" + c.dataset.ed] = true; savePending(); }));
     $$("[data-at]", box).forEach((c) => (c.onchange = () => { const v = c.value ? +new Date(c.value) : null; s.edits["t:" + c.dataset.at] = v; s.ex.tasks[+c.dataset.at].exact = true; if (v) s.sel["t:" + c.dataset.at] = true; savePending(); }));
     const sum = $("[data-sum]", box); if (sum) sum.onchange = () => { s.summary = redact(sum.value.trim()); savePending(); };
+    const rn = $("[data-revnotes]", box); if (rn) rn.onchange = () => { s.notes = redact(rn.value); savePending(); };
+    const aa = $("[data-addall]", box); if (aa) aa.onclick = () => { if (rn) s.notes = redact(rn.value); addNotes(s, suggestions(s, lead(s.leadId))); savePending(); box.innerHTML = reviewHTML(s, !!box.closest("#hpcModal")); wireReview(box, s); };
     $$("[data-act]", box).forEach((b) => (b.onclick = async () => { const a = b.dataset.act; if (a === "save") { b.disabled = true; try { await save(s); } catch (e) { toast("Couldn't save: " + (e.message || e)); b.disabled = false; } } else if (a === "later") later(s); else if (a === "polish") { b.disabled = true; aiPass(s); } else drop(s); }));
     const x = $("[data-close]", box); if (x) x.onclick = closeModal;
   }
