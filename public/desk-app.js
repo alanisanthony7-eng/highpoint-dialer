@@ -1008,16 +1008,20 @@ const TOOLS=[
     const c=IUL_CARRIERS[0],risk=tob?1.55:1,annual=(Number(i.monthly)||300)*12,face=Math.round(annual/ilTarget(age,sex,risk,"balanced",c)*1000/1000)*1000;const r=ilProject({age,sex,risk,face,annual,payTo:Number(i.pay_to_age)||100,rate:Number(i.rate)||5.5,dbo:"A",c,inc:null});const at=a=>Math.round(r.rows.find(x=>x.age===a)?.cv||0);return{deathBenefit:face,cashValueAt65:at(65),at75:at(75),at85:at(85),lapseAge:r.lapse}}}
 ];
 function aiContext(){const by=STAGES.map(([i,n])=>`${n}: ${[...leads.values()].filter(l=>(l.stage||"new")===i).length}`).join(", ");
-  return `You are the built-in assistant in "Highpoint Agent Desk", the CRM used by agents at Highpoint Financial LLC, licensed life insurance agents who sell final expense (FE), mortgage protection (MP) and indexed universal life (IUL). Today is ${new Date().toDateString()}. The book has ${leads.size} leads (${by}). Stage ids: ${STAGES.map(s=>s[0]).join(", ")}.
-Use the tools to look up leads instead of guessing, and only change a lead when the agent asks. Quotes from the quote tool are ballpark estimates, not carrier quotes; say so when you give numbers. When writing client-facing texts, keep them compliant: no guarantees of approval or returns, no pretending to be from a government program, and include "Reply STOP to opt out" in texts. Keep answers short and practical, plain text, no markdown headings. Refer to leads by name, never show ids. For underwriting questions, give your best general read of how carriers typically treat the condition (level, graded, guaranteed issue, or rate class), the details that change the answer, and remind the agent to confirm in the carrier's current underwriting guide, since guidelines change.`}
+  const recent=[...leads.values()].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,30)
+    .map(l=>`${fullName(l)} · ${stageName(l.stage)} · ${PROD[l.product]||"no product"} · age ${l.age||"?"} · ${l.state||""}`).join("\n");
+  return `You are the built-in assistant in Highpoint Agent Desk. Today is ${new Date().toDateString()}. The book has ${leads.size} leads (${by}).
+Recent clients — use these names, do not invent others:
+${recent||"(none)"}
+When writing client-facing texts: no guarantees of approval or returns, no pretending to be a government program, and include "Reply STOP to opt out." Keep answers short and practical. For underwriting, use the Highpoint FE UW model in your system prompt and remind the agent to confirm in the carrier's current guide.`}
 async function ask(text){
   if(aiBusy)return; text=text.trim(); if(!text)return;
   if(!sample){try{sample=await window.claude?.use?.("sample")}catch{}}
   addMsg("me",text); $("#aiIn").value="";
   if(!sample){addMsg("sys","The assistant isn't available right now. Sign in and try again.");return}
-  const turns=[...aiTurns,{role:"user",content:aiTurns.length?text:aiContext()+"\n\nAgent: "+text}];
+  const turns=[...aiTurns,{role:"user",content:text}];
   const out=addMsg("ai","Thinking…"); aiBusy=new AbortController(); $("#aiSend").textContent="Stop";
-  try{const res=await sample(turns,{onText:({text})=>{out.textContent=text;$("#msgs").scrollTop=1e9},signal:aiBusy.signal,tools:TOOLS,cache:false});
+  try{const res=await sample(turns,{system:aiContext(),onText:({text})=>{out.textContent=text;$("#msgs").scrollTop=1e9},signal:aiBusy.signal,tools:TOOLS,cache:false});
     out.textContent=res.text; aiTurns=[...turns,{role:"assistant",content:res.text}];
     if(aiTurns.length>24)aiTurns=[aiTurns[0],aiTurns[1],...aiTurns.slice(-20)];
   }catch(e){

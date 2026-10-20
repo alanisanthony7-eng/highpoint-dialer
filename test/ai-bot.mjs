@@ -40,8 +40,9 @@ await call("rep", "/api/auth/signup", { email: "rep@hp.com", password: "password
 
 let r = await call("rep", "/api/ai", hi);
 ok(r.s === 200 && r.j.text === "Hello from Workers AI", "Workers AI answers when the AI binding is set");
-ok(cfAsked.at(-1).model === "@cf/zai-org/glm-4.7-flash" && asked.length === 0, "it uses GLM-4.7 Flash and does not call Anthropic");
-ok(cfAsked.at(-1).input.messages[0].role === "system" && cfAsked.at(-1).input.messages[1].content === "hi", "the desk prompt and the user's message both go to the model");
+ok(cfAsked.at(-1).model === "@cf/google/gemma-4-26b-a4b-it" && asked.length === 0, "it uses Gemma 4 and does not call Anthropic");
+ok(cfAsked.at(-1).input.messages[0].role === "system" && /Highpoint Bot/.test(cfAsked.at(-1).input.messages[0].content) && /Heart attack/.test(cfAsked.at(-1).input.messages[0].content) && cfAsked.at(-1).input.messages[1].content === "hi", "the Highpoint knowledge prompt and the user's message both go to the model");
+ok(cfAsked.at(-1).input.temperature === 0.2 && cfAsked.at(-1).input.chat_template_kwargs?.enable_thinking === true, "answers stay conservative so rates are not invented");
 
 env.ANTHROPIC_API_KEY = "sk-ant-should-not-be-used";
 await call("rep", "/api/ai", hi);
@@ -49,14 +50,19 @@ ok(asked.length === 0, "with a Workers AI binding, a leftover Anthropic key is n
 
 env.HP_AI_MODEL = "@cf/meta/llama-3.2-3b-instruct";
 await call("rep", "/api/ai", hi);
-ok(cfAsked.at(-1).model === "@cf/meta/llama-3.2-3b-instruct", "HP_AI_MODEL can pick a cheaper Cloudflare model");
+ok(cfAsked.at(-1).model === "@cf/meta/llama-3.2-3b-instruct" && !cfAsked.at(-1).input.chat_template_kwargs, "HP_AI_MODEL can pick a cheaper Cloudflare model");
 env.HP_AI_MODEL = "claude-sonnet-5-5";
 await call("rep", "/api/ai", hi);
-ok(cfAsked.at(-1).model === "@cf/zai-org/glm-4.7-flash", "a Claude model name is ignored when Workers AI is on");
+ok(cfAsked.at(-1).model === "@cf/google/gemma-4-26b-a4b-it", "a Claude model name is ignored when Workers AI is on");
 env.HP_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
 await call("rep", "/api/ai", hi);
-ok(cfAsked.at(-1).model === "@cf/zai-org/glm-4.7-flash", "the retired Llama 3.1 8B id is remapped to GLM-4.7 Flash");
+ok(cfAsked.at(-1).model === "@cf/google/gemma-4-26b-a4b-it", "the retired Llama 3.1 8B id is remapped to Gemma 4");
 delete env.HP_AI_MODEL;
+
+cfReply = () => ({ response: "<think>internal notes</think>Typical after 2 years is Standard / level. Confirm in the guide." });
+r = await call("rep", "/api/ai", { messages: [{ role: "user", content: "heart attack 3 years ago" }] });
+ok(r.s === 200 && /Standard/.test(r.j.text) && !/think|internal notes/i.test(r.j.text), "thinking notes stay hidden from the agent");
+cfReply = () => ({ response: "Hello from Workers AI" });
 
 cfReply = () => { throw new Error("30000 neurons remaining would drop below 0 (3028)"); };
 r = await call("rep", "/api/ai", hi);
