@@ -510,6 +510,27 @@ const MEDS={"Lantus":"dmi","Humalog":"dmi","Novolog":"dmi","Levemir":"dmi","Tres
  "Suboxone":"alcohol","Buprenorphine":"alcohol","Methadone":"alcohol","Naltrexone":"alcohol",
  "Hydroxychloroquine":"lupus","Methotrexate":"ra","Humira":"ra","Tacrolimus":"transplant","Prograf":"transplant",
  "Levothyroxine":"thyroid","Synthroid":"thyroid","Ocrevus":"ms","Tecfidera":"ms"};
+/* more everyday brand and generic names heard on calls (each mapped to what it usually treats) */
+Object.assign(MEDS,{"Toujeo":"dmi","Novolin":"dmi","Admelog":"dmi","Apidra":"dmi","Fiasp":"dmi",
+ "Glucophage":"dm","Glyburide":"dm","Pioglitazone":"dm","Actos":"dm","Sitagliptin":"dm","Janumet":"dm","Victoza":"dm","Liraglutide":"dm","Rybelsus":"dm","Semaglutide":"dm","Dulaglutide":"dm","Tirzepatide":"dm","Empagliflozin":"dm","Dapagliflozin":"dm","Invokana":"dm","Tradjenta":"dm","Amaryl":"dm","Glucotrol":"dm",
+ "Norvasc":"hbp","Toprol":"hbp","Lopressor":"hbp","Atenolol":"hbp","Cozaar":"hbp","Diovan":"hbp","Benicar":"hbp","Olmesartan":"hbp","Irbesartan":"hbp","Telmisartan":"hbp","Benazepril":"hbp","Enalapril":"hbp","Ramipril":"hbp","Quinapril":"hbp","Hydralazine":"hbp","Clonidine":"hbp","Chlorthalidone":"hbp","HCTZ":"hbp","Triamterene":"hbp","Nifedipine":"hbp","Propranolol":"hbp","Bisoprolol":"hbp","Labetalol":"hbp","Coreg":"hbp","Zestril":"hbp","Prinivil":"hbp",
+ "Lipitor":"chol","Crestor":"chol","Zocor":"chol","Lovastatin":"chol","Pravachol":"chol","Ezetimibe":"chol","Zetia":"chol","Fenofibrate":"chol","Tricor":"chol","Repatha":"chol",
+ "Coumadin":"afib","Jantoven":"afib","Pradaxa":"afib","Dabigatran":"afib","Apixaban":"afib","Rivaroxaban":"afib","Sotalol":"afib","Flecainide":"afib","Multaq":"afib","Cardizem":"afib","Digoxin":"afib",
+ "Ranolazine":"cad","Imdur":"cad","Nitrostat":"cad","Effient":"cad","Prasugrel":"cad","Ticagrelor":"cad",
+ "Bumetanide":"chf","Bumex":"chf","Torsemide":"chf","Aldactone":"chf",
+ "Tiotropium":"copd","Anoro":"copd","Incruse":"copd","Stiolto":"copd","Breztri":"copd","Wixela":"copd","Ipratropium":"copd","Combivent":"copd","Duoneb":"copd",
+ "Ventolin":"asthma","ProAir":"asthma","Proventil":"asthma","Singulair":"asthma","Montelukast":"asthma","Flovent":"asthma","Qvar":"asthma","Pulmicort":"asthma",
+ "Zoloft":"depression","Celexa":"depression","Citalopram":"depression","Escitalopram":"depression","Fluoxetine":"depression","Paxil":"depression","Paroxetine":"depression","Cymbalta":"depression","Duloxetine":"depression","Effexor":"depression","Venlafaxine":"depression","Bupropion":"depression","Mirtazapine":"depression","Remeron":"depression","Buspirone":"depression","Buspar":"depression","Xanax":"depression","Alprazolam":"depression","Ativan":"depression","Lorazepam":"depression","Klonopin":"depression","Clonazepam":"depression","Hydroxyzine":"depression",
+ "Lamotrigine":"bipolar","Lamictal":"bipolar","Depakote":"bipolar","Divalproex":"bipolar","Aripiprazole":"bipolar","Latuda":"bipolar","Vraylar":"bipolar","Olanzapine":"schizo","Zyprexa":"schizo","Invega":"schizo",
+ "Rivastigmine":"dementia","Exelon":"dementia","Galantamine":"dementia","Leqembi":"dementia",
+ "Rytary":"parkinsons","Azilect":"parkinsons",
+ "Plaquenil":"lupus","Benlysta":"lupus","Enbrel":"ra","Xeljanz":"ra","Rinvoq":"ra","Orencia":"ra",
+ "Armour Thyroid":"thyroid","Methimazole":"thyroid","Unithroid":"thyroid","Euthyrox":"thyroid",
+ "Arimidex":"cancerPast","Femara":"cancerPast","Exemestane":"cancerPast","Lupron":"cancerNow","Opdivo":"cancerNow","Ibrance":"cancerNow",
+ "Truvada":"hiv","Descovy":"hiv","Odefsey":"hiv","Dovato":"hiv",
+ "Antabuse":"alcohol","Vivitrol":"alcohol","Sublocade":"alcohol",
+ "Cellcept":"transplant","Mycophenolate":"transplant","Envarsus":"transplant",
+ "Mavyret":"hepc","Epclusa":"hepc","Harvoni":"hepc"});
 const NIC={none:["None",false],cig:["Cigarettes",true],cigar:["Cigars",true],pipe:["Pipe",true],chew:["Chewing tobacco",true],vape:["Vape or e-cigarette",true],nrt:["Nicotine patch or gum",true],mj:["Marijuana",false]};
 const PAY={eft:"Bank draft / EFT",ssc:"Direct Express / SS card",cc:"Credit or debit card",dc:"Direct bill (mailed)"};
 FE_CARRIERS.forEach(c=>c.pref=["Transamerica","Aetna","American Home Life","American Amicable","Royal Neighbors","Foresters","Corebridge","Ethos","Fidelity Life","Aetna Accendo"].includes(c.n));

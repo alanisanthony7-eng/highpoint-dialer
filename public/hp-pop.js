@@ -493,15 +493,15 @@
       const parts = String(v("health")).split(/;\s*/), dia = parts.some((p) => /diabet/i.test(p));
       for (const p of parts) {
         const hit = CMAP.find(([re]) => re.test(p)); if (!hit || (hit[1] === "dmc" && !dia)) continue;
-        const k = hit[1], yr = p.match(/since (\d{4})/i);
-        add("cond=" + k, q.COND[k]?.n.replace(/\s*\(.*\)$/, "") || p, () => { if (Q.FE.conds.some((c) => c.k === k)) return () => {}; Q.FE.conds.push(yr ? { k, at: +new Date(+yr[1], 6, 1) } : { k }); return () => { Q.FE.conds = Q.FE.conds.filter((c) => c.k !== k); }; });
+        const yr = p.match(/since (\d{4})/i), it = condItem(hit[1], yr ? +new Date(+yr[1], 6, 1) : null, undefined, p);
+        if (it) out.push(it);
       }
     }
     if (v("meds") && v("meds") !== "None") {
       const names = Object.keys(q.MEDS);
       for (const m of String(v("meds")).split(/,\s*/)) {
-        const nm = names.find((x) => x.toLowerCase() === m.toLowerCase()) || m.replace(/^./, (c) => c.toUpperCase()), ck = q.MEDS[nm];
-        add("med=" + nm, nm, () => { const hadM = Q.FE.meds.includes(nm), hadC = !ck || Q.FE.conds.some((c) => c.k === ck); if (!hadM) Q.FE.meds.push(nm); if (!hadC) Q.FE.conds.push({ k: ck }); return () => { if (!hadM) Q.FE.meds = Q.FE.meds.filter((x) => x !== nm); if (!hadC) Q.FE.conds = Q.FE.conds.filter((c) => c.k !== ck); }; });
+        const nm = names.find((x) => x.toLowerCase() === m.toLowerCase()) || medVocab().names.get(m.toLowerCase().replace(/-/g, " ")) || m.replace(/^./, (c) => c.toUpperCase());
+        out.push(medItem(nm));
       }
     }
     const hw = String(v("hw") || ""), ht = hw.match(/(\d)'(\d+)"/), wt = hw.match(/(\d+) lbs/);
@@ -518,6 +518,203 @@
     if (bal > 0 && Q.tab === "TERM") add("bal=" + bal, `Mortgage ${usd(bal)}`, () => { const was = Q.TERM.amt; Q.TERM.amt = Math.max(50000, Math.ceil(bal / 5000) * 5000); return () => { Q.TERM.amt = was; }; });
     return out;
   }
+  /* ---------- health heard on the call ----------
+     Two listeners, both only after the client agrees to recording, both only on what the CLIENT says about themselves:
+     1. Word lists (instant, offline): the ways people say each condition, and every medication the quoter knows
+        (its own list plus Aetna Accendo's drug list). Skips "no ...", "never had ...", "used to take ...", and
+        anything about a family member. Picks up when ("since 2015", "two years ago", "last year").
+     2. Highpoint Bot reads the conversation for what the lists miss (how people really talk, misspelled drugs).
+     Everything lands in the quoter's Health section with a tag saying where it came from, and ✕ removes it for good. */
+  const SAID = [
+    [/\btype\s*(?:1|one)\s*diabet\w*|\bjuvenile diabet\w*|\binsulin[- ]dependent\b/i, "dmi"],
+    [/\b(?:i'?m|am|i'?ve been)\s+(?:a\s+)?diabetic\b|\b(?<!pre[- ]?)diabet(?:es|ic)\b|\bsugar diabetes\b|\bmy (?:blood )?sugar(?:'s| is)? (?:high|up|bad)\b/i, "dm"],
+    [/\b(?:on|take|taking|use|using)\s+insulin\b|\binsulin shots?\b/i, "dmi"],
+    [/\b(?:neuropathy|retinopathy)\b/i, "dmc"],
+    [/\bhigh blood pressure\b|\bhypertension\b|\bblood pressure (?:pills?|meds?|medicine|medication)\b/i, "hbp"],
+    [/\b(?:high )?cholesterol\b/i, "chol"],
+    [/\bheart attacks?\b|\bmyocardial infarction\b/i, "mi"],
+    [/\b[Mm]ini[- ]?[Ss]trokes?\b|\b[Tt]ransient [Ii]schemic\b|\bT\.?I\.?A\b/, "tia"],
+    [/\b(?<!mini[- ]?)strokes?\b/i, "stroke"],
+    [/\bstents?\b|\b(?:heart|triple|double|quadruple|coronary) bypass\b|\bhad (?:a )?bypass\b|\bangina\b|\bcoronary artery\b|\bblocked arter(?:y|ies)\b/i, "cad"],
+    [/\bcongestive heart failure\b|\bheart failure\b|\bc\.?h\.?f\.?\b|\bweak heart\b/i, "chf"],
+    [/\ba-?fib\b|\batrial fibrillation\b|\birregular heart ?beat\b|\barrhythmia\b/i, "afib"],
+    [/\bc\.?o\.?p\.?d\.?\b|\bemphysema\b|\bchronic bronchitis\b/i, "copd"],
+    [/\b(?:on|use|using|need|carry|wear)\s+(?:my\s+|an?\s+)?oxygen\b|\boxygen (?:tank|machine|concentrator)\b/i, "o2"],
+    [/\basthma\b|\binhaler\b/i, "asthma"],
+    [/\bsleep apnea\b|\bc-?pap\b/i, "apnea"],
+    [/\bskin cancer\b|\bbasal cell\b|\bsquamous cell\b|\bmelanoma\b/i, "skin"],
+    [/\bchemo(?:therapy)?\b|\bradiation (?:treatments?|therapy)\b|\b(?:have|got|fighting|battling|being treated for|treating)\s+(?:\w+\s+){0,2}cancer\b/i, "cancerNow"],
+    [/\bcancer\b|\btumou?r\b|\bin remission\b|\bcancer[- ]free\b/i, "cancerPast"],
+    [/\bdialysis\b/i, "dialysis"],
+    [/\bkidney (?:disease|failure|problems?|issues?)\b|\bc\.?k\.?d\.?\b|\bbad kidneys\b/i, "ckd"],
+    [/\bcirrhosis\b|\bliver (?:disease|failure|problems?)\b/i, "liver"],
+    [/\bhep(?:atitis)?\s*c\b/i, "hepc"],
+    [/\balzheimer'?s?\b|\bdementia\b/i, "dementia"],
+    [/\bparkinson'?s?\b/i, "parkinsons"],
+    [/\bmultiple sclerosis\b/i, "ms"],
+    [/\blupus\b/i, "lupus"],
+    [/\brheumatoid\b/i, "ra"],
+    [/\bbi-?polar\b/i, "bipolar"],
+    [/\bschizophreni\w*/i, "schizo"],
+    [/\bdepress(?:ion|ed)\b|\banxiety\b|\bpanic attacks?\b/i, "depression"],
+    [/\b(?:alcohol|drug|substance)\s+(?:abuse|treatment|rehab|problem)\b|\balcoholi(?:c|sm)\b|\bwent to rehab\b/i, "alcohol"],
+    [/\bh\.?i\.?v\b|(?<!(?:hearing|walking|visual|study|teaching|mobility|band|first)[\s-]?)\baids\b/i, "hiv"],
+    [/\b(?:kidney|liver|heart|lung|organ) transplant\b/i, "transplant"],
+    [/\bamputat\w*/i, "amput"],
+    [/\bwheel ?chair\b|\bmobility scooter\b|\bneed help (?:bathing|dressing|eating|getting dressed)\b/i, "wheelchair"],
+    [/\b(?:hip|knee) replacement\b/i, "joint"],
+    [/\b(?:hypo|hyper)?thyroid\b/i, "thyroid"],
+    [/\b(?:live|living|stay|staying|i'?m|am|been) (?:in|at) (?:a |the )?nursing home\b|\b(?:in|on|under) hospice\b|\bin the hospital (?:right )?now\b/i, "nursing"],
+    [/\bterminal(?:ly ill| illness| cancer| diagnosis)\b|\b(?:i'?m|am) terminal\b|\b(?:months|weeks) to live\b/i, "terminal"],
+    [/\b(?:surgery|procedure|biopsy|tests?) (?:coming up|scheduled|next (?:week|month))\b|\bwaiting (?:on|for) (?:test|biopsy) results\b/i, "pending"],
+  ];
+  const H_FAMILY = /\b(?:my|his|her|their|our)\s+(?:\w+\s+)?(?:mother|mom|mama|father|dad|daddy|brother|sister|husband|wife|aunt|uncle|grand(?:ma|pa|mother|father)|son|daughter|sibling|cousin|friend|neighbor|parents|family|kids|children|partner|boyfriend|girlfriend|spouse)s?\b|\b(?:he|she|they)(?:'s|\s+(?:has|had|have|takes?|took|was|is|got|gets|uses?))\b/i;
+  const H_NEG = /\b(?:no|not|never|nope|nah|without|don'?t|do not|haven'?t|hasn'?t|didn'?t|doesn'?t|ain'?t|negative for|free of|ruled out|none of|nothing like)\b/i;
+  const H_HYPO = /\b(?:in case|if i (?:ever )?(?:get|got|had|have)|what if|worried about|afraid of|scared of|prevent|risk of|chance of|check(?:ed)? for|tested for|screen(?:ed|ing)? for)\b/i;
+  const H_AFTER = /^[^.;!?]{0,30}?\b(?:runs in|in (?:my|the|our) family|on (?:my|his|her) side)\b/i;
+  const H_PAST_MED = /\b(?:used to|stopped|no longer|quit|came off|off of|not on|weaned off|ran out of)\b/i;
+  const H_WASPAST = /\b(?:had|did|finished|went through|was|beat|beaten|survived|survivor|remission|cancer[- ]free|all clear)\b/i;
+  const NUM = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, fifteen: 15, twenty: 20, couple: 2, few: 3, several: 4 };
+  function whenSaid(t) { // -> a date, or null
+    let m;
+    if ((m = t.match(/\b(?:since|in|back in|around|about|of)\s+((?:19|20)\d{2})\b/i))) return +new Date(+m[1], 6, 1);
+    if ((m = t.match(/\b(\d{1,2}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|couple|few|several)(?:\s+(?:and a half|or so))?\s+(?:of\s+)?years?\s+(?:ago|back|now)\b/i))) return Date.now() - (NUM[m[1].toLowerCase()] || +m[1]) * YR;
+    if ((m = t.match(/\b(?:for|about|almost|over)\s+(\d{1,2}|a|one|two|three|four|five|six|seven|eight|nine|ten|twenty|couple|few|several)\s+(?:of\s+)?years\b/i))) return Date.now() - (NUM[m[1].toLowerCase()] || +m[1]) * YR;
+    if ((m = t.match(/\b(\d{1,2}|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|couple|few|several)\s+months?\s+(?:ago|back)\b/i))) return Date.now() - ((NUM[m[1].toLowerCase()] || +m[1]) / 12) * YR;
+    if (/\blast year\b/i.test(t)) return Date.now() - YR;
+    if (/\bthis year\b|\brecently\b|\bjust (?:had|got|found out|diagnosed)\b|\blast (?:month|week)\b/i.test(t)) return Date.now() - 0.3 * YR;
+    return null;
+  }
+  const tcase = (x) => String(x).toLowerCase().replace(/(^|[\s\-\/(])([a-z])/g, (a, b, c) => b + c.toUpperCase());
+  let MEDV = null; // every medication the quoter knows: spoken name (lower case) -> the name the quoter files it under
+  function medVocab() {
+    if (MEDV) return MEDV;
+    const q = QT(), names = new Map(), rows = window.HP_DRUGS?.accendo?.rows || [], full = new Set(rows.map((r) => String(r[0]).toLowerCase()));
+    for (const m of Object.keys(q.MEDS)) names.set(m.toLowerCase().replace(/-/g, " "), m);
+    for (const r of rows) {
+      const raw = String(r[0]), n = raw.split(/[(,/]/)[0].replace(/\s*-\s*/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+      if (n.length < 5 || /\d/.test(n) || n.split(" ").length > 2 || names.has(n)) continue;
+      names.set(n, full.has(n) ? tcase(n) : tcase(raw)); // file it under the drug list's own name so Accendo's check still matches
+    }
+    MEDV = { names };
+    return MEDV;
+  }
+  // the medications named in a bit of speech: [{ name, index }]
+  function medsIn(text) {
+    const V = medVocab(), toks = [...String(text).matchAll(/[a-z][a-z']*/gi)], out = [];
+    for (let i = 0; i < toks.length; i++) {
+      const a = toks[i][0].toLowerCase(), b = toks[i + 1]?.[0].toLowerCase();
+      const two = b ? V.names.get(a + " " + b) : null, one = V.names.get(a);
+      if (two) { out.push({ name: two, index: toks[i].index }); i++; } else if (one) out.push({ name: one, index: toks[i].index });
+    }
+    return out;
+  }
+  const MORE_EXACT = { dmi: "dm", cancerNow: "cancerPast" }; // diabetes on insulin replaces plain diabetes, and so on
+  function condItem(k, at, src, quote) {
+    const q = QT(), Q = q.Q, C = q.COND[k]; if (!C) return null;
+    return { key: "cond=" + k, label: C.n.replace(/\s*\(.*\)$/, ""), src, quote, at, apply: () => {
+      const cur = Q.FE.conds.find((c) => c.k === k);
+      if (cur) { if (at && !cur.at) { cur.at = at; return () => { delete cur.at; }; } return () => {}; }
+      const lessI = Q.FE.conds.findIndex((c) => c.k === MORE_EXACT[k]), less = lessI >= 0 ? Q.FE.conds[lessI] : null;
+      const nc = { k }; if (at || less?.at) nc.at = at || less.at;
+      if (less) Q.FE.conds.splice(lessI, 1, nc); else Q.FE.conds.push(nc);
+      return () => { Q.FE.conds = Q.FE.conds.filter((c) => c !== nc); if (less && !Q.FE.conds.some((c) => c.k === less.k)) Q.FE.conds.push(less); };
+    } };
+  }
+  function medItem(nm, src, quote) {
+    const q = QT(), Q = q.Q, ck = q.MEDS[nm];
+    return { key: "med=" + nm, label: nm, src, quote, apply: () => {
+      const hadM = Q.FE.meds.includes(nm); if (!hadM) Q.FE.meds.push(nm);
+      const undoC = ck ? condItem(ck, null).apply() : () => {}; // Lantus means diabetes on insulin, and so on
+      return () => { if (!hadM) Q.FE.meds = Q.FE.meds.filter((x) => x !== nm); undoC(); };
+    } };
+  }
+  // the part of a sentence a word belongs to: "No, I have high blood pressure" -> "I have"
+  const clauseOf = (before) => before.split(/[;:]|,\s*(?=(?:i|i'm|i've|i'd|im|ive|my|me|he|she|they|we|but|yes|yeah|yep|well|although|though|except|also|plus|oh)\b)|\b(?:and|but|plus|also)\s+(?=(?:i|i'm|i've|im|ive|my|he|she|they|we)\b)/i).pop();
+  const LINEC = new WeakMap(); // line -> what it said, so long calls don't re-read every line
+  function lineHealth(ln, prev) {
+    const text = ln.text || "", ptext = prev?.who === "Agent" ? prev.text || "" : "";
+    const c = LINEC.get(ln); if (c && c.text === text && c.ptext === ptext) return c.res;
+    const res = []; // [kind, value, at, quote]
+    for (const part of text.split(/(?<=[.;!?])\s+|\s+but\s+/i)) { // one thought at a time
+      const at = whenSaid(part), t = part.trim(); if (!t) continue;
+      for (const [re, k] of SAID) {
+        const m = re.exec(t); if (!m) continue;
+        const cl = clauseOf(t.slice(0, m.index)), after = t.slice(m.index + m[0].length);
+        if (H_FAMILY.test(cl) || H_NEG.test(cl.slice(-45)) || H_HYPO.test(cl) || H_AFTER.test(after)) continue;
+        let kk = k;
+        if (k === "cancerPast" && /\bskin cancer|basal|squamous|melanoma/i.test(t)) continue;
+        if (k === "cancerNow" && (H_WASPAST.test(cl) || (at && Date.now() - at > YR))) kk = "cancerPast";
+        if (k === "dm" && /type\s*(?:1|one)/i.test(t)) continue;
+        res.push(["c", kk, at, t]);
+      }
+      for (const { name, index } of medsIn(t)) {
+        const cl = clauseOf(t.slice(0, index));
+        if (H_FAMILY.test(cl) || H_NEG.test(cl.slice(-35)) || H_PAST_MED.test(cl.slice(-35)) || H_HYPO.test(cl)) continue;
+        res.push(["m", name, null, t]);
+      }
+    }
+    // "Yes" to the agent's question about exactly one condition
+    if (ptext && /^\s*(?:yes|yeah|yep|yup|uh[- ]?huh|mm[- ]?hmm|i do|i did|i have|i am|correct|that'?s right|sure do|right)\b/i.test(text) && /\?|\b(?:any|ever|do you|have you|are you)\b/i.test(ptext)) {
+      const asked = [...new Set(SAID.filter(([re]) => re.test(ptext)).map(([, k]) => k))];
+      if (asked.length === 1) res.push(["c", asked[0], whenSaid(text), ptext.trim() + " — " + text.trim()]);
+    }
+    LINEC.set(ln, { text, ptext, res });
+    return res;
+  }
+  // the word-list listener: lines are the copilot's (after consent, sensitive numbers already hidden)
+  function healthHeard(lines) {
+    const out = new Map();
+    lines.forEach((ln, i) => {
+      if (ln.who !== "Lead") return;
+      for (const [kind, v, at, quote] of lineHealth(ln, lines[i - 1])) {
+        const it = kind === "c" ? condItem(v, at, "call", quote) : medItem(v, "call", quote);
+        if (!it) continue;
+        const had = out.get(it.key);
+        if (!had || (at && kind === "c" && !had.at)) out.set(it.key, it); // a later mention that says when wins
+      }
+    });
+    if (out.has("cond=dmi")) out.delete("cond=dm"); // the more specific answer wins
+    if (out.has("cond=cancerNow")) out.delete("cond=cancerPast");
+    return [...out.values()];
+  }
+
+  // Highpoint Bot: reads the recent conversation when the client talks about health, at most every few seconds
+  const AIH = { lead: null, seen: 0, at: 0, busy: false, items: [], status: "", timer: 0, n: 0 };
+  const HEALTHY = /\b(?:health\w*|doctors?|pills?|medic\w*|meds|prescri\w*|diagnos\w*|conditions?|surgery|surgeries|hospital\w*|heart|sugar|pressure|cancer|tumou?r|kidneys?|lungs?|breath\w*|insulin|oxygen|strokes?|seizures?|blood|cholesterol|thyroid|depress\w*|anxiety|arthritis|liver|dementia|alzheimer'?s?|memory|wheel ?chair|walker|cane|chemo|radiation|stents?|bypass|pacemaker|transplant|dialysis|neuropathy|rehab|inhaler|copd|emphysema|asthma|apnea|cpap|lupus|parkinson'?s?|hepatitis|hiv|amputat\w*|replacement|shots?|injections?|specialist|cardiologist|oncologist|nephrologist|pulmonologist)\b|\b\w{3,}(?:pril|sartan|olol|statin|formin|gliptin|glutide|azole|dipine|xetine|zepam|zolam|mab|nib|xaban|gatran|sone|lone|thyroxine|parin|mide|zide|pine|done|tine|pam)\b/i;
+  const talksHealth = (t) => HEALTHY.test(t) || medsIn(t).length > 0;
+  function aiHealth() {
+    clearTimeout(AIH.timer);
+    const id = QF.lead, ses = session(id); if (!id || !ses || ses.consent !== "agreed" || !QT()) return;
+    if (AIH.lead !== id) Object.assign(AIH, { lead: id, seen: 0, items: [], status: "", n: 0 });
+    const lines = ses.lines || [];
+    const fresh = lines.slice(AIH.seen).filter((x) => x.who === "Lead");
+    if (!fresh.length || !fresh.some((x) => talksHealth(x.text || ""))) return;
+    if (AIH.busy || AIH.status === "off" || AIH.n >= 40) return;
+    const wait = 6000 - (Date.now() - AIH.at); if (wait > 0) { AIH.timer = setTimeout(aiHealth, wait + 50); return; }
+    AIH.busy = true; AIH.at = Date.now(); AIH.n++; const upto = lines.length;
+    const q = QT(), keys = Object.entries(q.COND).map(([k, c]) => `${k}: ${c.n}`).join("\n");
+    const tx = lines.slice(-40).map((x) => `${x.who === "Agent" ? "Agent" : "Client"}: ${x.text}`).join("\n").slice(-6000);
+    const system = "You pull underwriting facts for a final expense life insurance quote out of a call transcript. Use only what the CLIENT says about THEMSELVES. Skip anything they deny, anything about family members, and anything the agent says that the client didn't confirm. Reply with JSON only.";
+    const prompt = `Condition keys you may use:\n${keys}\n\nReturn {"conditions":[{"key":"<one of the keys>","years_ago":<years since diagnosed or last treated, a number, or null if not said>,"quote":"<the client's words>"}],"medications":["<each drug the client takes now, spelled correctly>"]}. Use empty arrays if nothing. Pick the most specific key (insulin -> dmi; cancer being treated now -> cancerNow). Leave out drugs they stopped taking.\n\nTranscript:\n"""${tx}"""`;
+    fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ system, messages: [{ role: "user", content: prompt }] }) })
+      .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => {
+        if (AIH.lead !== id) return;
+        if (!ok) { AIH.status = j.code === "unavailable" || j.code === "bad_key" || j.code === "no_credit" ? "off" : "err"; return; }
+        const out = JSON.parse((String(j.text || "").match(/\{[\s\S]*\}/) || ["{}"])[0]);
+        const V = medVocab(), got = [];
+        for (const c of Array.isArray(out.conditions) ? out.conditions : []) { const y = c?.years_ago; if (q.COND[c?.key]) got.push(condItem(c.key, y != null && y !== "" && +y >= 0 ? Date.now() - +y * YR : null, "ai", c.quote ? String(c.quote).slice(0, 200) : "")); }
+        for (const m of Array.isArray(out.medications) ? out.medications : []) { const n = String(m?.name ?? m ?? "").trim().replace(/\s+/g, " "); if (n.length < 3 || n.length > 40 || /[^a-z \-']/i.test(n)) continue; got.push(medItem(V.names.get(n.toLowerCase().replace(/-/g, " ")) || tcase(n), "ai")); }
+        if (got.some((g) => g?.key === "cond=dmi")) { const i = got.findIndex((g) => g?.key === "cond=dm"); if (i >= 0) got.splice(i, 1); }
+        AIH.items = [...AIH.items.filter((x) => !got.some((g) => g?.key === x.key)), ...got.filter(Boolean)];
+        AIH.status = "ok"; AIH.seen = upto;
+        fromCall(); paint("quote");
+      })
+      .catch(() => { AIH.status = "err"; })
+      .finally(() => { AIH.busy = false; if (AIH.lead === id && (session(id)?.lines?.length || 0) > upto) AIH.timer = setTimeout(aiHealth, 1500); });
+  }
+
   // what's already on the client's file, in the copilot's field names
   function onFile(l) {
     const fl = l?.fields || {}, F = {}, put = (k, label) => { const x = fl[label]; if (x && !/^sample-/i.test(x)) F[k] = { value: x, line: -1 }; };
@@ -528,7 +725,7 @@
 
   /* The quoter follows the client you're on (the call, else the open profile) while the quote or script pop-out is up,
      so the script's prices are always this client's. Each client's quote is put away and brought back as you switch. */
-  const QF = { lead: null, manual: false, auto: lsGet("hp.pop.auto", true), done: {}, chips: {}, ctx: {}, pending: [] };
+  const QF = { lead: null, manual: false, auto: lsGet("hp.pop.auto", true), done: {}, chips: {}, src: {}, ctx: {}, pending: [] };
   const following = () => W.has("quote") || W.has("script");
   const QUOTE = {
     build(w) {
@@ -536,6 +733,7 @@
       w.body.innerHTML = `<div class="hpp-bar"><div class="hpp-seg sm" role="group" aria-label="Product">${[["FE", "Final expense", "FE"], ["TERM", "Term"], ["IUL", "IUL"]].map(([k, t, sh]) => `<button type="button" data-qtab="${k}" title="${t}">${lbl(t, sh)}</button>`).join("")}</div><span class="hpp-sp"></span><span data-r="link"></span></div>
         <div class="hpp-top" data-r="top" aria-live="polite"></div>
         <div class="hpp-scroll" data-r="scroll"><div class="hpp-heard" data-r="heard"></div>
+          <section class="hpp-health" data-r="health" aria-label="Health"></section>
           <div class="hpp-form"><button type="button" class="hpp-sum" data-q="form" data-r="sum"></button><div class="hpp-fbody" data-r="form"></div></div>
           <div class="hpp-res" data-r="res"></div>
           <div class="hpp-foot"><button type="button" class="hpp-mini" data-q="full">Open the full quoter</button><span class="hpp-fine" data-r="fine"></span></div></div>`;
@@ -550,9 +748,10 @@
         else if (d.step) { const r = q.result(), cur = Q()[r.T][r.K]; Q()[r.T][r.K] = Math.max(r.min, Math.min(r.max, cur + +d.step * r.step)); done(); }
         else if (d.amt) { const r = q.result(); Q()[r.T][r.K] = +d.amt; done(); }
         else if (d.plan) q.setPlan(d.plan);
-        else if (d.rmC != null) { Q().FE.conds.splice(+d.rmC, 1); done(); }
-        else if (d.rmM != null) { Q().FE.meds.splice(+d.rmM, 1); done(); }
-        else if (d.pick) { pickHealth(d.pick); $('[data-f="add"]', w.body).value = ""; $(".hpp-sug", w.body).hidden = true; }
+        else if (d.rmC != null) { const c = Q().FE.conds[+d.rmC]; if (c) { Q().FE.conds.splice(+d.rmC, 1); forget("cond=" + c.k); } done(); }
+        else if (d.rmM != null) { const m = Q().FE.meds[+d.rmM]; if (m) { Q().FE.meds.splice(+d.rmM, 1); forget("med=" + m); } done(); }
+        else if (d.pick) { pickHealth(d.pick); done(); const a = $('[data-f="add"]', w.body); if (a) { a.value = ""; a.focus(); } const sg = $(".hpp-sug", w.body); if (sg) sg.hidden = true; }
+        else if (d.useK) { const it = QF.pending.find((p) => p.key === d.useK); if (it) { applyItems([it], "call"); QUOTE.update(w); } }
         else if (d.undo != null) { const c = (QF.chips[QF.lead] || [])[+d.undo]; if (c && !c.undone) { c.undo(); c.undone = true; done(); } }
         else if (d.use != null) { const it = QF.pending[+d.use]; if (it) applyItems([it], "call"); }
         else if (d.useAll != null) applyItems(QF.pending, "call");
@@ -597,10 +796,9 @@
       // client details: a one-line summary; tap it to edit (open by default when you're quoting without a client)
       const fopen = st.formOpen ?? !QF.lead, FE = r.T === "FE", tob = FE ? !!q.NIC[Q.FE.nic]?.[1] : Q.tob === "1";
       const planName = (r.plans.find(([v]) => String(v) === String(r.plan)) || [])[1] || "";
-      const nH = FE ? Q.FE.conds.length + Q.FE.meds.length : 0;
       const sumEl = $('[data-r="sum"]', w.body);
       sumEl.setAttribute("aria-expanded", String(fopen));
-      sumEl.innerHTML = `<span>${[Q.age, Q.sex === "F" ? "Female" : "Male", tob ? "Tobacco" : "No tobacco", Q.state, r.B ? usd(r.amt) + "/mo" : usd(r.amt), planName].filter(Boolean).map(esc).join(" · ")}${FE && nH ? ` · ${nH} health item${nH === 1 ? "" : "s"}` : ""}</span><em>${fopen ? "Done" : "Edit"}</em>`;
+      sumEl.innerHTML = `<span>${[Q.age, Q.sex === "F" ? "Female" : "Male", tob ? "Tobacco" : "No tobacco", Q.state, r.B ? usd(r.amt) + "/mo" : usd(r.amt), planName].filter(Boolean).map(esc).join(" · ")}</span><em>${fopen ? "Done" : "Edit"}</em>`;
       $('[data-r="form"]', w.body).hidden = !fopen;
       // the form: rebuilt when values change, unless you're typing in it
       const form = $('[data-r="form"]', w.body), doc = w.el.ownerDocument, ae = doc.activeElement, inForm = form.contains(ae);
@@ -614,6 +812,19 @@
       }
       // what we heard on the call
       $('[data-r="heard"]', w.body).innerHTML = heardHTML(l, live);
+      // health: always open on final expense
+      const hb = $('[data-r="health"]', w.body), hIn = hb.contains(ae), ses = l ? session(l.id) : null;
+      hb.hidden = !FE;
+      if (FE) {
+        const hp = (QF.auto ? [] : QF.pending).filter((p) => /^(?:cond|med)=/.test(p.key)).map((p) => p.key);
+        const hsig = JSON.stringify([Q.FE.conds, Q.FE.meds, q.uw().t, QF.src[QF.lead] || {}, hp, live, ses?.consent, AIH.status, !!l]);
+        if (hsig !== st.hsig) {
+          const keepAdd = hIn && ae.dataset.f === "add" ? ae.value : null, keepSel = hIn && ae.matches("select[data-when]") ? `[data-when="${ae.dataset.when}"]` : null;
+          st.hsig = hsig; hb.innerHTML = healthHTML(q, l, live, ses);
+          if (keepAdd != null) { const a = $('[data-f="add"]', hb); a.value = keepAdd; a.focus(); if (keepAdd) suggest(w); }
+          else if (keepSel) $(keepSel, hb)?.focus();
+        }
+      }
       // results
       const ok = r.rows.filter((x) => x.price != null), off = r.rows.filter((x) => x.price == null);
       const fmt = (p) => (r.B ? usd(p) : usd(p, 2)), badge = (x) => (x.exact ? ["x", "Carrier rates"] : x.checked ? ["c", "Market-checked"] : ["r", "Rough estimate"]);
@@ -649,19 +860,46 @@
       <div class="hpp-quick">${r.quick.map(([v, t]) => `<button type="button" class="hpp-chip" data-amt="${v}" aria-pressed="${+v === +r.amt}">${t}</button>`).join("")}</div>
       <div class="hpp-plans">${seg("plan", r.plan, r.plans)}</div>`;
     if (r.T === "TERM") h += `<label class="hpp-fld inl"><span>Health class</span><select data-f="cls">${[["0.82", "Preferred plus"], ["1", "Preferred"], ["1.22", "Standard plus"], ["1.45", "Standard"]].map(([v, t]) => `<option value="${v}" ${v === String(Q.cls) ? "selected" : ""}>${t}</option>`).join("")}</select></label>`;
-    if (FE) {
-      const uw = q.uw(), tier = ["Likely Preferred", "Likely Standard", "Likely Graded", "Likely Guaranteed issue", "Likely doesn't qualify"][uw.t];
-      h += `<div class="hpp-health"><div class="hpp-hh"><span class="hpp-lbl">Health</span><span class="tierpill sm ${q.TIER_CLS[uw.t]}">${tier}</span></div>
-        <div class="hpp-hchips">${Q.FE.conds.map((c, i) => { const C = q.COND[c.k]; const timed = C && C.r.length > 1; return `<span class="hpp-hc c"><b>${esc(C?.n.replace(/\s*\(.*\)$/, "") || c.k)}</b>${timed ? `<select data-when="${i}" aria-label="When was it last treated?" class="${c.at ? "" : "need"}">${WHEN.map(([v, t]) => `<option value="${v}" ${String(bucket(c.at)) === String(v) ? "selected" : ""}>${t}</option>`).join("")}</select>` : ""}<button type="button" data-rm-c="${i}" aria-label="Remove">✕</button></span>`; }).join("")}${Q.FE.meds.map((m, i) => `<span class="hpp-hc m"><i>Rx</i><b>${esc(m)}</b><button type="button" data-rm-m="${i}" aria-label="Remove ${esc(m)}">✕</button></span>`).join("")}</div>
-        <div class="hpp-add"><input data-f="add" placeholder="Add a condition or medication" autocomplete="off" aria-label="Add a condition or medication"><div class="hpp-sug" hidden></div></div></div>`;
-    }
     return h;
+  }
+  const SHORT = { cad: "Coronary artery disease / stent", afib: "AFib / irregular heartbeat", copd: "COPD / emphysema", dmc: "Diabetes with complications", o2: "Uses oxygen", cancerNow: "Cancer (current)", cancerPast: "Cancer (past)", skin: "Skin cancer (basal/squamous)", ckd: "Kidney disease", dialysis: "Dialysis", liver: "Liver disease / cirrhosis", dementia: "Dementia / Alzheimer's", depression: "Depression / anxiety", alcohol: "Alcohol / drug treatment", hiv: "HIV / AIDS", amput: "Amputation", wheelchair: "Wheelchair / daily help", joint: "Hip or knee replacement", pending: "Pending surgery or tests", nursing: "Nursing home / hospice", hbp: "High blood pressure", chf: "Heart failure", tia: "TIA (mini-stroke)" };
+  const TIER = ["Likely Preferred", "Likely Standard", "Likely Graded", "Likely Guaranteed issue", "Likely doesn't qualify"];
+  const HSRC = { call: ["heard", "Heard on this call"], ai: ["AI", "Highpoint Bot picked this up from the call"], file: ["file", "From the client's file"] };
+  function healthHTML(q, l, live, ses) {
+    const Q = q.Q, uw = q.uw(), from = (l && QF.src[l.id]) || {};
+    const tag = (key) => { const f = from[key]; if (!f) return ""; const [t, why] = HSRC[f.src] || HSRC.call; return `<i class="src ${esc(f.src)}" title="${esc(f.via ? `Added because the client takes ${f.via}` : why + (f.quote ? `: “${f.quote.slice(0, 160)}”` : ""))}">${f.via ? "Rx" : t}</i>`; };
+    let status = "";
+    if (l && live && ses?.consent === "agreed") status = `<span class="hpp-listen" title="${AIH.status === "off" ? "Picking up conditions and medications as the client says them" : "Picking up conditions and medications as the client says them, with Highpoint Bot reading along"}">Listening</span>`;
+    else if (l && live && ses && ses.consent !== "declined") status = `<span class="hpp-fine">Fills in after the client agrees to recording</span>`;
+    const pend = (QF.auto ? [] : QF.pending).filter((p) => /^(?:cond|med)=/.test(p.key));
+    // conditions: one row each (name, when, where it came from, remove); medications: compact chips under them
+    const conds = Q.FE.conds.map((c, i) => { const C = q.COND[c.k]; const timed = C && C.r.length > 1; return `<li class="hpp-hrow"><b title="${esc(C?.n || c.k)}">${esc(SHORT[c.k] || C?.n.replace(/\s*\(.*\)$/, "") || c.k)}</b>${timed ? `<select data-when="${i}" aria-label="When was ${esc(C.n)} last treated?" class="${c.at ? "" : "need"}">${WHEN.map(([v, t]) => `<option value="${v}" ${String(bucket(c.at)) === String(v) ? "selected" : ""}>${t}</option>`).join("")}</select>` : "<span></span>"}${tag("cond=" + c.k) || "<span></span>"}<button type="button" data-rm-c="${i}" aria-label="Remove ${esc(C?.n || c.k)}" title="Remove">✕</button></li>`; }).join("");
+    const meds = Q.FE.meds.map((m, i) => `<span class="hpp-hc m"><i class="rx">Rx</i><b title="${esc(m)}">${esc(m)}</b>${tag("med=" + m)}<button type="button" data-rm-m="${i}" aria-label="Remove ${esc(m)}" title="Remove">✕</button></span>`).join("");
+    return `<div class="hpp-hh"><span class="hpp-lbl">Health</span><span class="tierpill sm ${q.TIER_CLS[uw.t]}">${TIER[uw.t]}</span><span class="hpp-sp"></span>${status}</div>
+      ${pend.length ? `<div class="hpp-hchips">${pend.map((it) => `<button type="button" class="hpp-hc sug" data-use-k="${esc(it.key)}" title="${esc(it.quote ? `Heard: “${it.quote.slice(0, 160)}”` : "Heard on this call")}">${esc(it.label)}<i>Use</i></button>`).join("")}</div>` : ""}
+      ${conds ? `<ul class="hpp-hrows">${conds}</ul>` : ""}${meds ? `<div class="hpp-hchips">${meds}</div>` : ""}${conds || meds ? "" : `<p class="hpp-fine">No conditions or medications yet.${l && live ? " They fill in as the client mentions them." : ""}</p>`}
+      <div class="hpp-add"><input data-f="add" placeholder="Add a condition or medication" autocomplete="off" aria-label="Add a condition or medication"><div class="hpp-sug" hidden></div></div>`;
+  }
+  // you took off something the call put in: it stays off (it's already in the done list, so the call won't add it again)
+  function forget(key) {
+    const id = QF.lead; if (!id) return;
+    QF.pending = QF.pending.filter((p) => p.key !== key);
+    if (QF.src[id]) delete QF.src[id][key];
+  }
+  let HLIST = null; // what you can add: every condition, the quoter's medications, and Aetna Accendo's drug list
+  function healthList() {
+    if (HLIST) return HLIST;
+    const q = QT(), seen = new Set();
+    HLIST = [...Object.entries(q.COND).map(([k, c]) => ({ id: "c:" + k, t: c.n, h: "" }))];
+    for (const [m, k] of Object.entries(q.MEDS)) { seen.add(m.toLowerCase()); HLIST.push({ id: "m:" + m, t: m, h: q.COND[k]?.n.replace(/\s*\(.*\)$/, "") }); }
+    for (const r of window.HP_DRUGS?.accendo?.rows || []) { const n = tcase(r[0]); if (seen.has(n.toLowerCase())) continue; seen.add(n.toLowerCase()); HLIST.push({ id: "m:" + n, t: n, h: "Aetna Accendo drug list" }); }
+    return HLIST;
   }
   function suggest(w) {
     const q = QT(), inp = $('[data-f="add"]', w.body), box = $(".hpp-sug", w.body), s = inp.value.trim().toLowerCase();
     if (!s) { box.hidden = true; return; }
-    const list = [...Object.entries(q.COND).map(([k, c]) => ({ id: "c:" + k, t: c.n, h: "" })), ...Object.entries(q.MEDS).map(([m, k]) => ({ id: "m:" + m, t: m, h: q.COND[k]?.n.replace(/\s*\(.*\)$/, "") }))];
-    const hits = list.filter((x) => x.t.toLowerCase().includes(s)).sort((a, b) => a.t.toLowerCase().indexOf(s) - b.t.toLowerCase().indexOf(s)).slice(0, 7);
+    const have = new Set([...q.Q.FE.conds.map((c) => "c:" + c.k), ...q.Q.FE.meds.map((m) => "m:" + m)]);
+    const hits = healthList().filter((x) => !have.has(x.id) && x.t.toLowerCase().includes(s)).map((x) => [x, x.t.toLowerCase().indexOf(s)]).sort((a, b) => a[1] - b[1] || a[0].t.length - b[0].t.length).slice(0, 8).map(([x]) => x);
     box.innerHTML = hits.map((x) => `<button type="button" data-pick="${esc(x.id)}">${esc(x.t)}${x.h ? `<span> · ${esc(x.h)}</span>` : ""}</button>`).join("") || `<span class="hpp-fine">No match. Try another word.</span>`;
     box.hidden = false;
   }
@@ -673,30 +911,43 @@
   }
   function heardHTML(l, live) {
     if (!l) return "";
-    const ses = session(l.id), chips = (QF.chips[l.id] || []).filter((c) => !c.undone);
+    const ses = session(l.id), chips = (QF.chips[l.id] || []).filter((c) => !c.undone && !/^(?:cond|med)=/.test(c.key || ""));
     let h = "";
     if (live && ses && ses.consent === "none") h += `<p class="hpp-fine">Fills in from the call once the client agrees to recording.</p>`;
     if (ses?.consent === "declined") h += `<p class="hpp-fine">The client declined recording, so nothing from this call is used.</p>`;
-    const pend = QF.auto ? [] : QF.pending;
+    const pend = QF.auto ? [] : QF.pending.filter((p) => !/^(?:cond|med)=/.test(p.key));
     if (!chips.length && !pend.length && !(live && ses?.consent === "agreed")) return h;
     h += `<div class="hpp-hh"><span class="hpp-lbl">From the call</span><span class="hpp-sp"></span><button type="button" class="hpp-chk" data-q="auto" aria-pressed="${QF.auto}" title="Update the quote as the client answers">Fill in for me</button></div>`;
     h += `<div class="hpp-hchips">${chips.slice(-10).map((c) => `<span class="hpp-hc ok" title="${c.src === "file" ? "From the client's file" : "Heard on this call"}">✓ <b>${esc(c.label)}</b>${c.src === "file" ? "<i>file</i>" : ""}<button type="button" data-undo="${(QF.chips[l.id] || []).indexOf(c)}" aria-label="Undo ${esc(c.label)}" title="Undo">↶</button></span>`).join("")}
       ${pend.map((it, i) => `<button type="button" class="hpp-hc sug" data-use="${i}">${esc(it.label)}<i>Use</i></button>`).join("")}${pend.length > 1 ? `<button type="button" class="hpp-mini" data-use-all>Use all</button>` : ""}</div>`;
-    if (!chips.length && !pend.length) h += `<p class="hpp-fine">Listening. Age, tobacco, health, medications and budget fill in as the client mentions them.</p>`;
+    if (!chips.length && !pend.length) h += `<p class="hpp-fine">Listening for age, tobacco, coverage and budget.</p>`;
     return h;
   }
   function applyItems(list, src) {
     const id = QF.lead; if (!id || !list.length) return;
-    const done = (QF.done[id] = QF.done[id] || []), chips = (QF.chips[id] = QF.chips[id] || []);
-    for (const it of list) { if (done.includes(it.key)) continue; done.push(it.key); chips.push({ label: it.label, undo: it.apply(), src }); }
+    const done = (QF.done[id] = QF.done[id] || []), chips = (QF.chips[id] = QF.chips[id] || []), from = (QF.src[id] = QF.src[id] || {});
+    for (const it of list) {
+      if (!it || done.includes(it.key)) continue;
+      const how = it.src || src, f = { src: how, quote: it.quote || "" };
+      done.push(it.key); from[it.key] = f;
+      if (it.key.startsWith("med=")) { const ck = QT().MEDS[it.key.slice(4)]; if (ck && !from["cond=" + ck]) from["cond=" + ck] = { src: how, quote: it.quote || "", via: it.label }; }
+      chips.push({ key: it.key, label: it.label, undo: it.apply(), src: how });
+    }
     QF.pending = QF.pending.filter((p) => !done.includes(p.key));
     QT().changed();
   }
   // the client's answers on this call -> the quote (or suggestions, when "Fill in for me" is off)
   function fromCall() {
     if (!QF.lead || !QT()) return;
-    const F = heardF(QF.lead), done = QF.done[QF.lead] || [];
-    const fresh = items(F).filter((it) => !done.includes(it.key));
+    const F = heardF(QF.lead), done = QF.done[QF.lead] || [], ses = session(QF.lead);
+    const heard = ses?.consent === "agreed" ? healthHeard(ses.lines || []) : [];
+    const ai = AIH.lead === QF.lead ? AIH.items : [];
+    const all = [...items(F), ...heard, ...ai].filter(Boolean), dated = new Map(all.filter((it) => it.at).map((it) => [it.key, it]));
+    const seen = new Set(), fresh = all.map((it) => (!it.at && dated.get(it.key)) || it).filter((it) => !done.includes(it.key) && !seen.has(it.key) && seen.add(it.key));
+    // a condition already in from the call, now with a when ("two years ago"): fill in the when, unless you already picked one
+    let dateFix = false;
+    for (const [key, it] of dated) { if (!done.includes(key) || !QF.src[QF.lead]?.[key]) continue; const c = QT().Q.FE.conds.find((x) => "cond=" + x.k === key); if (c && !c.at) { c.at = it.at; dateFix = true; } }
+    if (dateFix && !(QF.auto && fresh.length)) QT().changed();
     if (QF.auto) { if (fresh.length) applyItems(fresh, "call"); }
     else QF.pending = fresh;
   }
@@ -720,7 +971,7 @@
       if (fileItems.length) { QF.done[id] = []; QF.chips[id] = []; applyItems(fileItems, "file"); }
     }
     q.setLead(id); q.changed();
-    fromCall();
+    fromCall(); aiHealth();
   }
   const follow = () => { if (following()) { const id = ctxId(); if (id) bind(id); } };
 
@@ -815,7 +1066,7 @@
     CALL.lines = lines; CALL.partial = Array.isArray(partial) ? partial : [];
     paint("live"); paint("script");
   });
-  addEventListener("hp:copilot", () => { if (following()) fromCall(); paint(); });
+  addEventListener("hp:copilot", () => { if (following()) { fromCall(); aiHealth(); } paint(); });
   addEventListener("hp:quote", () => { paint("quote"); paint("script"); });
   addEventListener("hp:profile", () => { follow(); paint("script"); paint("live"); });
   setInterval(() => { if (CALL.live && W.has("live")) { const c = W.get("live").el.querySelector('[data-r="clock"]'); if (c) c.textContent = clock(); } }, 1000);
