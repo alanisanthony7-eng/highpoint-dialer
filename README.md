@@ -42,6 +42,7 @@ Twilio carries the calls.
 | `HP_PUBLIC_URL` | your site address, e.g. `https://highpoint-dialer.pages.dev` |
 | `ANTHROPIC_API_KEY` | *(optional)* turns on Highpoint Bot and call summaries |
 | `STRIPE_SECRET_KEY` | *(optional)* turns on paid plans (see Plans and billing) |
+| `RESEND_API_KEY`, `HP_EMAIL_FROM` | *(optional)* emails: forgot-password links and invites (see Email) |
 | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | *(optional)* lets each agent connect their own Spotify (see Spotify) |
 
 6. **Redeploy.** Go to **Deployments → ⋯ on the latest → Retry deployment** so the settings take effect.
@@ -53,13 +54,24 @@ The database tables are created automatically on the first visit.
 ## Agents
 Agents open the site, click **Create account**, and enter the team code. Each login sees only its own leads.
 
-If someone forgets their password, an admin can reset it by signing in and running this in the browser console:
+With email set up (below), agents reset their own password from **Forgot your password?** on the sign-in screen. Without it, an admin can reset a password by signing in and running this in the browser console:
 
 ```
 fetch('/api/auth/reset',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:'agent@x.com'})}).then(r=>r.json()).then(console.log)
 ```
 
 That returns a temporary password to give the agent.
+
+## Email
+Password reset links and emailed invites go through Resend (resend.com, free for small volumes).
+1. Create a Resend account and add your domain (for example highpointfinancial.co) under **Domains**, then add the DNS records it shows.
+2. Create an API key and add it in Cloudflare as the secret `RESEND_API_KEY`.
+3. Add `HP_EMAIL_FROM`, for example `Highpoint Desk <desk@highpointfinancial.co>`, then redeploy.
+Until the domain is verified, Resend only delivers to the email you signed up to Resend with.
+
+## Security
+- **Two-step verification:** each agent can turn it on in **Account menu → Security** using an authenticator app. They get 10 one-time recovery codes. If an agent loses their phone, an admin can turn it off for them in **Team → Agents**.
+- Signing in with two-step on takes the password plus a 6-digit code. Each code works once, and five wrong tries means starting the sign-in over.
 
 ## Plans and billing
 | Plan | Price | Includes |

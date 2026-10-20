@@ -1,5 +1,6 @@
 // Highpoint accounts: email + password, sessions in D1, HttpOnly cookie.
-import { D1, ensureSchema } from "./store.mjs";
+import { D1, ensureSchema, getStore } from "./store.mjs";
+import { emailOn, sendEmail, layout } from "./email.mjs";
 import { ensureTeam, member, addMember, accessFor, billingSettings, useInvite, markInviteUsed, TERMS_VERSION, normPlan, FEATURES, plansWith } from "./team.mjs";
 
 const env = (k, d = "") => globalThis.__ENV?.[k] ?? d;
@@ -41,6 +42,27 @@ async function startSession(userId) {
   return cookie(token, DAYS * 86400);
 }
 
+/* ---------- two-factor (authenticator apps, RFC 6238) ---------- */
+const kvA = () => getStore("hpd-auth");
+const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function b32enc(bytes) { let bits = 0, val = 0, out = ""; for (const b of bytes) { val = ((val << 8) | b) & 0xffff; bits += 8; while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; } } if (bits > 0) out += B32[(val << (5 - bits)) & 31]; return out; }
+function b32dec(s) { let bits = 0, val = 0; const out = []; for (const c of String(s).toUpperCase().replace(/[\s=]/g, "")) { const i = B32.indexOf(c); if (i < 0) continue; val = ((val << 5) | i) & 0xffff; bits += 5; if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; } } return new Uint8Array(out); }
+export async function totp(secret, counter) {
+  const key = await crypto.subtle.importKey("raw", b32dec(secret), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const buf = new ArrayBuffer(8), dv = new DataView(buf); dv.setUint32(0, Math.floor(counter / 2 ** 32)); dv.setUint32(4, counter >>> 0);
+  const h = new Uint8Array(await crypto.subtle.sign("HMAC", key, buf)), o = h[h.length - 1] & 15;
+  return String((((h[o] & 127) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3]) % 1e6).padStart(6, "0");
+}
+async function checkTotp(secret, code, last = 0) { // -> the time step it matched (codes can't be reused), or null
+  const c = String(code || "").replace(/\D/g, ""); if (c.length !== 6) return null;
+  const now = Math.floor(Date.now() / 30000);
+  for (const d of [0, -1, 1]) { const ctr = now + d; if (ctr <= last) continue; if ((await totp(secret, ctr)) === c) return ctr; }
+  return null;
+}
+const twofa = async (uid) => (await kvA().get("2fa:" + uid, { type: "json" })) || {};
+export const has2fa = async (uid) => !!(await twofa(uid)).on;
+const site = () => (env("HP_PUBLIC_URL") || globalThis.__ORIGIN || "").replace(/\/$/, "");
+
 const cache = new Map();
 export async function currentUser(req) {
   await ensureSchema();
@@ -76,7 +98,7 @@ export const clearUserCache = () => cache.clear();
 export async function authRoute(req, action) {
   await ensureSchema();
   const json = (b, s = 200, h = {}) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json", "cache-control": "no-store", ...h } });
-  if (action === "me") { const u = await currentUser(req); return u ? json({ user: u, termsVersion: TERMS_VERSION }) : json({ user: null }, 401); }
+  if (action === "me") { const u = await currentUser(req); return u ? json({ user: { ...u, twofa: await has2fa(u.id) }, termsVersion: TERMS_VERSION, email: emailOn() }) : json({ user: null, email: emailOn() }, 401); }
   if (action === "invite") { // public: describe an invite link before sign-up
     const r = await useInvite(new URL(req.url).searchParams.get("code"));
     return r.error ? json({ error: r.error }, 404) : json({ ok: true, plan: r.inv.plan, role: r.inv.role, note: r.inv.note });
@@ -117,7 +139,79 @@ export async function authRoute(req, action) {
     if (!u || !same(await hashPw(pw, u.salt), u.hash)) return json({ error: "Email or password is wrong." }, 401);
     const full = await withMember(u);
     if (full.disabled) return json({ error: "Your account is turned off. Contact your Highpoint admin." }, 403);
+    if (await has2fa(u.id)) { // password was right: now the code from their authenticator app
+      const t = rand(24); await kvA().setJSON("tick:" + (await sha(t)), { uid: u.id, exp: Date.now() + 5 * 60_000, tries: 0 });
+      return json({ twofa: true, ticket: t });
+    }
     return json({ user: full }, 200, { "set-cookie": await startSession(u.id) });
+  }
+  if (action === "2fa-login") {
+    const key = "tick:" + (await sha(String(b.ticket || ""))), t = await kvA().get(key, { type: "json" });
+    if (!t || t.exp < Date.now() || t.tries >= 5) { if (t) await kvA().delete(key); return json({ error: "That took too long. Sign in again.", code: "expired" }, 401); }
+    const rec = await twofa(t.uid); let ok = false;
+    const ctr = await checkTotp(rec.secret, b.code, rec.last || 0);
+    if (ctr) { rec.last = ctr; ok = true; }
+    else if (b.code && /[a-z]/i.test(String(b.code))) { // a recovery code, used once
+      const h = await sha(String(b.code).toLowerCase().replace(/[^a-z0-9]/g, ""));
+      const i = (rec.recovery || []).indexOf(h); if (i >= 0) { rec.recovery.splice(i, 1); ok = true; }
+    }
+    if (!ok) { t.tries++; await kvA().setJSON(key, t); return json({ error: t.tries >= 5 ? "Too many tries. Sign in again." : "That code isn't right. Check the time on your phone and try the newest code." }, 401); }
+    await kvA().setJSON("2fa:" + t.uid, rec); await kvA().delete(key);
+    const u = await D1().prepare("SELECT * FROM users WHERE id=?1").bind(t.uid).first();
+    const full = await withMember(u);
+    if (full.disabled) return json({ error: "Your account is turned off. Contact your Highpoint admin." }, 403);
+    return json({ user: full, recoveryLeft: (rec.recovery || []).length }, 200, { "set-cookie": await startSession(t.uid) });
+  }
+  // forgot password: email a one-hour link (never says whether the email has an account)
+  if (action === "forgot") {
+    if (!emailOn()) return json({ ok: true, email: false });
+    const u = await D1().prepare("SELECT id, email, name FROM users WHERE email=?1").bind(email).first();
+    if (u) {
+      const lim = (await kvA().get("fr:" + u.id, { type: "json" })) || { n: 0, at: 0 };
+      if (Date.now() - lim.at > 3600e3) { lim.n = 0; lim.at = Date.now(); }
+      if (lim.n < 3) {
+        lim.n++; await kvA().setJSON("fr:" + u.id, lim);
+        const t = rand(32); await kvA().setJSON("reset:" + (await sha(t)), { uid: u.id, exp: Date.now() + 3600e3 });
+        const first = String(u.name || "").split(" ")[0] || "there";
+        await sendEmail({ to: u.email, subject: "Reset your Highpoint password", ...layout({ title: "Reset your password", paras: [`Hi ${first}, someone asked to reset the password for your Highpoint Desk login.`], button: { label: "Choose a new password", url: site() + "/?reset=" + t }, after: ["This link works for one hour. If you didn't ask for this, you can ignore this email and your password stays the same."] }) });
+      }
+    }
+    return json({ ok: true, email: true });
+  }
+  if (action === "reset-password") {
+    const key = "reset:" + (await sha(String(b.token || ""))), rec = await kvA().get(key, { type: "json" });
+    if (!rec || rec.exp < Date.now()) return json({ error: "That reset link has expired or was already used. Ask for a new one." }, 400);
+    if (pw.length < 8) return json({ error: "Use at least 8 characters for your password." }, 400);
+    const salt = rand(16);
+    await D1().prepare("UPDATE users SET salt=?2, hash=?3 WHERE id=?1").bind(rec.uid, salt, await hashPw(pw, salt)).run();
+    await D1().prepare("DELETE FROM sessions WHERE user_id=?1").bind(rec.uid).run(); cache.clear();
+    await kvA().delete(key);
+    if (await has2fa(rec.uid)) return json({ ok: true, signIn: true }); // two-factor still applies: sign in with the new password and a code
+    const u = await D1().prepare("SELECT * FROM users WHERE id=?1").bind(rec.uid).first();
+    return json({ user: await withMember(u) }, 200, { "set-cookie": await startSession(rec.uid) });
+  }
+  // two-factor settings for the signed-in user
+  if (action === "2fa-setup") {
+    const me = await requireUser(req), rec = await twofa(me.id);
+    if (rec.on) return json({ error: "Two-factor is already on." }, 400);
+    rec.pending = b32enc(crypto.getRandomValues(new Uint8Array(20))); await kvA().setJSON("2fa:" + me.id, rec);
+    const label = encodeURIComponent("Highpoint:" + me.email);
+    return json({ secret: rec.pending, uri: `otpauth://totp/${label}?secret=${rec.pending}&issuer=Highpoint&algorithm=SHA1&digits=6&period=30` });
+  }
+  if (action === "2fa-enable") {
+    const me = await requireUser(req), rec = await twofa(me.id);
+    if (!rec.pending) return json({ error: "Start setup again." }, 400);
+    const ctr = await checkTotp(rec.pending, b.code); if (!ctr) return json({ error: "That code isn't right. Try the newest code in your app." }, 400);
+    const codes = Array.from({ length: 10 }, () => rand(5).slice(0, 10)), hashes = [];
+    for (const c of codes) hashes.push(await sha(c));
+    await kvA().setJSON("2fa:" + me.id, { on: true, secret: rec.pending, last: ctr, recovery: hashes, at: Date.now() });
+    return json({ ok: true, recovery: codes.map((c) => c.slice(0, 5) + "-" + c.slice(5)) });
+  }
+  if (action === "2fa-disable") {
+    const me = await requireUser(req), u = await D1().prepare("SELECT * FROM users WHERE id=?1").bind(me.id).first();
+    if (!same(await hashPw(String(b.password || ""), u.salt), u.hash)) return json({ error: "Your password is wrong." }, 401);
+    await kvA().delete("2fa:" + me.id);
+    return json({ ok: true });
   }
   if (action === "password") {
     const me = await requireUser(req);

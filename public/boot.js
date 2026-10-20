@@ -166,6 +166,9 @@
   #hpGate .g-agree input{margin-top:2px;width:17px;height:17px;flex:none;accent-color:#FF2E88}
   #hpGate .g-agree a{color:#FF9E3D}
   #hpGate .g-fine{margin:2px 0 0;font-size:12px;color:#8C92A0;text-align:center;line-height:1.5}
+  #hpGate .g-fine a,#hpGate .g-forgot{color:#C9CDD5;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  #hpGate .g-fine a:hover{color:#fff}
+  #hpGate .g-ok{margin:0;padding:10px 12px;border-radius:10px;background:rgba(59,211,139,.12);border:1px solid rgba(59,211,139,.4);font-size:13.5px;color:#C9F5DD}
   #hpGate .gx-foot{position:fixed;left:clamp(20px,6vw,96px);bottom:18px;font-size:12px;color:rgba(255,255,255,.55)}
   @keyframes gxIn{from{opacity:0;transform:translateY(14px)}}
   @media (max-width:900px){#hpGate .gx-bg::after{background:rgba(5,6,16,.6)}#hpGate .gx{grid-template-columns:1fr;gap:26px;padding:32px 18px 60px;align-content:start}
@@ -193,9 +196,10 @@
   const st = document.createElement("style"); st.textContent = css; document.head.append(st);
 
   const MARK = `<svg viewBox="0 0 132 96" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="#FFFFFF">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="#FFFFFF"/><path d="M104 22 L128 12 L118 30 L113 24 Z" fill="#FFFFFF"/><path d="M113 24 L118 30 L112 31Z" fill="#FF9E3D"/></svg>`;
-  function gate(msg) {
+  function gate(msg, opts = {}) {
     const inviteToken = new URLSearchParams(location.search).get("invite") || "";
-    let mode = inviteToken ? "up" : "in", showPw = false, inviteInfo = null;
+    let mode = opts.mode || (inviteToken ? "up" : "in"), showPw = false, inviteInfo = null, ticket = null, info = "", recov = false;
+    const resetToken = opts.reset || "";
     if (inviteToken) call("/api/auth/invite?code=" + encodeURIComponent(inviteToken)).then((r) => { inviteInfo = r; draw(""); }).catch((e) => { inviteInfo = { error: e.message }; draw(""); });
     const keep = {};
     const g = document.createElement("div"); g.id = "hpGate"; g.setAttribute("role", "dialog"); g.setAttribute("aria-label", "Sign in to Highpoint");
@@ -206,30 +210,87 @@
     g.giveBack = () => { if (scene && home) home.parent.insertBefore(scene, home.next); };
     document.body.append(g);
     const box = $(".gx-content", g);
-    const draw = (err = msg || "") => {
-      ["gName", "gEmail", "gCode"].forEach((id) => { const el = document.getElementById(id); if (el) keep[id] = el.value; });
-      const agreeEl = document.getElementById("gAgree"); if (agreeEl) keep.gAgree = agreeEl.checked;
-      const up = mode === "up";
-      box.innerHTML = `<div class="gx">
-        <section class="gx-hero">
+    const HERO = `        <section class="gx-hero">
           <div class="gx-lock">${MARK}<div><b>HIGHPOINT</b><span>FINANCIAL</span></div></div>
           <h1>Elevate your future.</h1>
           <p class="gx-sub">The Highpoint agent desk. Your leads, your dialer, your quotes and follow-ups for Final Expense, Mortgage Protection and IUL, in one place.</p>
           <div class="gx-chips"><span><i></i>3-line power dialer</span><span><i></i>Local caller ID</span><span><i></i>Private lead CRM</span><span><i></i>FE · MP · IUL quotes</span></div>
-        </section>
+        </section>`;
+    const PLAN = { early: "Early Access", base: "Base", plus: "Pro", full: "Full Access", starter: "Base", pro: "Full Access" };
+    const leave = (u) => { g.style.transition = "opacity .35s"; g.style.opacity = "0"; setTimeout(() => { g.giveBack(); g.remove(); }, 360); start(u); };
+    // forgot password, the reset link, and the second step of two-factor sign-in
+    const special = (err) => {
+      const card = mode === "forgot"
+        ? `<h2>Reset your password</h2><p class="g-lead">Enter the email you sign in with. We'll email you a link to choose a new password.</p>
+           <label for="gEmail">Email<input class="g-in" id="gEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(keep.gEmail || "")}"></label>
+           ${err ? `<p class="g-err" role="alert">${esc(err)}</p>` : ""}<button class="g-go" type="submit">Email me a link</button>
+           <p class="g-sw">Remembered it? <a data-m="in" tabindex="0" role="button">Sign in</a></p>`
+        : mode === "sent"
+        ? `<h2>Check your email</h2><p class="g-lead">If there's a Highpoint login for <b>${esc(keep.gEmail || "that email")}</b>, a link to reset your password is on its way. It works for one hour.</p>
+           <p class="g-fine" style="text-align:left">Nothing after a few minutes? Check spam, or ask your Highpoint admin to reset it.</p>
+           <p class="g-sw"><a data-m="in" tabindex="0" role="button">Back to sign in</a></p>`
+        : mode === "reset"
+        ? `<h2>Choose a new password</h2><p class="g-lead">At least 8 characters. You'll be signed out everywhere else.</p>
+           <label for="gPw">New password<span class="g-pw"><input class="g-in" id="gPw" type="${showPw ? "text" : "password"}" autocomplete="new-password" placeholder="At least 8 characters" style="padding-right:64px"><button type="button" class="g-eye" aria-label="${showPw ? "Hide" : "Show"} password">${showPw ? "Hide" : "Show"}</button></span></label>
+           <label for="gPw2">Type it again<input class="g-in" id="gPw2" type="${showPw ? "text" : "password"}" autocomplete="new-password"></label>
+           ${err ? `<p class="g-err" role="alert">${esc(err)}</p>` : ""}<button class="g-go" type="submit">Save and sign in</button>`
+        : `<h2>Two-step verification</h2><p class="g-lead">${recov ? "Enter one of the recovery codes you saved when you turned on two-step verification." : "Enter the 6-digit code from your authenticator app."}</p>
+           <label for="gCode2">${recov ? "Recovery code" : "Code"}<input class="g-in" id="gCode2" ${recov ? 'autocomplete="off" placeholder="abcde-12345"' : 'inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:.3em;font-size:20px;text-align:center"'}></label>
+           ${err ? `<p class="g-err" role="alert">${esc(err)}</p>` : ""}<button class="g-go" type="submit">Verify</button>
+           <p class="g-sw"><a data-recov tabindex="0" role="button">${recov ? "Use my authenticator app" : "Use a recovery code instead"}</a></p>
+           <p class="g-fine">Lost your phone? Your Highpoint admin can turn two-step verification off for your login.</p>`;
+      box.innerHTML = `<div class="gx">${HERO}<form class="g-card" novalidate>${card}</form></div><p class="gx-foot">© ${new Date().getFullYear()} Highpoint Financial</p>`;
+      g.querySelectorAll("[data-m]").forEach((b) => { const go = () => { mode = b.dataset.m; draw(""); }; b.onclick = go; b.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } }; });
+      const rv = $("[data-recov]", g); if (rv) rv.onclick = () => { recov = !recov; draw(""); };
+      const eye = $(".g-eye", g); if (eye) eye.onclick = () => { const a = $("#gPw").value, b2 = $("#gPw2").value; showPw = !showPw; draw(err); $("#gPw").value = a; $("#gPw2").value = b2; $("#gPw").focus(); };
+      const cd = $("#gCode2", g); if (cd && !recov) cd.oninput = () => { cd.value = cd.value.replace(/\D/g, "").slice(0, 6); if (cd.value.length === 6) $("form", g).requestSubmit(); };
+      $("form", g).onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = $(".g-go", g); if (!btn || btn.disabled) return; btn.disabled = true;
+        try {
+          if (mode === "forgot") {
+            keep.gEmail = $("#gEmail").value.trim(); btn.textContent = "Sending…";
+            const r = await call("/api/auth/forgot", { method: "POST", body: { email: keep.gEmail } });
+            if (r.email === false) { draw("Password emails aren't set up for your team yet. Ask your Highpoint admin to reset your password."); return; }
+            mode = "sent"; draw("");
+          } else if (mode === "reset") {
+            const a = $("#gPw").value, b2 = $("#gPw2").value;
+            if (a.length < 8) { draw("Use at least 8 characters."); return; }
+            if (a !== b2) { draw("Those two passwords don't match."); return; }
+            btn.textContent = "Saving…";
+            const r = await call("/api/auth/reset-password", { method: "POST", body: { token: resetToken, password: a } });
+            history.replaceState(null, "", location.pathname);
+            if (r.user) leave(r.user); else { mode = "in"; info = "Password changed. Sign in with your new password."; draw(""); }
+          } else if (mode === "2fa") {
+            btn.textContent = "Checking…";
+            const r = await call("/api/auth/2fa-login", { method: "POST", body: { ticket, code: $("#gCode2").value.trim() } });
+            leave(r.user);
+            if (r.recoveryLeft != null && r.recoveryLeft <= 2) setTimeout(() => window.hpDesk?.toast?.(`You have ${r.recoveryLeft} recovery code${r.recoveryLeft === 1 ? "" : "s"} left. Make new ones in Security.`), 4000);
+          }
+        } catch (er) { if (er.code === "expired") { mode = "in"; ticket = null; } draw(er.message); }
+      };
+      setTimeout(() => (g.querySelector("#gCode2") || g.querySelector("#gPw") || g.querySelector("#gEmail"))?.focus(), 30);
+    };
+    const draw = (err = msg || "") => {
+      ["gName", "gEmail", "gCode"].forEach((id) => { const el = document.getElementById(id); if (el) keep[id] = el.value; });
+      const agreeEl = document.getElementById("gAgree"); if (agreeEl) keep.gAgree = agreeEl.checked;
+      if (["forgot", "sent", "reset", "2fa"].includes(mode)) return special(err);
+      const up = mode === "up";
+      box.innerHTML = `<div class="gx">
+${HERO}
         <form class="g-card" novalidate>
           <h2>${up ? "Join the Highpoint team" : "Welcome back"}</h2>
-          <p class="g-lead">${up ? (inviteToken ? (inviteInfo?.error ? "" : `You're invited to the Highpoint desk${inviteInfo?.plan ? ` (${inviteInfo.plan === "starter" ? "Starter" : "Pro"} plan)` : ""}. Create your agent login.`) : "Create your agent login. You'll need the team code from your admin.") : "Sign in to pick up where you left off."}</p>
+          <p class="g-lead">${up ? (inviteToken ? (inviteInfo?.error ? "" : `You're invited to the Highpoint desk${inviteInfo?.plan ? ` (${PLAN[inviteInfo.plan] || "Full Access"} plan)` : ""}. Create your agent login.`) : "Create your agent login. You'll need the team code from your admin.") : "Sign in to pick up where you left off."}</p>
           ${up && inviteInfo?.error ? `<p class="g-err" role="alert">${esc(inviteInfo.error)}</p>` : ""}
           ${up ? `<label for="gName">Full name<input class="g-in" id="gName" autocomplete="name" placeholder="First and last name" value="${esc(keep.gName || "")}"></label>` : ""}
           <label for="gEmail">Email<input class="g-in" id="gEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(keep.gEmail || "")}"></label>
           <label for="gPw">Password<span class="g-pw"><input class="g-in" id="gPw" type="${showPw ? "text" : "password"}" autocomplete="${up ? "new-password" : "current-password"}" placeholder="${up ? "At least 8 characters" : "Your password"}" style="padding-right:64px"><button type="button" class="g-eye" aria-label="${showPw ? "Hide" : "Show"} password">${showPw ? "Hide" : "Show"}</button></span></label>
           ${up && !inviteToken ? `<label for="gCode">Team code<input class="g-in" id="gCode" autocomplete="off" placeholder="From your Highpoint admin" value="${esc(keep.gCode || "")}"></label>` : ""}
           ${up ? `<label class="g-agree" for="gAgree"><input type="checkbox" id="gAgree" ${keep.gAgree ? "checked" : ""}><span>I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>, and I'm responsible for following calling and texting laws (TCPA, Do Not Call, recording consent).</span></label>` : ""}
-          ${err ? `<p class="g-err" role="alert">${esc(err)}</p>` : ""}
+          ${err ? `<p class="g-err" role="alert">${esc(err)}</p>` : info && !up ? `<p class="g-ok" role="status">${esc(info)}</p>` : ""}
           <button class="g-go" type="submit">${up ? "Create my account" : "Sign in"}</button>
           <p class="g-sw">${up ? `Already on the team? <a data-m="in" tabindex="0" role="button">Sign in</a>` : `New agent? <a data-m="up" tabindex="0" role="button">Create an account</a>`}</p>
-          <p class="g-fine">${up ? "Your leads are private to your login. Nobody else on the team sees them." : "Forgot your password? Your Highpoint admin can reset it."}</p>
+          <p class="g-fine">${up ? "Your leads are private to your login. Nobody else on the team sees them." : `<a data-m="forgot" tabindex="0" role="button" class="g-forgot">Forgot your password?</a>`}</p>
         </form>
       </div>
       <p class="gx-foot">© ${new Date().getFullYear()} Highpoint Financial</p>`;
@@ -247,8 +308,9 @@
             Object.assign(body, { name: $("#gName").value, invite: $("#gCode")?.value || "", inviteToken, agree: true });
           }
           const r = await call(`/api/auth/${up ? "signup" : "login"}`, { method: "POST", body });
+          if (r.twofa) { ticket = r.ticket; keep.gEmail = body.email; mode = "2fa"; recov = false; draw(""); return; }
           if (inviteToken) history.replaceState(null, "", location.pathname);
-          g.style.transition = "opacity .35s"; g.style.opacity = "0"; setTimeout(() => { g.giveBack(); g.remove(); }, 360); start(r.user);
+          info = ""; leave(r.user);
         } catch (er) { draw(er.message); }
       };
       setTimeout(() => (err && $("#gPw")) ? $("#gPw").focus() : ($("#gName") || $("#gEmail"))?.focus(), 30);
@@ -260,13 +322,14 @@
     const row = document.querySelector(".topbar .row"); if (!row || row.querySelector(".hp-acct")) return;
     const a = document.createElement("div"); a.className = "hp-acct";
     a.innerHTML = `<button type="button" class="hp-acct-b" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu"><i aria-hidden="true">${esc((u.name || u.email)[0].toUpperCase())}</i><span>${esc((u.name || u.email).split(" ")[0])}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-      <div class="hp-acct-m" role="menu" hidden><div class="hp-acct-who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}</span></div>${u.admin ? `<button type="button" role="menuitem" data-team>Team</button>` : ""}<button type="button" role="menuitem" data-bill>Billing</button><button type="button" role="menuitem" data-look>Look: ${window.hpTheme?.look === "classic" ? "Highpoint Classic" : "Miami"}<small>Switch to ${window.hpTheme?.look === "classic" ? "Miami" : "Highpoint Classic"}</small></button><button type="button" role="menuitem" data-out>Sign out</button></div>`;
+      <div class="hp-acct-m" role="menu" hidden><div class="hp-acct-who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}</span></div>${u.admin ? `<button type="button" role="menuitem" data-team>Team</button>` : ""}<button type="button" role="menuitem" data-sec>Security<small>${u.twofa ? "Two-step verification is on" : "Password and two-step verification"}</small></button><button type="button" role="menuitem" data-bill>Billing</button><button type="button" role="menuitem" data-look>Look: ${window.hpTheme?.look === "classic" ? "Highpoint Classic" : "Miami"}<small>Switch to ${window.hpTheme?.look === "classic" ? "Miami" : "Highpoint Classic"}</small></button><button type="button" role="menuitem" data-out>Sign out</button></div>`;
     const btn = a.querySelector(".hp-acct-b"), menu = a.querySelector(".hp-acct-m");
     const open = (on) => { menu.hidden = !on; btn.setAttribute("aria-expanded", on); if (on) menu.querySelector("[role=menuitem]")?.focus(); };
     btn.onclick = (e) => { e.stopPropagation(); open(menu.hidden); };
     document.addEventListener("click", (e) => { if (!a.contains(e.target)) open(false); });
     a.addEventListener("keydown", (e) => { if (e.key === "Escape") { open(false); btn.focus(); } });
     a.querySelector("[data-bill]").onclick = () => { open(false); window.hpTeam?.openBilling(); };
+    a.querySelector("[data-sec]").onclick = () => { open(false); window.hpTeam?.openSecurity(); };
     a.querySelector("[data-look]").onclick = () => { open(false); window.hpTheme?.toggle(); }; // Miami ↔ Highpoint Classic colors (this browser)
     const tb = a.querySelector("[data-team]"); if (tb) tb.onclick = () => { open(false); window.hpTeam?.openTeam(); };
     a.querySelector("[data-out]").onclick = async () => { try { await call("/api/auth/logout", { method: "POST" }); } finally { location.reload(); } };
@@ -288,6 +351,8 @@
   async function boot() {
     document.documentElement.classList.add("gated");
     window.hpNeon?.intro();
+    const rt = new URLSearchParams(location.search).get("reset");
+    if (rt) { gate("", { mode: "reset", reset: rt }); return; } // a password reset link
     try { const r = await call("/api/auth/me"); start(r.user); }
     catch (e) { gate(e.status === 401 ? "" : e.status === 503 ? e.message : ""); }
   }

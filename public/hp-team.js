@@ -217,6 +217,62 @@
     e.preventDefault(); e.stopImmediatePropagation(); upgrade(f);
   }, true);
 
+  /* ---------- Security: password and two-step verification ---------- */
+  function loadQr() { return window.QRCode ? Promise.resolve() : new Promise((res, rej) => { const sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"; sc.onload = res; sc.onerror = rej; document.head.append(sc); }); }
+  async function openSecurity() {
+    let me = window.hpUser || {}; try { me = (await call("/api/auth/me")).user || me; window.hpUser = { ...window.hpUser, twofa: me.twofa }; } catch {}
+    const m = modal(`<h2>Security</h2><div id="secBody"></div>`);
+    const body = $("#secBody", m.el);
+    const draw = () => {
+      body.innerHTML = `<div class="hpt-sec"><h3>Two-step verification</h3>
+          ${me.twofa ? `<p><span class="hpt-pill ok">On</span> Signing in needs your password and a code from your authenticator app.</p><div class="hpt-row"><button class="hpt-btn sm danger" type="button" id="tfOff">Turn off</button></div>`
+            : `<p id="tfIntro">Add a code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password…) when you sign in, so a stolen password isn't enough to open your clients' files.</p><div class="hpt-row" id="tfRow"><button class="hpt-btn go" type="button" id="tfOn">Turn on</button></div>`}
+          <div id="tfStep"></div></div>
+        <div class="hpt-sec"><h3>Change password</h3><div class="hpt-grid">
+          <label>Current password<input class="hpt-in" id="pwCur" type="password" autocomplete="current-password"></label>
+          <label>New password<input class="hpt-in" id="pwNew" type="password" autocomplete="new-password" placeholder="At least 8 characters"></label></div>
+          <div class="hpt-row" style="margin-top:10px"><button class="hpt-btn" type="button" id="pwGo">Change password</button></div><div id="pwMsg"></div></div>`;
+      const step = $("#tfStep", body);
+      const on = $("#tfOn", body);
+      if (on) on.onclick = async () => {
+        on.disabled = true;
+        try {
+          const r = await call("/api/auth/2fa-setup", {});
+          step.innerHTML = `<div class="hpt-note" style="margin-top:12px"><b>1.</b> In your authenticator app, add an account and scan this code.<div id="tfQr" style="background:#fff;padding:10px;border-radius:10px;width:max-content;margin:10px 0"></div>Can't scan? Enter this key: <code style="font:13px ui-monospace,Menlo,monospace;letter-spacing:.06em;user-select:all">${esc(r.secret.replace(/(.{4})/g, "$1 ").trim())}</code></div>
+            <div class="hpt-row" style="margin-top:8px"><span><b>2.</b> Type the 6-digit code it shows:</span><input class="hpt-in" id="tfCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="width:110px;letter-spacing:.25em;text-align:center"><button class="hpt-btn go" type="button" id="tfGo">Turn on</button></div><div id="tfMsg"></div>`;
+          try { await loadQr(); new window.QRCode($("#tfQr", step), { text: r.uri, width: 168, height: 168, colorDark: "#0b1220", colorLight: "#ffffff" }); } catch { $("#tfQr", step).remove(); }
+          $("#tfCode", step).focus();
+          const go = async () => {
+            const b = $("#tfGo", step); b.disabled = true;
+            try {
+              const x = await call("/api/auth/2fa-enable", { code: $("#tfCode", step).value });
+              me.twofa = true; window.hpUser = { ...window.hpUser, twofa: true };
+              step.innerHTML = `<div class="hpt-note" style="margin-top:12px"><b>Two-step verification is on.</b> Save these recovery codes somewhere safe. Each one signs you in once if you lose your phone.<pre style="margin:10px 0;font:14px/1.7 ui-monospace,Menlo,monospace;columns:2;user-select:all">${x.recovery.map(esc).join("\n")}</pre><div class="hpt-row"><button class="hpt-btn sm" type="button" id="rcCopy">Copy</button><button class="hpt-btn sm" type="button" id="rcSave">Download</button></div></div>`;
+              const txt = "Highpoint recovery codes for " + (me.email || "") + "\n\n" + x.recovery.join("\n") + "\n";
+              $("#rcCopy", step).onclick = async () => { try { await navigator.clipboard.writeText(txt); toast("Copied"); } catch {} };
+              $("#rcSave", step).onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt], { type: "text/plain" })); a.download = "highpoint-recovery-codes.txt"; a.click(); };
+              $("#tfIntro", body)?.remove(); $("#tfRow", body)?.remove();
+            } catch (e) { b.disabled = false; $("#tfMsg", step).innerHTML = `<div class="hpt-err">${esc(e.message)}</div>`; }
+          };
+          $("#tfGo", step).onclick = go; $("#tfCode", step).onkeydown = (e) => { if (e.key === "Enter") go(); };
+          $("#tfCode", step).oninput = (e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 6); if (e.target.value.length === 6) go(); };
+        } catch (e) { on.disabled = false; step.innerHTML = `<div class="hpt-err">${esc(e.message)}</div>`; }
+      };
+      const off = $("#tfOff", body);
+      if (off) off.onclick = () => {
+        step.innerHTML = `<div class="hpt-row" style="margin-top:10px"><input class="hpt-in" id="tfPw" type="password" placeholder="Your password" autocomplete="current-password" style="flex:1"><button class="hpt-btn danger" type="button" id="tfOffGo">Turn off two-step</button></div><div id="tfMsg"></div>`;
+        $("#tfPw", step).focus();
+        $("#tfOffGo", step).onclick = async () => { try { await call("/api/auth/2fa-disable", { password: $("#tfPw", step).value }); me.twofa = false; window.hpUser = { ...window.hpUser, twofa: false }; toast("Two-step verification is off"); draw(); } catch (e) { $("#tfMsg", step).innerHTML = `<div class="hpt-err">${esc(e.message)}</div>`; } };
+      };
+      $("#pwGo", body).onclick = async () => {
+        const msg = $("#pwMsg", body);
+        try { await call("/api/auth/password", { current: $("#pwCur", body).value, next: $("#pwNew", body).value }); msg.innerHTML = `<div class="hpt-note">Password changed.</div>`; $("#pwCur", body).value = $("#pwNew", body).value = ""; }
+        catch (e) { msg.innerHTML = `<div class="hpt-err">${esc(e.message)}</div>`; }
+      };
+    };
+    draw();
+  }
+
   /* ---------- Team panel (admins) ---------- */
   const planOpts = (cur, withEarly = true) => Object.keys(PLAN_NAME).filter((k) => withEarly || k !== "early").map((k) => `<option value="${k}" ${cur === k ? "selected" : ""}>${PLAN_NAME[k]}</option>`).join("");
   async function openTeam(tab = "agents") {
@@ -235,18 +291,19 @@
       const { members } = await call("/api/team/members");
       const stat = (x) => x.disabled ? `<span class="hpt-pill bad">Off</span>` : x.owner ? `<span class="hpt-pill ok">Owner</span>` : x.comp ? `<span class="hpt-pill ok">Free</span>` : x.access?.ok ? `<span class="hpt-pill ok">${x.status === "trialing" ? "Trial" : x.status === "active" ? "Paid" : "Access on"}</span>` : `<span class="hpt-pill ${x.status === "past_due" ? "bad" : "warn"}">${x.status === "past_due" ? "Payment failed" : "Unpaid"}</span>`;
       el.innerHTML = `<div class="hpt-wrap"><table class="hpt-tbl"><thead><tr><th>Agent</th><th>Role</th><th>Plan</th><th>Status</th><th>Free access</th><th>Last seen</th><th></th></tr></thead><tbody>
-        ${members.map((x) => `<tr data-id="${esc(x.id)}"><td><b>${esc(x.name || x.email)}</b><div class="hpt-muted">${esc(x.email)}</div></td>
+        ${members.map((x) => `<tr data-id="${esc(x.id)}"><td><b>${esc(x.name || x.email)}</b>${x.twofa ? ` <span class="hpt-pill ok" title="Two-step verification is on">2-step</span>` : ""}<div class="hpt-muted">${esc(x.email)}</div></td>
           <td>${x.owner ? "Owner" : `<select data-k="role" aria-label="Role"><option value="agent" ${x.role !== "admin" ? "selected" : ""}>Agent</option><option value="admin" ${x.role === "admin" ? "selected" : ""}>Admin</option></select>`}</td>
           <td>${x.owner || x.role === "admin" ? "Full Access" : `<select data-k="plan" aria-label="Plan">${planOpts(x.access?.plan || "full")}</select>`}</td>
           <td>${stat(x)}</td>
           <td>${x.owner ? "—" : `<input type="checkbox" data-k="comp" ${x.comp ? "checked" : ""} aria-label="Free access">`}</td>
           <td class="hpt-muted">${x.lastSeen ? day(x.lastSeen) : "—"}</td>
-          <td>${x.owner ? "" : `<button class="hpt-btn sm" type="button" data-k="disabled" data-v="${x.disabled ? 0 : 1}">${x.disabled ? "Turn on" : "Turn off"}</button>`}</td></tr>`).join("")}
+          <td><span style="display:flex;gap:6px;flex-wrap:wrap">${x.twofa ? `<button class="hpt-btn sm" type="button" data-k="reset2fa" title="They lost their phone? This turns off two-step verification for their login.">Reset 2-step</button>` : ""}${x.owner ? "" : `<button class="hpt-btn sm" type="button" data-k="disabled" data-v="${x.disabled ? 0 : 1}">${x.disabled ? "Turn on" : "Turn off"}</button>`}</span></td></tr>`).join("")}
       </tbody></table></div><p class="hpt-muted" style="margin-top:10px">Turning an account off signs them out right away. Their leads stay saved, and you can turn them back on anytime. The plan here decides what an agent can use when they have free access or billing is off; agents who pay change their own plan in Billing.</p>`;
       el.querySelectorAll("tr[data-id]").forEach((tr) => {
         const id = tr.dataset.id, save = async (patch) => { try { await call("/api/team/member", { id, ...patch }); toast("Saved"); show("agents"); } catch (e) { toast(e.message); show("agents"); } };
         tr.querySelectorAll("select[data-k]").forEach((s) => s.onchange = () => save({ [s.dataset.k]: s.value }));
         tr.querySelectorAll("input[data-k=comp]").forEach((c) => c.onchange = () => save({ comp: c.checked }));
+        tr.querySelectorAll("button[data-k=reset2fa]").forEach((b) => b.onclick = () => { if (confirm("Turn off two-step verification for this login? They can sign in with just their password and turn it back on in Security.")) save({ reset2fa: true }); });
         tr.querySelectorAll("button[data-k=disabled]").forEach((b) => b.onclick = () => { if (b.dataset.v === "1" && !confirm("Turn off this agent's account? They'll be signed out.")) return; save({ disabled: b.dataset.v === "1" }); });
       });
     }
@@ -258,14 +315,17 @@
           <label>Uses<select class="hpt-in" id="iUses"><option value="1">One person</option><option value="">Unlimited</option><option value="10">Up to 10</option></select></label>
           <label>Expires<select class="hpt-in" id="iDays"><option value="7">In 7 days</option><option value="30">In 30 days</option><option value="">Never</option></select></label>
           <label>Note<input class="hpt-in" id="iNote" placeholder="e.g. Maria's team" maxlength="80"></label>
+          <label>Email it to (optional)<input class="hpt-in" id="iEmail" type="email" placeholder="agent@example.com"></label>
           <label style="justify-content:flex-end"><span style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="iComp" style="accent-color:var(--accent)"> Free access</span></label></div>
         <div class="hpt-row" style="margin-top:10px"><button class="hpt-btn go" type="button" id="iGo">Create invite link</button></div><div id="iNew"></div>
         <h3>Active links</h3>${invites.length ? invites.map((i) => `<div class="hpt-link"><code>${esc(i.url)}</code><span class="hpt-pill">${esc(planName(i.plan === "pro" ? "full" : i.plan === "starter" ? "base" : i.plan))}${i.role === "admin" ? " · Admin" : ""}${i.comp ? " · Free" : ""}</span><span class="hpt-muted">${i.uses}${i.max_uses ? "/" + i.max_uses : ""} used${i.expires ? " · until " + day(i.expires) : ""}${i.note ? " · " + esc(i.note) : ""}</span><button class="hpt-btn sm" type="button" data-copy="${esc(i.url)}">Copy</button><button class="hpt-btn sm" type="button" data-rev="${esc(i.code)}">Revoke</button></div>`).join("") : `<p class="hpt-muted">No active links yet.</p>`}`;
       const copy = async (t) => { try { await navigator.clipboard.writeText(t); toast("Link copied"); } catch { prompt("Copy this link:", t); } };
       $("#iGo", el).onclick = async () => {
         try {
-          const r = await call("/api/team/invite", { plan: $("#iPlan", el).value, role: $("#iRole", el).value, maxUses: $("#iUses", el).value, days: $("#iDays", el).value, note: $("#iNote", el).value, comp: $("#iComp", el).checked });
-          await copy(r.url); show("invites");
+          const to = $("#iEmail", el).value.trim();
+          const r = await call("/api/team/invite", { plan: $("#iPlan", el).value, role: $("#iRole", el).value, maxUses: $("#iUses", el).value, days: $("#iDays", el).value, note: $("#iNote", el).value, comp: $("#iComp", el).checked, email: to });
+          if (to && r.emailed) toast(`Invite emailed to ${to}`); else { await copy(r.url); if (to) toast("Email isn't set up yet, so the link was copied instead"); }
+          show("invites");
         } catch (e) { $("#iNew", el).innerHTML = `<div class="hpt-err">${esc(e.message)}</div>`; }
       };
       el.querySelectorAll("[data-copy]").forEach((b) => b.onclick = () => copy(b.dataset.copy));
@@ -327,5 +387,5 @@
     window.hpUser = u; lockNav();
     return u;
   }
-  window.hpTeam = { ready, openBilling, openTeam, upgrade, can, viewLocked, viewFeature, lockNav, planName };
+  window.hpTeam = { ready, openBilling, openTeam, openSecurity, upgrade, can, viewLocked, viewFeature, lockNav, planName };
 })();

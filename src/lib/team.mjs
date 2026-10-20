@@ -261,10 +261,12 @@ export async function teamRoute(req, action, user) {
   const b = req.method === "POST" ? await req.json().catch(() => ({})) : {};
   if (action === "members") {
     const r = await D1().prepare("SELECT u.id, u.email, u.name, u.created, m.role, m.plan, m.status, m.comp, m.disabled, m.period_end, m.agreed_at, m.invited_by FROM users u LEFT JOIN members m ON m.user_id = u.id ORDER BY u.created").all();
+    const tf = await D1().prepare("SELECT key FROM blobs WHERE store='hpd-auth' AND key LIKE '2fa:%' AND txt LIKE '%\"on\":true%'").all().catch(() => ({ results: [] }));
+    const on2 = new Set((tf.results || []).map((x) => String(x.key).slice(4)));
     const seen = await D1().prepare("SELECT user_id, at FROM room").all();
     const at = Object.fromEntries((seen.results || []).map((x) => [x.user_id, x.at]));
     const settings = await billingSettings(); const own = (await import("./auth.mjs")).admins();
-    return json({ members: (r.results || []).map((x) => ({ ...x, owner: own.includes(String(x.email).toLowerCase()), lastSeen: at[x.id] || null, access: accessFor(x.role ? x : null, settings, own.includes(String(x.email).toLowerCase())) })) });
+    return json({ members: (r.results || []).map((x) => ({ ...x, twofa: on2.has(x.id), owner: own.includes(String(x.email).toLowerCase()), lastSeen: at[x.id] || null, access: accessFor(x.role ? x : null, settings, own.includes(String(x.email).toLowerCase())) })) });
   }
   if (action === "member" && req.method === "POST") {
     const id = String(b.id || ""); if (!id) return json({ error: "Missing agent" }, 400);
@@ -277,6 +279,7 @@ export async function teamRoute(req, action, user) {
     if (b.disabled !== undefined) { sets.push(`disabled=?${vals.push(b.disabled ? 1 : 0)}`); }
     if (sets.length) await D1().prepare(`UPDATE members SET ${sets.join(", ")} WHERE user_id=?1`).bind(...vals).run();
     if (b.disabled) await D1().prepare("DELETE FROM sessions WHERE user_id=?1").bind(id).run();
+    if (b.reset2fa) await getStore("hpd-auth").delete("2fa:" + id);
     return json({ ok: true });
   }
   if (action === "invites") {
@@ -287,7 +290,12 @@ export async function teamRoute(req, action, user) {
     const c = code();
     await D1().prepare("INSERT INTO invites (code, created_by, plan, role, comp, max_uses, expires, note, created) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
       .bind(c, user.id, normPlan(b.plan) || "full", b.role === "admin" ? "admin" : "agent", b.comp ? 1 : 0, b.maxUses ? Math.max(1, +b.maxUses) : null, b.days ? Date.now() + Math.max(1, +b.days) * 864e5 : null, String(b.note || "").slice(0, 80) || null, Date.now()).run();
-    return json({ code: c, url: site() + "/?invite=" + c });
+    let emailed = false;
+    if (b.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(b.email).trim())) {
+      const { emailOn, sendEmail, layout } = await import("./email.mjs");
+      if (emailOn()) emailed = (await sendEmail({ to: String(b.email).trim(), subject: `${user.name} invited you to the Highpoint desk`, ...layout({ title: "You're invited to Highpoint", paras: [`${user.name} invited you to join the Highpoint agent desk: your leads, dialer, quotes and follow-ups in one place.`], button: { label: "Create my login", url: site() + "/?invite=" + c }, after: ["The link works once and is only for you."] }) })).ok;
+    }
+    return json({ code: c, url: site() + "/?invite=" + c, emailed });
   }
   if (action === "revoke" && req.method === "POST") { await D1().prepare("UPDATE invites SET revoked=1 WHERE code=?1").bind(String(b.code || "")).run(); return json({ ok: true }); }
   if (action === "settings") {
