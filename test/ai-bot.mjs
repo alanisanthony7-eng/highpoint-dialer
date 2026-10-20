@@ -40,7 +40,7 @@ await call("rep", "/api/auth/signup", { email: "rep@hp.com", password: "password
 
 let r = await call("rep", "/api/ai", hi);
 ok(r.s === 200 && r.j.text === "Hello from Workers AI", "Workers AI answers when the AI binding is set");
-ok(cfAsked.at(-1).model === "@cf/meta/llama-3.1-8b-instruct" && asked.length === 0, "it uses Llama 3.1 8B and does not call Anthropic");
+ok(cfAsked.at(-1).model === "@cf/zai-org/glm-4.7-flash" && asked.length === 0, "it uses GLM-4.7 Flash and does not call Anthropic");
 ok(cfAsked.at(-1).input.messages[0].role === "system" && cfAsked.at(-1).input.messages[1].content === "hi", "the desk prompt and the user's message both go to the model");
 
 env.ANTHROPIC_API_KEY = "sk-ant-should-not-be-used";
@@ -52,7 +52,10 @@ await call("rep", "/api/ai", hi);
 ok(cfAsked.at(-1).model === "@cf/meta/llama-3.2-3b-instruct", "HP_AI_MODEL can pick a cheaper Cloudflare model");
 env.HP_AI_MODEL = "claude-sonnet-5-5";
 await call("rep", "/api/ai", hi);
-ok(cfAsked.at(-1).model === "@cf/meta/llama-3.1-8b-instruct", "a Claude model name is ignored when Workers AI is on");
+ok(cfAsked.at(-1).model === "@cf/zai-org/glm-4.7-flash", "a Claude model name is ignored when Workers AI is on");
+env.HP_AI_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+await call("rep", "/api/ai", hi);
+ok(cfAsked.at(-1).model === "@cf/zai-org/glm-4.7-flash", "the retired Llama 3.1 8B id is remapped to GLM-4.7 Flash");
 delete env.HP_AI_MODEL;
 
 cfReply = () => { throw new Error("30000 neurons remaining would drop below 0 (3028)"); };

@@ -110,7 +110,7 @@ export async function roomRoute(req, action) {
 
 // Highpoint Bot + call summaries. Prefers Cloudflare Workers AI (10,000 neurons/day
 // free, then cheap). Anthropic is only used when there is no AI binding (local/dev).
-const DEFAULT_CF = "@cf/meta/llama-3.1-8b-instruct";
+const DEFAULT_CF = "@cf/zai-org/glm-4.7-flash";
 const DEFAULT_CLAUDE = "claude-haiku-5-5";
 function aiText(out) {
   if (out == null) return "";
@@ -132,9 +132,16 @@ export async function aiRoute(req) {
   const chosen = String(env("HP_AI_MODEL") || "").trim();
 
   if (ai?.run) {
-    const model = chosen.startsWith("@cf/") ? chosen : DEFAULT_CF;
+    const model = chosen.startsWith("@cf/") && !/llama-3(\.1)?-8b-instruct(?!-fp8)/.test(chosen) ? chosen : DEFAULT_CF;
+    const run = async (m) => aiText(await ai.run(m, { messages: [{ role: "system", content: system }, ...messages], max_tokens: 1500 }));
     try {
-      const text = aiText(await ai.run(model, { messages: [{ role: "system", content: system }, ...messages], max_tokens: 1500 }));
+      let text;
+      try { text = await run(model); }
+      catch (e) {
+        const detail = String(e?.message || e || "");
+        if (model !== DEFAULT_CF && /5028|deprecated/i.test(detail)) text = await run(DEFAULT_CF);
+        else throw e;
+      }
       if (!String(text).trim()) return json({ error: "The assistant didn't return an answer. Try again.", code: "empty" }, 502);
       return json({ text });
     } catch (e) {
