@@ -1,5 +1,4 @@
-// Highpoint Bot (/api/ai): turned off without a key, which model it asks for, falling back when a chosen
-// model is retired, and plain messages for a bad key, an empty account and a busy API. Run: node test/ai-bot.mjs
+// Highpoint Bot (/api/ai): Workers AI by default, Anthropic only when there is no AI binding.
 import { DatabaseSync } from "node:sqlite";
 import { onRequest } from "../functions/api/[[path]].js";
 
@@ -15,7 +14,6 @@ const stmt = (q, args = []) => ({
 const DB = { prepare: (q) => stmt(q), batch: async (list) => Promise.all(list.map((s) => s.run())) };
 const env = { DB, HP_ADMIN_EMAILS: "boss@hp.com", HP_INVITE_CODE: "HP2026" };
 
-// fake Anthropic API: answers according to `reply`, records what was asked
 const asked = [];
 let reply = () => ({ status: 200, body: { content: [{ type: "text", text: "Hello from Claude" }] } });
 globalThis.fetch = async (url, o = {}) => {
@@ -24,6 +22,10 @@ globalThis.fetch = async (url, o = {}) => {
   const r = reply(body.model);
   return new Response(JSON.stringify(r.body), { status: r.status, headers: { "content-type": "application/json" } });
 };
+const cfAsked = [];
+let cfReply = () => ({ response: "Hello from Workers AI" });
+env.AI = { run: async (model, input) => { cfAsked.push({ model, input }); const r = cfReply(model, input); if (r instanceof Error) throw r; return r; } };
+
 const jars = {};
 async function call(who, path, body) {
   const h = { "content-type": "application/json" }; if (jars[who]) h.cookie = jars[who];
@@ -37,30 +39,39 @@ const hi = { messages: [{ role: "user", content: "hi" }] };
 await call("rep", "/api/auth/signup", { email: "rep@hp.com", password: "password1", name: "Rep", invite: "HP2026", agree: true });
 
 let r = await call("rep", "/api/ai", hi);
-ok(r.s === 503 && /ANTHROPIC_API_KEY/.test(r.j.error) && asked.length === 0, "without a key the bot says what to add, and calls nothing");
-env.ANTHROPIC_API_KEY = "  sk-ant-test  ";
-r = await call("rep", "/api/ai", hi);
-ok(r.s === 200 && r.j.text === "Hello from Claude", "with a key the bot answers");
-ok(asked.at(-1).model === "claude-haiku-5-5" && asked.at(-1).key === "sk-ant-test", "it uses the current Haiku model, and stray spaces around the key are trimmed");
+ok(r.s === 200 && r.j.text === "Hello from Workers AI", "Workers AI answers when the AI binding is set");
+ok(cfAsked.at(-1).model === "@cf/meta/llama-3.1-8b-instruct" && asked.length === 0, "it uses Llama 3.1 8B and does not call Anthropic");
+ok(cfAsked.at(-1).input.messages[0].role === "system" && cfAsked.at(-1).input.messages[1].content === "hi", "the desk prompt and the user's message both go to the model");
+
+env.ANTHROPIC_API_KEY = "sk-ant-should-not-be-used";
+await call("rep", "/api/ai", hi);
+ok(asked.length === 0, "with a Workers AI binding, a leftover Anthropic key is not used");
+
+env.HP_AI_MODEL = "@cf/meta/llama-3.2-3b-instruct";
+await call("rep", "/api/ai", hi);
+ok(cfAsked.at(-1).model === "@cf/meta/llama-3.2-3b-instruct", "HP_AI_MODEL can pick a cheaper Cloudflare model");
 env.HP_AI_MODEL = "claude-sonnet-5-5";
 await call("rep", "/api/ai", hi);
-ok(asked.at(-1).model === "claude-sonnet-5-5", "HP_AI_MODEL picks a different model");
-env.HP_AI_MODEL = "claude-old-model";
-reply = (model) => (model === "claude-old-model" ? { status: 404, body: { error: { type: "not_found_error", message: "model: claude-old-model" } } } : { status: 200, body: { content: [{ type: "text", text: "fallback ok" }] } });
-r = await call("rep", "/api/ai", hi);
-ok(r.s === 200 && r.j.text === "fallback ok" && asked.at(-1).model === "claude-haiku-5-5", "a retired model in HP_AI_MODEL falls back to the default instead of breaking");
+ok(cfAsked.at(-1).model === "@cf/meta/llama-3.1-8b-instruct", "a Claude model name is ignored when Workers AI is on");
 delete env.HP_AI_MODEL;
+
+cfReply = () => { throw new Error("30000 neurons remaining would drop below 0 (3028)"); };
+r = await call("rep", "/api/ai", hi);
+ok(r.s === 429 && r.j.code === "quota" && /Workers AI/.test(r.j.error), "hitting the daily allowance says so, and still doesn't call Claude");
+
+delete env.AI;
+asked.length = 0;
+r = await call("rep", "/api/ai", hi);
+ok(r.s === 200 && r.j.text === "Hello from Claude" && asked.at(-1).key === "sk-ant-should-not-be-used", "without an AI binding, a leftover Anthropic key is the fallback");
+ok(asked.at(-1).model === "claude-haiku-5-5", "the fallback uses Haiku");
+
+delete env.ANTHROPIC_API_KEY;
+r = await call("rep", "/api/ai", hi);
+ok(r.s === 503 && /Workers AI binding/.test(r.j.error) && asked.length === 1, "with neither binding nor key, the bot says what to add");
+
+env.ANTHROPIC_API_KEY = "  sk-ant-test  ";
 reply = () => ({ status: 401, body: { error: { type: "authentication_error", message: "invalid x-api-key" } } });
 r = await call("rep", "/api/ai", hi);
-ok(r.j.code === "bad_key" && /isn't valid/.test(r.j.error), "a wrong key says so");
-reply = () => ({ status: 400, body: { error: { type: "invalid_request_error", message: "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits." } } });
-r = await call("rep", "/api/ai", hi);
-ok(r.j.code === "no_credit" && /out of credits/.test(r.j.error), "an account with no credits says to add credits");
-reply = () => ({ status: 529, body: { error: { type: "overloaded_error", message: "Overloaded" } } });
-r = await call("rep", "/api/ai", hi);
-ok(r.s === 503 && r.j.code === "busy", "a busy API asks to try again");
-reply = () => ({ status: 429, body: { error: { type: "rate_limit_error", message: "rate limited" } } });
-r = await call("rep", "/api/ai", hi);
-ok(r.s === 429 && r.j.code === "rate_limited", "rate limits still come back as 429");
+ok(r.j.code === "bad_key" && /isn't valid/.test(r.j.error), "a wrong leftover Anthropic key says so");
 ok((await call("nobody", "/api/ai", hi)).s === 401, "signed-out visitors can't use the bot");
 console.log("done");

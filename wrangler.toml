@@ -11,6 +11,10 @@ binding = "DB"
 database_name = "highpoint"
 database_id = "5dceed87-da4e-4420-8940-78ec50647f4b"
 
+# Highpoint Bot + call summaries: Cloudflare Workers AI (10k neurons/day free).
+[ai]
+binding = "AI"
+
 # Non-secret settings (secrets like TWILIO_AUTH_TOKEN and HP_INVITE_CODE go in
 # Pages → Settings → Variables and secrets, type "Secret")
 [vars]

@@ -64,7 +64,7 @@ Locally, put Cloudflare-style keys in `.dev.vars` (same names as Pages secrets).
 | `HP_ADMIN_EMAILS` | your email (comma-separate more admins) |
 | `HP_INVITE_CODE` | a team code agents type when they create an account, e.g. `HIGHPOINT2026` |
 | `HP_PUBLIC_URL` | your site address, e.g. `https://highpoint-dialer.pages.dev` |
-| `ANTHROPIC_API_KEY` | *(optional)* turns on Highpoint Bot and call summaries |
+| `ANTHROPIC_API_KEY` | *(optional, unused on the live site)* old Claude fallback. Highpoint Bot now uses Cloudflare Workers AI |
 | `STRIPE_SECRET_KEY` | *(optional)* turns on paid plans (see Plans and billing) |
 | `RESEND_API_KEY`, `HP_EMAIL_FROM` | *(optional)* emails: forgot-password links and invites (see Email) |
 | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | *(optional)* lets each agent connect their own Spotify (see Spotify) |

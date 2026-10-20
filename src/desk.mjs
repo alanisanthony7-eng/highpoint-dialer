@@ -108,26 +108,52 @@ export async function roomRoute(req, action) {
   return json({ error: "Unknown action" }, 404);
 }
 
-// Highpoint Bot + call summaries (needs ANTHROPIC_API_KEY)
+// Highpoint Bot + call summaries. Prefers Cloudflare Workers AI (10,000 neurons/day
+// free, then cheap). Anthropic is only used when there is no AI binding (local/dev).
+const DEFAULT_CF = "@cf/meta/llama-3.1-8b-instruct";
+const DEFAULT_CLAUDE = "claude-haiku-5-5";
+function aiText(out) {
+  if (out == null) return "";
+  if (typeof out === "string") return out;
+  if (typeof out.response === "string") return out.response;
+  if (typeof out.result?.response === "string") return out.result.response;
+  if (Array.isArray(out.content)) return out.content.filter((c) => c?.type === "text").map((c) => c.text).join("");
+  return String(out.text || "");
+}
 export async function aiRoute(req) {
   await requireFeature(req, "bot", "dialer"); // Highpoint Bot, or the dialer's call summaries and Copilot
+  const ai = globalThis.__ENV?.AI;
   const key = String(env("ANTHROPIC_API_KEY") || "").trim();
-  if (!key) return json({ error: "The assistant isn't turned on yet. An admin needs to add ANTHROPIC_API_KEY in Cloudflare Pages → Settings → Variables and secrets.", code: "unavailable" }, 503);
+  if (!ai?.run && !key) return json({ error: "The assistant isn't turned on yet. Add a Workers AI binding named AI in Cloudflare Pages → Settings → Bindings, then redeploy.", code: "unavailable" }, 503);
   const b = await req.json().catch(() => ({}));
   const messages = (b.messages || []).filter((m) => m && (m.role === "user" || m.role === "assistant")).map((m) => ({ role: m.role, content: typeof m.content === "string" ? redact(m.content.slice(0, 40000)) : redact(JSON.stringify(m.content)).slice(0, 40000) })).slice(-30);
   if (!messages.length) return json({ error: "Nothing to send" }, 400);
   const system = String(b.system || "You are Highpoint Bot, a helpful assistant for life insurance agents at Highpoint Financial (final expense, mortgage protection, IUL). Be concise and practical. You are not a lawyer; flag compliance questions for a licensed advisor.").slice(0, 8000);
+  const chosen = String(env("HP_AI_MODEL") || "").trim();
+
+  if (ai?.run) {
+    const model = chosen.startsWith("@cf/") ? chosen : DEFAULT_CF;
+    try {
+      const text = aiText(await ai.run(model, { messages: [{ role: "system", content: system }, ...messages], max_tokens: 1500 }));
+      if (!String(text).trim()) return json({ error: "The assistant didn't return an answer. Try again.", code: "empty" }, 502);
+      return json({ text });
+    } catch (e) {
+      const detail = String(e?.message || e || "");
+      if (/neuron|quota|limit|429|3028/i.test(detail)) return json({ error: "Today's free Workers AI allowance is used up. Try again tomorrow — extra use is billed in cents on a paid Workers plan, not Claude credits.", code: "quota" }, 429);
+      return json({ error: detail || "Assistant error" }, 502);
+    }
+  }
+
   const ask = (model) => fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({ model, max_tokens: 1500, system, messages }),
   });
-  const DEFAULT_MODEL = "claude-haiku-5-5"; // fast and inexpensive; HP_AI_MODEL can pick another
-  const chosen = String(env("HP_AI_MODEL") || "").trim() || DEFAULT_MODEL;
-  let r = await ask(chosen);
+  let model = chosen || DEFAULT_CLAUDE;
+  if (!model.startsWith("claude-")) model = DEFAULT_CLAUDE;
+  let r = await ask(model);
   let j = await r.json().catch(() => ({}));
-  // a model set in HP_AI_MODEL that Anthropic has retired: fall back to the default instead of breaking the bot
-  if (r.status === 404 && chosen !== DEFAULT_MODEL) { r = await ask(DEFAULT_MODEL); j = await r.json().catch(() => ({})); }
+  if (r.status === 404 && model !== DEFAULT_CLAUDE) { r = await ask(DEFAULT_CLAUDE); j = await r.json().catch(() => ({})); }
   if (r.ok) return json({ text: (j.content || []).filter((c) => c.type === "text").map((c) => c.text).join("") });
   const detail = String(j.error?.message || "");
   if (r.status === 401) return json({ error: "The Anthropic API key isn't valid. An admin needs to check ANTHROPIC_API_KEY in Cloudflare (it starts with sk-ant-).", code: "bad_key" }, 502);

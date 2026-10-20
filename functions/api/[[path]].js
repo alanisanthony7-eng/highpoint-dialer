@@ -34,6 +34,7 @@ async function health(env) {
     stripe: !!env?.STRIPE_SECRET_KEY,
     spotify: !!(env?.SPOTIFY_CLIENT_ID && env?.SPOTIFY_CLIENT_SECRET),
     email: !!(env?.RESEND_API_KEY && env?.HP_EMAIL_FROM),
+    workersAi: !!env?.AI,
     anthropic: !!env?.ANTHROPIC_API_KEY,
     cron: !!env?.HP_CRON_SECRET,
   }, db === "ok" ? 200 : 503);
