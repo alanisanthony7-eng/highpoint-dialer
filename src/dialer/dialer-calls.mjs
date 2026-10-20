@@ -181,6 +181,19 @@ export default wrap(async (req) => {
     });
   }
 
+  // scrub a list against the National DNC, state DNC lists and TCPA litigators (cached 30 days per number)
+  if (action === "scrub") {
+    const { scrubOn, scrub, blockWhy, SCRUB_DEFAULTS } = await import("../lib/scrub.mjs");
+    const cfg = await loadConfig(), set = { ...SCRUB_DEFAULTS, ...(cfg.settings.scrub || {}) };
+    if (req.method === "GET") return json({ on: scrubOn() && set.on !== false, configured: scrubOn(), settings: set });
+    if (!scrubOn() || set.on === false) return json({ on: false, results: {} });
+    const b = await req.json().catch(() => ({}));
+    const list = [...new Set((b.numbers || []).map(to10).filter(Boolean))].slice(0, 250), results = {};
+    let i = 0;
+    await Promise.all(Array.from({ length: 6 }, async () => { while (i < list.length) { const n = list[i++]; const r = await scrub(n); results[n] = { status: r.status, why: r.status === "error" ? r.why : blockWhy(r, set) || "", blocked: !!blockWhy(r, set), at: r.at || Date.now() }; } }));
+    return json({ on: true, results });
+  }
+
   if (action === "dnc") {
     if (req.method === "GET") {
       const keys = await listKeys("dnc", "");

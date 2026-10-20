@@ -204,6 +204,7 @@ $("#impGo").onclick=async()=>{
   const queue=fresh.map(r=>({...r,product:r.product||dp,stage:stg,source:src,notes:r.notes?[{t:Date.now(),text:String(r.notes)}]:[],callCount:0}));
   let i=0; async function worker(){while(i<queue.length){const r=queue[i++];try{await putLead(r)}catch(e){fail++;if(e?.code==="quota_exceeded"){i=queue.length;toast("Your lead storage is full. Delete old leads to import more.")}}done++;upd()}}
   await Promise.all(Array.from({length:6},worker));
+  window.dispatchEvent(new CustomEvent("hp:imported",{detail:{phones:queue.map(r=>r.phone).filter(Boolean)}})); // the dialer scrubs new numbers against the DNC lists
   toast(`Imported ${done-fail} leads into ${stageName(stg)}`);if(done-fail>0)setTimeout(()=>awardXP(Math.min(50,5+Math.ceil((done-fail)/20)),"leads imported"),600); imp=null; $("#impStep2").hidden=true; go("pipeline");
 };
 

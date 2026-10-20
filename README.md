@@ -62,6 +62,16 @@ fetch('/api/auth/reset',{method:'POST',headers:{'content-type':'application/json
 
 That returns a temporary password to give the agent.
 
+## Do Not Call and litigator scrubbing
+Before every call, the dialer can check the number against the National Do Not Call Registry, state DNC lists and known TCPA litigators, through The Blacklist Alliance.
+1. Open an account at The Blacklist Alliance. For National DNC results, the account also needs your FTC Subscription Account Number (SAN) on file.
+2. Add the API key in Cloudflare as the secret `BLACKLIST_ALLIANCE_KEY`, then redeploy.
+3. Pick what to block in **Highpoint Dialer → Do not call**.
+- Each number's result is saved for 30 days, so repeat checks cost nothing. The National DNC has to be rechecked at least every 31 days.
+- New imports are checked automatically, and **Scrub all my leads** checks the whole book. Flagged leads are skipped by the dialer and marked on their profile.
+- If the check can't run, the call doesn't go through. Your own Do Not Call list, calling hours and the 24-hour attempt cap still apply on top.
+- This isn't legal advice. Whether consented leads may be called despite the National DNC is a question for your compliance advisor.
+
 ## Email
 Password reset links and emailed invites go through Resend (resend.com, free for small volumes).
 1. Create a Resend account and add your domain (for example highpointfinancial.co) under **Domains**, then add the DNS records it shows.

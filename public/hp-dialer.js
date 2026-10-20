@@ -1484,7 +1484,7 @@
     el.innerHTML = `
       <div class="hpf-top">
         <button type="button" class="hpf-x" id="hpfClose" aria-label="Close profile">✕</button>
-        <div class="hpf-who"><span class="hpf-av">${esc(((l.first || "?")[0] + ((l.last || "")[0] || "")).toUpperCase())}</span><div><b>${esc(D.fullName(l))}</b><span class="hpd-sm">${esc(fmt(l.phone))}${l.state ? " · " + esc(l.state) : ""}${l.age ? " · " + esc(l.age) + " yrs" : ""}</span></div>
+        <div class="hpf-who"><span class="hpf-av">${esc(((l.first || "?")[0] + ((l.last || "")[0] || "")).toUpperCase())}</span><div><b>${esc(D.fullName(l))}</b><span class="hpd-sm">${esc(fmt(l.phone))}${l.state ? " · " + esc(l.state) : ""}${l.age ? " · " + esc(l.age) + " yrs" : ""}</span>${scrubbedOut(l) ? `<span class="hpf-scrub" title="${esc(l.scrub.why || "")}">${l.scrub.status === "litigator" ? "TCPA litigator · don't call" : l.scrub.status === "federal" ? "On the National DNC" : l.scrub.status === "state" ? "On a state DNC list" : "Flagged · don't call"}</span>` : ""}</div>
           ${live ? `<span class="hpd-chip" data-s="live"><i></i>On call <span id="hpfClock" class="num" style="margin-left:4px"></span></span>` : ""}</div>
         ${window.hpPop ? `<span class="hpf-pops" role="group" aria-label="Call tools">${window.hpPop.launchers("hpf")}</span>` : ""}
         <div class="hpf-nav"><span class="hpd-sm"><span class="hpf-list">${esc(listName())} · </span>${idx + 1}/${n}</span><button type="button" id="hpfPrev" aria-label="Previous lead" ${idx <= 0 ? "disabled" : ""}>‹</button><button type="button" id="hpfNext" aria-label="Next lead" ${idx >= n - 1 ? "disabled" : ""}>›</button></div>
@@ -1751,7 +1751,8 @@
     return { st, h, ok: h >= start && h < end, txt: `${h12}:${p.minute} ${+p.hour < 12 ? "AM" : "PM"}`, start };
   }
   const WARM = ["contacted", "appointment", "application"];
-  const dialable = (l) => d10(l.phone).length === 10 && !CLOSED.includes(l.stage) && !l.dnc;
+  const scrubbedOut = (l) => !!(l.scrub?.blocked && Date.now() - (l.scrub.at || 0) < 30 * 864e5); // on a DNC or litigator list (checked again after 30 days)
+  const dialable = (l) => d10(l.phone).length === 10 && !CLOSED.includes(l.stage) && !l.dnc && !scrubbedOut(l);
   S.camps = lsGet("hpd.camps", []);
   // Two simple choices: which LIST to call from, and WHO in that list.
   {
@@ -2093,15 +2094,68 @@
     };
     $("#hprQ").oninput = draw; draw();
   }
+  /* ---------- National DNC / state DNC / litigator scrubbing ---------- */
+  S.scrub = null; // { on, configured, settings }
+  async function scrubStatus() { try { S.scrub = await api("/calls/scrub"); } catch { S.scrub = { on: false }; } return S.scrub; }
+  async function scrubLeads(leads, onProgress) {
+    const D = window.hpDesk, todo = leads.filter((l) => d10(l.phone).length === 10 && !l.dnc);
+    let done = 0, blocked = 0, errors = 0;
+    for (let i = 0; i < todo.length; i += 200) {
+      const part = todo.slice(i, i + 200);
+      let r; try { r = await api("/calls/scrub", { method: "POST", body: { numbers: part.map((l) => d10(l.phone)) } }); } catch (e) { toast(e.message); break; }
+      if (!r.on) break;
+      for (const l of part) {
+        const x = r.results[d10(l.phone)]; if (!x) continue;
+        if (x.status === "error") { errors++; continue; }
+        if (x.blocked) blocked++;
+        if (x.blocked || l.scrub) { try { await D.patchLead(l.id, { scrub: { status: x.status, why: x.why, blocked: x.blocked, at: x.at } }); } catch {} }
+      }
+      done += part.length; onProgress?.(done, todo.length, blocked);
+    }
+    return { done, blocked, errors };
+  }
+  window.addEventListener("hp:imported", async (e) => {
+    const st = S.scrub || (await scrubStatus()); if (!st.on) return;
+    const phones = new Set((e.detail?.phones || []).map(d10));
+    await sleep(1500); // let the new leads arrive
+    const leads = [...window.hpDesk.leads.values()].filter((l) => phones.has(d10(l.phone)));
+    if (!leads.length) return;
+    toast(`Checking ${leads.length} new numbers against the Do Not Call and litigator lists…`);
+    const r = await scrubLeads(leads);
+    toast(r.blocked ? `${r.blocked} of ${r.done} new numbers are on a Do Not Call or litigator list and won't be dialed` : `All ${r.done} new numbers are clear to call`);
+  });
+
   async function renderDnc() {
     const el = $("#hpdDnc"); let info = { count: 0 }; try { info = await api("/calls/dnc"); } catch {}
-    el.innerHTML = `<div class="hpd-grid2"><div class="panel stack"><h2>Do not call</h2><p class="hpd-sm" style="margin:0">${(info.count || 0).toLocaleString()} numbers blocked for the whole team. Press-9 opt-outs, STOP replies and "Do not call" results are added automatically.</p>
+    const sc = await scrubStatus(), set = sc.settings || {};
+    const flagged = [...window.hpDesk.leads.values()].filter(scrubbedOut).length;
+    const scrubPanel = `<div class="panel stack hpd-scrubp"><div class="hpd-flex" style="justify-content:space-between"><h2 style="margin:0">National DNC &amp; litigator scrub</h2><span class="hpd-chip" data-s="${sc.on ? "live" : ""}"><i></i>${sc.on ? "On" : sc.configured ? "Paused" : "Not set up"}</span></div>
+      ${sc.configured ? `<p class="hpd-sm" style="margin:0">Before every call, the number is checked against the National Do Not Call Registry, state DNC lists and known TCPA litigators (The Blacklist Alliance). If the check can't run, the call doesn't go through. New imports are checked automatically.</p>
+        ${S.me?.admin ? `<div class="hpd-scrubset">${[["on", "Check numbers before calling"], ["litigators", "Block known TCPA litigators"], ["federal", "Block the National DNC Registry"], ["state", "Block state DNC lists"], ["other", "Block other flags (anti-telemarketing, government)"]].map(([k, t]) => `<label><input type="checkbox" data-sc="${k}" ${set[k] !== false ? "checked" : ""}> ${t}</label>`).join("")}</div>
+          <p class="hpd-sm" style="margin:0">Only turn off the National DNC block for leads that gave prior express written consent to be called by you. When in doubt, leave it on.</p>` : ""}
+        <div class="hpd-flex"><button class="btn primary" id="hpdScrubAll" type="button" ${sc.on ? "" : "disabled"}>Scrub all my leads</button><span class="hpd-sm" id="hpdScrubMsg">${flagged ? `${flagged.toLocaleString()} of your leads are flagged and skipped by the dialer.` : ""}</span></div>`
+      : `<p class="hpd-sm" style="margin:0">Off. To check every number against the National Do Not Call Registry, state DNC lists and known TCPA litigators before it's dialed, an admin creates an account at The Blacklist Alliance and adds its API key in Cloudflare as <code>BLACKLIST_ALLIANCE_KEY</code>. Without it, the dialer still blocks your own Do Not Call list, calling hours and repeat attempts.</p>`}</div>`;
+    el.innerHTML = `${scrubPanel}<div class="hpd-grid2"><div class="panel stack"><h2>Do not call</h2><p class="hpd-sm" style="margin:0">${(info.count || 0).toLocaleString()} numbers blocked for the whole team. Press-9 opt-outs, STOP replies and "Do not call" results are added automatically.</p>
       <div class="hpd-flex"><input id="hpdDncChk" placeholder="Check a number" inputmode="tel" style="flex:1"><button class="btn" id="hpdDncChkB" type="button">Check</button></div><div id="hpdDncRes" class="hpd-sm"></div>
       <textarea id="hpdDncN2" rows="4" placeholder="Paste numbers to block, one per line"></textarea>
       <div class="hpd-flex"><button class="btn primary" id="hpdDncAdd2" type="button">Add to Do Not Call</button>${S.me?.admin ? `<button class="btn" id="hpdDncDel2" type="button">Remove (admin)</button>` : ""}</div></div>
       ${info.numbers?.length ? `<div class="panel stack"><h2>Blocked numbers</h2><div class="hpd-sm" style="max-height:360px;overflow:auto;columns:2">${info.numbers.slice(0, 2000).map((n) => `<div class="num">${esc(fmt(n))}</div>`).join("")}</div></div>` : ""}</div>`;
     const nums = () => $("#hpdDncN2").value.split(/[\n,;]+/).map(d10).filter((x) => x.length === 10);
-    $("#hpdDncChkB").onclick = async () => { const n = d10($("#hpdDncChk").value); if (n.length !== 10) return; const r = await api("/calls/dnc?n=" + n); $("#hpdDncRes").textContent = r.check ? `${fmt(n)} is on Do Not Call.` : `${fmt(n)} is not blocked.`; };
+    $("#hpdDncChkB").onclick = async () => {
+      const n = d10($("#hpdDncChk").value); if (n.length !== 10) return; const out = $("#hpdDncRes"); out.textContent = "Checking…";
+      const r = await api("/calls/dnc?n=" + n);
+      if (r.check) { out.textContent = `${fmt(n)} is on your Do Not Call list.`; return; }
+      if (sc.on) { try { const x = (await api("/calls/scrub", { method: "POST", body: { numbers: [n] } })).results[n]; out.textContent = x?.status === "error" ? `${fmt(n)}: ${x.why}` : x?.blocked ? `${fmt(n)}: ${x.why}` : `${fmt(n)} is clear: not on your list, the National DNC, state lists or litigator lists.`; return; } catch (e) { out.textContent = e.message; return; } }
+      out.textContent = `${fmt(n)} is not on your Do Not Call list.`;
+    };
+    $$("[data-sc]", el).forEach((c) => (c.onchange = async () => { const next = { ...set }; $$("[data-sc]", el).forEach((x) => (next[x.dataset.sc] = x.checked)); try { await api("/setup", { method: "PUT", body: { settings: { scrub: next } } }); toast("Saved"); renderDnc(); } catch (e) { toast(e.message); } }));
+    $("#hpdScrubAll")?.addEventListener("click", async (e) => {
+      const b = e.currentTarget, msg = $("#hpdScrubMsg"); b.disabled = true;
+      const leads = [...window.hpDesk.leads.values()].filter((l) => !CLOSED.includes(l.stage));
+      const r = await scrubLeads(leads, (d, t, bl) => { msg.textContent = `Checked ${d.toLocaleString()} of ${t.toLocaleString()} · ${bl} flagged`; });
+      msg.textContent = `Done: ${r.done.toLocaleString()} checked, ${r.blocked.toLocaleString()} flagged and skipped by the dialer${r.errors ? `, ${r.errors} couldn't be checked (they're checked again before dialing)` : ""}.`;
+      b.disabled = false; renderHome();
+    });
     $("#hpdDncAdd2").onclick = async () => { const n = nums(); if (!n.length) return; await api("/calls/dnc", { method: "POST", body: { numbers: n } }); toast(`${n.length} added to Do Not Call`); renderDnc(); };
     $("#hpdDncDel2")?.addEventListener("click", async () => { const n = nums(); if (!n.length) return; await api("/calls/dnc", { method: "DELETE", body: { numbers: n } }); toast(`${n.length} removed`); renderDnc(); });
   }

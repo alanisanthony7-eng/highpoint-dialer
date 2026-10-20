@@ -641,3 +641,9 @@ html.hp-pro .hpdk.callbar{border-radius:0;border-width:1px 0 0;border-color:rgba
 .hph-planmin.warn i{background:linear-gradient(90deg,#e2aa5e var(--p),rgba(255,255,255,.1) var(--p))}
 .hph-planmin.out{border-color:rgba(232,140,118,.45)}.hph-planmin.out i{background:#e88c76}.hph-planmin.out small{color:#f2b3a3}
 .hph-planmin.over i{background:#e2aa5e}
+/* DNC / litigator scrub */
+.hpd-scrubp{margin-bottom:14px}
+.hpd-scrubset{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 14px}
+.hpd-scrubset label{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.hpd-scrubset input{width:16px!important;height:16px;flex:none;margin:0}
+.hpf-scrub{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;color:#ffb3a3;background:rgba(232,140,118,.14);border:1px solid rgba(232,140,118,.45);width:max-content}

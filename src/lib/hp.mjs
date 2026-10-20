@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import { getStore } from "./store.mjs";
 import { requireDialer as authUser, httpErr as authErr } from "./auth.mjs";
 import { minutesGate, reportMinutes } from "./team.mjs";
+import { scrubOn, scrub, blockWhy, SCRUB_DEFAULTS } from "./scrub.mjs";
 import crypto from "node:crypto";
 
 export const env = (k, d = "") => (globalThis.__ENV?.[k] ?? d);
@@ -134,6 +135,7 @@ export const DEFAULT_SETTINGS = {
   agentMaxNumbers: 5,          // numbers an agent may buy themselves (0 = admins only)
   maxAttempts24h: 3,           // per lead, all states (some states require this)
   quietHours: null,            // override {start:8,end:21}
+  scrub: SCRUB_DEFAULTS,       // National DNC / state DNC / litigator scrubbing (needs BLACKLIST_ALLIANCE_KEY)
   amdAutoSkip: true,           // multi-line: hang up machines automatically and keep dialing
   inboundGreeting: "You've reached Highpoint Financial. Please leave your name and number and we'll call you right back.",
   abandonMessage: "",          // custom text for the second-answer message
@@ -274,6 +276,12 @@ export async function preflight(user, leadNum, settings, leadState, { override }
   if (!n) return { ok: false, why: "That isn't a valid US phone number." };
   const capped = await minutesGate(user).catch(() => null); if (capped) return { ok: false, why: capped, minutes: true };
   if (await isDnc(n)) return { ok: false, why: "This number is on your Do Not Call list.", hard: true };
+  // the National DNC, state DNC lists and known TCPA litigators (fails closed: no answer, no call)
+  if (scrubOn() && (settings.scrub || SCRUB_DEFAULTS).on !== false) {
+    const r = await scrub(n);
+    if (r.status === "error") return { ok: false, why: r.badKey ? r.why : "Couldn't check the Do Not Call and litigator lists just now, so the call didn't go through. Try again in a moment.", scrub: "error" };
+    const why = blockWhy(r, settings.scrub); if (why) return { ok: false, why, hard: true, scrub: r.status };
+  }
   const w = callWindow(n, settings, leadState);
   if (!w.ok && !(override && user.admin)) return { ok: false, why: w.why };
   const max = Math.min(settings.maxAttempts24h || 99, w.rule?.max24h || 99);
