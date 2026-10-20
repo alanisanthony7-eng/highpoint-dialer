@@ -14,23 +14,41 @@ const DB = { prepare: (q) => stmt(q), batch: async (list) => { const r = []; for
 const env = { DB, HP_ADMIN_EMAILS: "boss@hp.com", HP_INVITE_CODE: "HP2026", HP_PUBLIC_URL: "https://desk.example.com", TWILIO_ACCOUNT_SID: "AC_test", TWILIO_AUTH_TOKEN: "tok" };
 
 /* ---------- fake Stripe ---------- */
-const S = { products: [], prices: [], customers: [], sessions: [], subs: {}, hooks: [], calls: [] };
+const S = { products: [], prices: [], customers: [], sessions: [], subs: {}, hooks: [], calls: [], meters: [], events: [] };
 let n = 0; const id = (p) => p + "_" + ++n;
 const flat = (body) => Object.fromEntries(new URLSearchParams(String(body || "")));
-const subObj = (s) => ({ id: s.id, object: "subscription", status: s.status, customer: s.customer, metadata: s.metadata, current_period_end: Math.floor(Date.now() / 1000) + 30 * 86400, items: { data: [{ id: s.item, price: S.prices.find((p) => p.id === s.price) }] } });
+const priceObj = (pid) => S.prices.find((p) => p.id === pid);
+const subObj = (s) => ({ id: s.id, object: "subscription", status: s.status, customer: s.customer, metadata: s.metadata, current_period_end: Math.floor(Date.now() / 1000) + 30 * 86400, items: { data: [{ id: s.item, price: priceObj(s.price) }, ...(s.extra || []).map((x) => ({ id: x.id, price: priceObj(x.price) }))] } });
 function stripe(u, o) {
   const p = u.pathname.replace(/^\/v1\//, ""), b = flat(o.body), m = o.method || "GET";
   S.calls.push([m, p, b]);
   if (p === "prices" && m === "GET") { const key = u.searchParams.get("lookup_keys[0]"); return { data: S.prices.filter((x) => x.lookup_key === key && x.active) }; }
   if (p === "products") { const x = { id: id("prod"), name: b.name }; S.products.push(x); return x; }
-  if (p === "prices") { if (b.transfer_lookup_key) S.prices.forEach((x) => { if (x.lookup_key === b.lookup_key) x.lookup_key = null; }); const x = { id: id("price"), product: b.product, unit_amount: +b.unit_amount, currency: b.currency, lookup_key: b.lookup_key, active: true, metadata: { hp_plan: b["metadata[hp_plan]"] } }; S.prices.push(x); return x; }
+  if (p === "prices") { if (b.transfer_lookup_key) S.prices.forEach((x) => { if (x.lookup_key === b.lookup_key) x.lookup_key = null; }); const x = { id: id("price"), product: b.product, unit_amount: +b.unit_amount, currency: b.currency, lookup_key: b.lookup_key, active: true, recurring: { interval: b["recurring[interval]"], usage_type: b["recurring[usage_type]"] || "licensed", meter: b["recurring[meter]"] }, tiers: b["tiers[0][up_to]"] ? [{ up_to: b["tiers[0][up_to]"], unit_amount: b["tiers[0][unit_amount]"] }, { up_to: b["tiers[1][up_to]"], unit_amount_decimal: b["tiers[1][unit_amount_decimal]"] }] : null, unit_amount_decimal: b.unit_amount_decimal, metadata: { hp_plan: b["metadata[hp_plan]"], hp_kind: b["metadata[hp_kind]"], hp_minutes: b["metadata[hp_minutes]"], hp_rate: b["metadata[hp_rate]"] } }; S.prices.push(x); return x; }
+  if (p === "billing/meters" && m === "GET") return { data: S.meters };
+  if (p === "billing/meters") { const x = { id: id("mtr"), event_name: b.event_name, b }; S.meters.push(x); return x; }
+  if (p === "billing/meter_events") { S.events.push(b); return { event_name: b.event_name }; }
+  const si = p.match(/^subscription_items\/(.+)$/); if (si && m === "DELETE") { for (const s of Object.values(S.subs)) s.extra = (s.extra || []).filter((x) => x.id !== si[1]); return { deleted: true }; }
   if (p === "webhook_endpoints") { const x = { id: id("we"), secret: "whsec_test", url: b.url }; S.hooks.push(x); return x; }
   if (p === "customers") { const x = { id: id("cus"), email: b.email }; S.customers.push(x); return x; }
   if (p === "checkout/sessions") { const x = { id: id("cs"), url: "https://checkout.stripe.test/" + n, ...b }; S.sessions.push(x); return x; }
   if (p === "billing_portal/sessions") return { url: "https://billing.stripe.test/portal" };
   if (p === "subscriptions" && m === "GET") { const c = u.searchParams.get("customer"); return { data: Object.values(S.subs).filter((s) => s.customer === c).map(subObj) }; }
   const sm = p.match(/^subscriptions\/(.+)$/);
-  if (sm) { const s = S.subs[sm[1]]; if (m === "POST") { if (b["items[0][price]"]) s.price = b["items[0][price]"]; s.proration = b.proration_behavior; if (b["metadata[hp_plan]"]) s.metadata.hp_plan = b["metadata[hp_plan]"]; } return subObj(s); }
+  if (sm) {
+    const s = S.subs[sm[1]];
+    if (m === "POST") {
+      for (let i = 0; b[`items[${i}][price]`] || b[`items[${i}][id]`]; i++) {
+        const iid = b[`items[${i}][id]`], pr = b[`items[${i}][price]`], del = b[`items[${i}][deleted]`] === "true";
+        if (iid === s.item) { if (pr) s.price = pr; continue; }
+        s.extra = s.extra || [];
+        const ex = s.extra.find((x) => x.id === iid);
+        if (ex && del) s.extra = s.extra.filter((x) => x !== ex); else if (ex) ex.price = pr; else if (!iid) s.extra.push({ id: id("si"), price: pr });
+      }
+      s.proration = b.proration_behavior; if (b["metadata[hp_plan]"]) s.metadata.hp_plan = b["metadata[hp_plan]"];
+    }
+    return subObj(s);
+  }
   return {};
 }
 /* ---------- fake Spotify ---------- */
@@ -73,7 +91,7 @@ async function webhook(ev, secret = "whsec_test") {
 // Stripe finishing a checkout: make the subscription, then send the webhook
 async function complete(who) {
   const sess = S.sessions[S.sessions.length - 1], sid = id("sub");
-  S.subs[sid] = { id: sid, status: "active", customer: sess.customer, price: sess["line_items[0][price]"], item: id("si"), metadata: { hp_user: sess["subscription_data[metadata][hp_user]"], hp_plan: sess["subscription_data[metadata][hp_plan]"] } };
+  S.subs[sid] = { id: sid, status: "active", customer: sess.customer, price: sess["line_items[0][price]"], item: id("si"), extra: sess["line_items[1][price]"] ? [{ id: id("si"), price: sess["line_items[1][price]"] }] : [], metadata: { hp_user: sess["subscription_data[metadata][hp_user]"], hp_plan: sess["subscription_data[metadata][hp_plan]"] } };
   return webhook({ type: "checkout.session.completed", data: { object: { subscription: sid, customer: sess.customer, client_reference_id: sess.client_reference_id } } });
 }
 const me = async (who) => (await call(who, "/api/auth/me")).j.user;
@@ -163,6 +181,51 @@ r = await call("rep3", "/api/billing/checkout", { method: "POST", body: { plan: 
 await call("boss", "/api/team/settings", { method: "POST", body: { prices: { early: 40, base: 55, plus: 75, full: 150 } } });
 await call("rep3", "/api/billing/checkout", { method: "POST", body: { plan: "base" } });
 ok(S.prices.filter((p) => p.lookup_key === "hp_base_monthly").length === 1 && S.prices.find((p) => p.lookup_key === "hp_base_monthly").unit_amount === 5500, "a new Base price moves the lookup key to $55");
+
+// ---------- dialer minutes ----------
+const { aggregate } = await import("../src/lib/hp.mjs");
+r = await call("boss", "/api/team/settings");
+ok(r.j.minutes.full === 2000 && r.j.minutes.early === 1000 && r.j.minutes.base === null && r.j.overage.on === false, "plans include dialer minutes: Full Access 2,000 and Early Access 1,000 a month");
+const repMe = await me("rep");
+r = await call("rep", "/api/billing/status");
+ok(r.j.minutes.included === 2000 && r.j.minutes.used === 0 && r.j.minutes.overage === null, "an agent sees their minutes: 0 of 2,000");
+await call("boss", "/api/team/settings", { method: "POST", body: { minutes: { early: 1000, base: "", plus: "", full: 3 } } });
+r = await call("boss", "/api/dialer/setup", { method: "PUT", body: { settings: { quietHours: { start: 0, end: 24 } } } }); // calling hours depend on the clock; open the window for the test
+const callEnd = (sec, i) => aggregate({ id: "call" + i, agent: repMe.identity, talkSec: sec, answered: true, human: true, at: Date.now(), endedAt: Date.now() }, "end");
+await callEnd(61, 1); // 2 minutes (rounded up)
+r = await call("rep", "/api/billing/status"); ok(r.j.minutes.used === 2, "each call counts rounded up to the minute (61 seconds = 2)");
+r = await call("rep", "/api/dialer/calls/check", { method: "POST", body: { to: "2125550123", leadState: "NY" } });
+ok(r.j.ok !== false, "under the limit, calls go through");
+await callEnd(30, 2); // 3 of 3
+r = await call("rep", "/api/dialer/calls/check", { method: "POST", body: { to: "2125550123", leadState: "NY" } });
+ok(r.j.ok === false && /used all 3 dialer minutes/.test(r.j.why), "at the limit, dialing stops with a clear reason: " + r.j.why);
+r = await call("boss", "/api/dialer/calls/check", { method: "POST", body: { to: "2125550123", leadState: "NY" } });
+ok(r.j.ok !== false, "admins are never limited");
+// overage: keep dialing, Stripe bills the extra minutes
+r = await call("boss", "/api/team/settings", { method: "POST", body: { overage: { on: true, rate: 0.05 } } });
+ok(r.j.overage.on && r.j.overage.rate === 0.05, "admins can bill extra minutes instead ($0.05 each)");
+const meter = S.meters[0], mp = S.prices.find((p) => p.lookup_key === "hp_full_minutes");
+ok(meter && meter.event_name === "hp_dialer_minutes" && meter.b["default_aggregation[formula]"] === "sum", "Stripe gets a dialer-minutes meter");
+ok(mp && mp.recurring.usage_type === "metered" && mp.recurring.meter === meter.id && mp.tiers?.[0].up_to === "3" && mp.tiers[0].unit_amount === "0" && mp.tiers[1].unit_amount_decimal === "5", "and a price where the plan's minutes are free and the rest cost 5¢");
+const repSub = Object.values(S.subs).find((x) => x.customer === S.customers[0].id);
+ok(repSub.extra?.some((x) => x.price === mp.id), "existing subscribers get the minutes price added");
+r = await call("rep", "/api/dialer/calls/check", { method: "POST", body: { to: "2125550123", leadState: "NY" } });
+ok(r.j.ok !== false, "with overage on, the agent keeps dialing past the limit");
+r = await call("rep", "/api/billing/status"); ok(r.j.minutes.overage === 0.05, "and sees the per-minute rate");
+await callEnd(125, 3);
+const ev = S.events[S.events.length - 1];
+ok(ev && ev.event_name === "hp_dialer_minutes" && ev["payload[stripe_customer_id]"] === repSub.customer && ev["payload[value]"] === "3" && ev.identifier === "hpcall_call3", "each call's minutes are reported to Stripe (125 seconds = 3)");
+// switching plans swaps the minutes price too
+await call("rep", "/api/billing/change", { method: "POST", body: { plan: "plus" } });
+ok(!repSub.extra?.length, "a plan without the dialer drops the minutes price");
+await call("rep", "/api/billing/change", { method: "POST", body: { plan: "full" } });
+ok(repSub.extra?.length === 1 && priceObj(repSub.extra[0].price).lookup_key === "hp_full_minutes", "and switching back adds it again");
+r = await call("rep4", "/api/auth/signup", { method: "POST", body: { email: "rep4@hp.com", password: "password1", name: "Rep Four", invite: "HP2026", agree: true } });
+await call("rep4", "/api/billing/checkout", { method: "POST", body: { plan: "full" } });
+const s4 = S.sessions[S.sessions.length - 1];
+ok(s4["line_items[1][price]"] === mp.id && s4["line_items[1][quantity]"] === undefined, "new checkouts include the minutes price (no quantity, it's metered)");
+await call("boss", "/api/team/settings", { method: "POST", body: { overage: { on: false }, minutes: { early: 1000, full: 2000 } } });
+ok(!repSub.extra?.length, "turning overage off takes the minutes price off");
 
 // ---------- Spotify, one account per login ----------
 r = await call("boss", "/api/spotify/status"); ok(r.s === 200 && !r.j.configured && !r.j.connected, "Spotify shows as not set up until the admin adds the app keys");

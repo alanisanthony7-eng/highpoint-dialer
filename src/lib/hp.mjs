@@ -2,6 +2,7 @@
 import { Buffer } from "node:buffer";
 import { getStore } from "./store.mjs";
 import { requireDialer as authUser, httpErr as authErr } from "./auth.mjs";
+import { minutesGate, reportMinutes } from "./team.mjs";
 import crypto from "node:crypto";
 
 export const env = (k, d = "") => (globalThis.__ENV?.[k] ?? d);
@@ -271,6 +272,7 @@ export async function isDnc(num) { return !!(await getJ("dnc", to10(num))); }
 export async function preflight(user, leadNum, settings, leadState, { override } = {}) {
   const n = to10(leadNum);
   if (!n) return { ok: false, why: "That isn't a valid US phone number." };
+  const capped = await minutesGate(user).catch(() => null); if (capped) return { ok: false, why: capped, minutes: true };
   if (await isDnc(n)) return { ok: false, why: "This number is on your Do Not Call list.", hard: true };
   const w = callWindow(n, settings, leadState);
   if (!w.ok && !(override && user.admin)) return { ok: false, why: w.why };
@@ -304,12 +306,14 @@ export async function aggregate(rec, kind) {
       if (rec.abandoned) add(a, "abandoned");
       if (rec.answered && rec.talkSec < 10) add(a, "short");
       add(a, "talkSec", rec.talkSec || 0);
+      if (rec.talkSec > 0) add(a, "billMin", Math.ceil(rec.talkSec / 60)); // billable minutes: each connected call rounded up
     }
     if (kind === "dispo") { a.dispo = a.dispo || {}; add(a.dispo, rec.disposition || "Other"); if (/Appointment/i.test(rec.disposition)) add(a, "appts"); }
     return a;
   };
   await updateJ("stats", `${day}/a/${rec.agent}`, apply, {});
   if (rec.from && kind !== "dispo") await updateJ("stats", `${day}/n/${rec.from}`, apply, {});
+  if (kind === "end" && rec.talkSec > 0 && rec.agent && rec.dir !== "in") await reportMinutes(rec);
   if (kind === "end" && rec.from) {
     if (rec.answered) await bumpNumber(rec.from, "answered");
     if (rec.answered && rec.talkSec < 10) await bumpNumber(rec.from, "short");

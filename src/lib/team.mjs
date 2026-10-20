@@ -33,7 +33,10 @@ export const ORDER = ["base", "plus", "full"];
 // older plan names: Starter became Base; the old Pro (which had the dialer) became Full Access
 export const normPlan = (p) => (PLANS[p] ? p : p === "pro" ? "full" : p === "starter" ? "base" : null);
 const DEFAULT_FEATURES = { base: ["crm", "clients", "quoter", "screen", "scripts"], plus: ["crm", "clients", "quoter", "screen", "scripts", "bot", "iul"] };
-const DEFAULTS = { required: false, trialDays: 7, prices: { early: 40, base: 50, plus: 75, full: 150 }, defaultPlan: "full", features: DEFAULT_FEATURES, early: { on: true, ends: null } };
+// Dialer minutes included each month (null = no limit). They only count once payment is required; admins and
+// free-access agents are never limited. With overage on, extra minutes are billed through Stripe instead of stopping.
+const DEFAULT_MINUTES = { early: 1000, base: null, plus: null, full: 2000 };
+const DEFAULTS = { required: false, trialDays: 7, prices: { early: 40, base: 50, plus: 75, full: 150 }, defaultPlan: "full", features: DEFAULT_FEATURES, early: { on: true, ends: null }, minutes: DEFAULT_MINUTES, overage: { on: false, rate: 0.04 } };
 export function featuresFor(plan, settings) {
   const p = normPlan(plan) || "full";
   if (p === "full" || p === "early") return ALL.slice();
@@ -63,7 +66,8 @@ export async function billingSettings() {
   const s = (await kv().get("billing", { type: "json" })) || {}, prices = { ...DEFAULTS.prices };
   for (const k of Object.keys(PLANS)) if (+s.prices?.[k] > 0) prices[k] = +s.prices[k];
   const features = {}; for (const k of ["base", "plus"]) features[k] = Array.isArray(s.features?.[k]) ? s.features[k].filter((f) => FEATURES[f]) : DEFAULT_FEATURES[k];
-  return { ...DEFAULTS, ...s, prices, features, defaultPlan: normPlan(s.defaultPlan) || DEFAULTS.defaultPlan, early: { ...DEFAULTS.early, ...(s.early || {}) } };
+  const minutes = { ...DEFAULT_MINUTES }; for (const k of Object.keys(PLANS)) if (s.minutes && k in s.minutes) minutes[k] = s.minutes[k] == null || s.minutes[k] === "" ? null : Math.max(0, Math.round(+s.minutes[k] || 0));
+  return { ...DEFAULTS, ...s, prices, features, minutes, overage: { ...DEFAULTS.overage, ...(s.overage || {}) }, defaultPlan: normPlan(s.defaultPlan) || DEFAULTS.defaultPlan, early: { ...DEFAULTS.early, ...(s.early || {}) } };
 }
 async function saveSettings(patch) { const cur = (await kv().get("billing", { type: "json" })) || {}; const next = { ...cur, ...patch }; await kv().setJSON("billing", next); return next; }
 async function secretStore() { return (await kv().get("stripe", { type: "json" })) || {}; }
@@ -90,6 +94,43 @@ export function accessFor(m, settings, isOwner) {
   if (!settings.required) return yes(plan, "billing-off");
   if (ACTIVE.has(m?.status) && (!m.period_end || m.period_end > Date.now() - 3 * 864e5)) return yes(plan, m.status);
   return { ok: false, dialer: false, features: [], plan, reason: m?.status === "past_due" ? "past_due" : "unpaid" };
+}
+
+/* ---------- dialer minutes ---------- */
+const nyDay = (t) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(t);
+export const minutesFor = (plan, settings) => { const v = settings.minutes?.[normPlan(plan) || "full"]; return v == null ? null : +v; };
+// this month for the agent: their Stripe billing period, else the calendar month
+export function cycleOf(m) {
+  if (m?.stripe_sub && m.period_end && m.period_end > Date.now() - 40 * 864e5) { const s = new Date(m.period_end); s.setMonth(s.getMonth() - 1); return [s.getTime(), m.period_end]; }
+  const n = new Date(); return [new Date(n.getFullYear(), n.getMonth(), 1).getTime(), new Date(n.getFullYear(), n.getMonth() + 1, 1).getTime()];
+}
+// billable minutes: each connected call rounded up to the minute (older days without that count are estimated)
+export async function minutesUsed(identity, [from, to]) {
+  const days = new Set(); for (let t = from; t < Math.min(to, Date.now() + 864e5); t += 864e5) days.add(nyDay(t)); days.add(nyDay(Math.min(to, Date.now()) - 1));
+  const st = getStore({ name: "hpd-stats" });
+  const docs = await Promise.all([...days].map((d) => st.get(`${d}/a/${identity}`, { type: "json" }).catch(() => null)));
+  return docs.reduce((n, a) => n + (!a ? 0 : a.billMin != null ? a.billMin : Math.round((a.talkSec || 0) / 60 + (a.answered || 0) * 0.5)), 0);
+}
+// null when the agent may dial; otherwise why not
+export async function minutesGate(user) {
+  const settings = await billingSettings(); if (!settings.required) return null;
+  const uid = user.id || String(user.identity || "").replace(/^hp_/, ""), m = await member(uid);
+  if (!m || m.comp || m.role === "admin" || (await import("./auth.mjs")).admins().includes(String(user.email || "").toLowerCase())) return null;
+  const inc = minutesFor(m.plan, settings); if (inc == null) return null;
+  if (settings.overage?.on && m.stripe_sub && env("STRIPE_SECRET_KEY")) return null; // extra minutes are billed
+  const cyc = cycleOf(m), used = await minutesUsed("hp_" + uid, cyc);
+  if (used < inc) return null;
+  return `You've used all ${inc.toLocaleString("en-US")} dialer minutes in your plan for this month. They reset ${new Date(cyc[1]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Ask your Highpoint admin about more minutes.`;
+}
+// at the end of a connected call: report its minutes to Stripe (the first ones in the plan cost nothing)
+export async function reportMinutes(rec) {
+  try {
+    const n = Math.ceil((+rec.talkSec || 0) / 60); if (!n || !env("STRIPE_SECRET_KEY")) return;
+    const settings = await billingSettings(); if (!settings.overage?.on || !settings.required) return;
+    const m = await member(String(rec.agent || "").replace(/^hp_/, "")); if (!m?.stripe_customer || !ACTIVE.has(m.status) || m.comp) return;
+    const meter = await ensureMeter();
+    await stripe("billing/meter_events", { method: "POST", body: { event_name: meter.event, identifier: "hpcall_" + String(rec.id || rec.sid || Date.now()).slice(0, 90), timestamp: Math.floor((rec.endedAt || Date.now()) / 1000), payload: { stripe_customer_id: m.stripe_customer, value: n } } });
+  } catch (e) { console.error("minutes report failed", e.message); }
 }
 
 /* ---------- invites ---------- */
@@ -134,6 +175,28 @@ async function priceFor(plan, settings) {
   const p = await stripe("prices", { method: "POST", body: { product, currency: "usd", unit_amount: amount, recurring: { interval: "month" }, lookup_key: lookup, transfer_lookup_key: true, metadata: { hp_plan: plan } } });
   return p.id;
 }
+async function ensureMeter() {
+  const s = await secretStore(); if (s.meterId && s.meterEvent) return { id: s.meterId, event: s.meterEvent };
+  const event = "hp_dialer_minutes";
+  let m = ((await stripe("billing/meters", { query: { status: "active", limit: 100 } })).data || []).find((x) => x.event_name === event);
+  if (!m) m = await stripe("billing/meters", { method: "POST", body: { display_name: "Highpoint dialer minutes", event_name: event, default_aggregation: { formula: "sum" }, customer_mapping: { type: "by_id", event_payload_key: "stripe_customer_id" }, value_settings: { event_payload_key: "value" } } });
+  await saveSecret({ meterId: m.id, meterEvent: event });
+  return { id: m.id, event };
+}
+async function minutesPriceFor(plan, settings) {
+  if (!settings.overage?.on) return null;
+  const inc = minutesFor(plan, settings); if (inc == null) return null;
+  const rate = String(Math.max(0, +settings.overage.rate || 0) * 100).replace(/(\.\d{0,6})\d*$/, "$1"), lookup = `hp_${plan}_minutes`;
+  const found = (await stripe("prices", { query: { lookup_keys: [lookup], active: true, limit: 1 } })).data?.[0];
+  if (found && found.metadata?.hp_minutes === String(inc) && found.metadata?.hp_rate === rate) return found.id;
+  const meter = await ensureMeter(), s = await secretStore();
+  let product = s.minutesProduct;
+  if (!product) { product = (await stripe("products", { method: "POST", body: { name: "Highpoint dialer minutes", metadata: { hp_kind: "minutes" } } })).id; await saveSecret({ minutesProduct: product }); }
+  const body = { product, currency: "usd", recurring: { interval: "month", usage_type: "metered", meter: meter.id }, lookup_key: lookup, transfer_lookup_key: true, metadata: { hp_plan: plan, hp_kind: "minutes", hp_minutes: String(inc), hp_rate: rate } };
+  if (inc > 0) Object.assign(body, { billing_scheme: "tiered", tiers_mode: "graduated", tiers: [{ up_to: inc, unit_amount: 0 }, { up_to: "inf", unit_amount_decimal: rate }] });
+  else body.unit_amount_decimal = rate;
+  return (await stripe("prices", { method: "POST", body })).id;
+}
 const site = () => (env("HP_PUBLIC_URL") || globalThis.__ORIGIN || "").replace(/\/$/, "");
 async function ensureWebhook() {
   const s = await secretStore();
@@ -153,21 +216,53 @@ async function verify(req, raw) {
   const mine = hex(await crypto.subtle.sign("HMAC", k, enc.encode(`${t}.${raw}`)));
   return sigs.some((s) => s.length === mine.length && [...s].reduce((a, c, i) => a | (c.charCodeAt(0) ^ mine.charCodeAt(i)), 0) === 0);
 }
-const planOf = (sub) => normPlan(sub?.items?.data?.[0]?.price?.metadata?.hp_plan || (sub?.items?.data?.[0]?.price?.lookup_key || "").replace(/^hp_|_monthly$/g, "") || sub?.metadata?.hp_plan);
+const planItem = (sub) => (sub?.items?.data || []).find((i) => i.price?.recurring?.usage_type !== "metered" && i.price?.metadata?.hp_kind !== "minutes") || sub?.items?.data?.[0];
+const minutesItem = (sub) => (sub?.items?.data || []).find((i) => i.price?.recurring?.usage_type === "metered" || i.price?.metadata?.hp_kind === "minutes");
+const planOf = (sub) => normPlan(planItem(sub)?.price?.metadata?.hp_plan || (planItem(sub)?.price?.lookup_key || "").replace(/^hp_|_monthly$/g, "") || sub?.metadata?.hp_plan);
 async function applySub(sub, userId) {
   const uid = userId || sub.metadata?.hp_user || (await D1().prepare("SELECT user_id FROM members WHERE stripe_customer=?1").bind(sub.customer).first())?.user_id;
   if (!uid) return;
   const plan = planOf(sub);
   await D1().prepare("UPDATE members SET status=?2, stripe_customer=?3, stripe_sub=?4, period_end=?5" + (PLANS[plan] ? ", plan=?6" : "") + " WHERE user_id=?1")
-    .bind(uid, sub.status, sub.customer, sub.id, (sub.current_period_end || sub.items?.data?.[0]?.current_period_end || 0) * 1000, ...(PLANS[plan] ? [plan] : [])).run();
+    .bind(uid, sub.status, sub.customer, sub.id, (sub.current_period_end || planItem(sub)?.current_period_end || 0) * 1000, ...(PLANS[plan] ? [plan] : [])).run();
   (await import("./auth.mjs")).clearUserCache();
 }
 
+// the subscription's items for a plan: the plan price, and the minutes price when overage is on
+async function swapItems(sub, plan, settings) {
+  const items = [{ id: planItem(sub).id, price: await priceFor(plan, settings) }];
+  const mp = await minutesPriceFor(plan, settings), mi = minutesItem(sub);
+  if (mp && mi) items.push({ id: mi.id, price: mp }); else if (mp) items.push({ price: mp }); else if (mi) items.push({ id: mi.id, deleted: true });
+  return items;
+}
+// overage switched on: put a minutes price on every active subscription (switched off: take it off)
+async function syncMinutesItems(settings) {
+  const r = await D1().prepare("SELECT user_id, stripe_sub, plan FROM members WHERE stripe_sub IS NOT NULL AND status IN ('active','trialing')").all();
+  const out = { updated: 0, failed: [] };
+  for (const x of r.results || []) {
+    try {
+      const sub = await stripe("subscriptions/" + x.stripe_sub), mi = minutesItem(sub), mp = await minutesPriceFor(normPlan(x.plan), settings);
+      if (mp && (!mi || mi.price?.id !== mp)) await stripe("subscriptions/" + x.stripe_sub, { method: "POST", body: { items: [mi ? { id: mi.id, price: mp } : { price: mp }], proration_behavior: "none" } });
+      else if (!mp && mi) await stripe("subscription_items/" + mi.id, { method: "DELETE", query: { clear_usage: false } });
+      else continue;
+      out.updated++;
+    } catch (e) { out.failed.push(x.user_id + ": " + e.message); }
+  }
+  return out;
+}
+// the agent's minutes this month, for Billing and the dialer
+export async function minutesInfo(user, m, settings) {
+  const cyc = cycleOf(m), used = await minutesUsed(user.identity || "hp_" + user.id, cyc);
+  const limited = settings.required && !m.comp && m.role !== "admin" && !user.owner;
+  const included = limited && featuresFor(m.plan, settings).includes("dialer") ? minutesFor(m.plan, settings) : null;
+  return { used, included, resets: cyc[1], overage: limited && included != null && !!settings.overage?.on && !!m.stripe_sub ? +settings.overage.rate : null };
+}
 // what each plan costs and includes, for the plan screens
 function catalog(settings) {
   const open = earlyOpen(settings);
   return {
-    plans: Object.entries(PLANS).map(([k, p]) => ({ key: k, name: p.name, price: settings.prices[k], features: featuresFor(k, settings), early: !!p.early, available: k !== "early" || open })),
+    plans: Object.entries(PLANS).map(([k, p]) => ({ key: k, name: p.name, price: settings.prices[k], features: featuresFor(k, settings), early: !!p.early, available: k !== "early" || open, minutes: featuresFor(k, settings).includes("dialer") ? minutesFor(k, settings) : null })),
+    overage: settings.overage,
     featureNames: FEATURES, earlyOpen: open, earlyEnds: settings.early?.ends || null,
   };
 }
@@ -180,8 +275,8 @@ async function endEarly(moveTo, settings) {
     if (moveTo === "keep") { out.kept++; continue; }
     try {
       if (x.stripe_sub && ACTIVE.has(x.status)) {
-        const sub = await stripe("subscriptions/" + x.stripe_sub), item = sub.items?.data?.[0];
-        const next = await stripe("subscriptions/" + x.stripe_sub, { method: "POST", body: { items: [{ id: item.id, price: await priceFor(moveTo, settings) }], proration_behavior: "none", metadata: { hp_user: x.user_id, hp_plan: moveTo } } });
+        const sub = await stripe("subscriptions/" + x.stripe_sub);
+        const next = await stripe("subscriptions/" + x.stripe_sub, { method: "POST", body: { items: await swapItems(sub, moveTo, settings), proration_behavior: "none", metadata: { hp_user: x.user_id, hp_plan: moveTo } } });
         await applySub(next, x.user_id);
       } else await D1().prepare("UPDATE members SET plan=?2 WHERE user_id=?1").bind(x.user_id, moveTo).run();
       out.moved++;
@@ -212,7 +307,7 @@ export async function billingRoute(req, action, user) {
   if (!m) { await addMember(user.id, { plan: settings.defaultPlan }); m = await member(user.id); }
   if (action === "status") {
     return json({ plan: normPlan(m.plan), status: m.status, comp: !!m.comp, periodEnd: m.period_end, required: settings.required, trialDays: settings.trialDays, prices: settings.prices,
-      connected: !!env("STRIPE_SECRET_KEY"), hasCustomer: !!m.stripe_customer, subscribed: !!m.stripe_sub && ACTIVE.has(m.status), access: accessFor(m, settings, user.owner), ...catalog(settings) });
+      connected: !!env("STRIPE_SECRET_KEY"), hasCustomer: !!m.stripe_customer, subscribed: !!m.stripe_sub && ACTIVE.has(m.status), access: accessFor(m, settings, user.owner), ...catalog(settings), minutes: await minutesInfo(user, m, settings) });
   }
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const b = await req.json().catch(() => ({}));
@@ -221,9 +316,9 @@ export async function billingRoute(req, action, user) {
     if (plan === "early" && !earlyOpen(settings) && normPlan(m.plan) !== "early") return json({ error: "Early access has ended. Choose Base, Pro or Full Access." }, 400);
     if (m.stripe_sub && ACTIVE.has(m.status)) { // already subscribed: switch the plan on the same subscription (Stripe prorates the difference)
       if (plan === normPlan(m.plan)) return json({ ok: true, plan, access: accessFor(m, settings, user.owner) });
-      const sub = await stripe("subscriptions/" + m.stripe_sub), item = sub.items?.data?.[0];
+      const sub = await stripe("subscriptions/" + m.stripe_sub), item = planItem(sub);
       if (!item) return json({ error: "Couldn't find your subscription. Open Manage billing, or contact your admin." }, 400);
-      const next = await stripe("subscriptions/" + m.stripe_sub, { method: "POST", body: { items: [{ id: item.id, price: await priceFor(plan, settings) }], proration_behavior: "create_prorations", metadata: { hp_user: user.id, hp_plan: plan } } });
+      const next = await stripe("subscriptions/" + m.stripe_sub, { method: "POST", body: { items: await swapItems(sub, plan, settings), proration_behavior: "create_prorations", metadata: { hp_user: user.id, hp_plan: plan } } });
       await applySub(next, user.id);
       const m2 = await member(user.id);
       return json({ ok: true, changed: true, plan: normPlan(m2.plan), access: accessFor(m2, settings, user.owner) });
@@ -234,7 +329,7 @@ export async function billingRoute(req, action, user) {
     if (!customer) { customer = (await stripe("customers", { method: "POST", body: { email: user.email, name: user.name, metadata: { hp_user: user.id } } })).id; await D1().prepare("UPDATE members SET stripe_customer=?2 WHERE user_id=?1").bind(user.id, customer).run(); }
     const trial = m.status === "none" && settings.trialDays > 0 ? settings.trialDays : undefined;
     const s = await stripe("checkout/sessions", { method: "POST", body: {
-      mode: "subscription", customer, client_reference_id: user.id, line_items: [{ price: await priceFor(plan, settings), quantity: 1 }],
+      mode: "subscription", customer, client_reference_id: user.id, line_items: [{ price: await priceFor(plan, settings), quantity: 1 }, ...((await minutesPriceFor(plan, settings)) ? [{ price: await minutesPriceFor(plan, settings) }] : [])],
       subscription_data: { metadata: { hp_user: user.id, hp_plan: plan }, ...(trial ? { trial_period_days: trial } : {}) },
       metadata: { hp_user: user.id }, allow_promotion_codes: true,
       success_url: site() + "/?billing=success", cancel_url: site() + "/?billing=canceled" } });
@@ -309,8 +404,18 @@ export async function teamRoute(req, action, user) {
       if (b.prices) { patch.prices = {}; for (const k of Object.keys(PLANS)) patch.prices[k] = Math.max(1, Math.round(+b.prices[k] || DEFAULTS.prices[k])); }
       if (b.defaultPlan && normPlan(b.defaultPlan)) patch.defaultPlan = normPlan(b.defaultPlan);
       if (b.features) { patch.features = {}; for (const k of ["base", "plus"]) patch.features[k] = (Array.isArray(b.features[k]) ? b.features[k] : DEFAULT_FEATURES[k]).filter((f) => FEATURES[f]); }
+      if (b.minutes) { patch.minutes = {}; for (const k of Object.keys(PLANS)) patch.minutes[k] = b.minutes[k] == null || b.minutes[k] === "" ? null : Math.max(0, Math.round(+b.minutes[k] || 0)); }
+      if (b.overage) {
+        if (b.overage.on && !env("STRIPE_SECRET_KEY")) return json({ error: "Connect Stripe first to bill extra minutes." }, 400);
+        patch.overage = { on: !!b.overage.on, rate: Math.min(5, Math.max(0.001, +b.overage.rate || DEFAULTS.overage.rate)) };
+      }
       if (b.early) { const cur = (await billingSettings()).early; patch.early = { on: b.early.on === undefined ? cur.on : !!b.early.on, ends: b.early.ends === undefined ? cur.ends : b.early.ends ? Math.max(0, +new Date(b.early.ends)) || null : null }; }
+      const before = await billingSettings();
       await saveSettings(patch);
+      const after = await billingSettings();
+      if (env("STRIPE_SECRET_KEY") && (patch.overage || patch.minutes) && JSON.stringify([before.overage, before.minutes]) !== JSON.stringify([after.overage, after.minutes])) {
+        const r = await syncMinutesItems(after); if (r.failed.length) console.error("minutes sync", r.failed);
+      }
     }
     const s = await secretStore(), cur = await billingSettings();
     const early = (await D1().prepare("SELECT COUNT(*) AS n FROM members WHERE plan='early'").first())?.n || 0;

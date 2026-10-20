@@ -86,6 +86,7 @@ Until the domain is verified, Resend only delivers to the email you signed up to
 - Agents pick a plan at checkout and switch plans in **Billing**. Stripe prorates the difference. **Manage card and invoices** opens Stripe's portal.
 - **End early access** stops new Early Access sign-ups. It moves early members to the plan you pick from their next renewal, or lets them keep $40.
 - Until payment is required, agents get whatever plan their admin sets. Everyone starts on Full Access, so nobody loses anything.
+- **Dialer minutes:** Full Access includes 2,000 a month and Early Access 1,000. Admins can change this, and a blank means no limit. A minute is counted for each connected call, rounded up. Agents see their minutes on the dialer and in Billing. When the minutes run out, dialing stops until the month resets, unless **Bill extra minutes** is on. Then Stripe charges each extra minute on the agent's next bill, through a usage meter the site creates for you. Limits only apply once payment is required. Admins and agents with free access are never limited.
 
 ## Spotify
 Each agent connects their own Spotify account to their login. With Spotify Premium, music plays inside the desk: their playlists, controls, and a pause when a call starts. Spotify Free accounts and agents who haven't connected get Spotify's embedded player.

@@ -1809,8 +1809,8 @@
   async function loadUsage() {
     try {
       const dom = new Date().getDate();
-      const [d1, dm] = await Promise.all([api(`/calls/analytics?days=1`), api(`/calls/analytics?days=${dom}`)]);
-      usage = { today: d1.total, month: dm.total };
+      const [d1, dm, bs] = await Promise.all([api(`/calls/analytics?days=1`), api(`/calls/analytics?days=${dom}`), fetch("/api/billing/status", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).catch(() => null)]);
+      usage = { today: d1.total, month: dm.total, plan: bs?.minutes || null };
     } catch { usage = null; }
     if (!$("#hpdHome")?.hidden) renderHome();
   }
@@ -1919,6 +1919,8 @@
         <label><span>Pick-up ding</span><input type="range" id="hphDing" min="0" max="1" step="0.05" value="${S.sound.ding}"><b class="num">${Math.round(S.sound.ding * 100)}%</b></label>
         <button type="button" class="btn" id="hphTest">Test ding</button>
       </div>
+      ${(() => { const pm = usage?.plan; if (!pm || pm.included == null) return ""; const pct = pm.included ? Math.min(100, Math.round((pm.used / pm.included) * 100)) : 100, over = pm.used >= pm.included;
+        return `<div class="hph-planmin ${over ? (pm.overage != null ? "over" : "out") : pct >= 80 ? "warn" : ""}"><div><b>Plan minutes</b><span class="num">${pm.used.toLocaleString()} of ${pm.included.toLocaleString()}</span><em>Resets ${new Date(pm.resets).toLocaleDateString([], { month: "short", day: "numeric" })}</em></div><i style="--p:${pct}%"></i><small>${over ? (pm.overage != null ? `You're past your plan's minutes. Extra minutes are $${pm.overage.toFixed(3).replace(/0$/, "")} each.` : "You've used this month's minutes, so dialing is paused until they reset. Ask your admin about more.") : pct >= 80 ? "Getting close to this month's minutes." : "Each connected call counts, rounded up to the minute."}</small></div>`; })()}
       <div class="hph-usage">
         <div><b class="num">${usage ? estMin(t) : "—"}</b> min today<span>${usage ? cost(t) + " est." : ""}</span></div>
         <div><b class="num">${usage ? estMin(m) : "—"}</b> min this month<span>${usage ? cost(m) + " est." : ""}</span></div>

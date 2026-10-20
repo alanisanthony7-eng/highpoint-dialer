@@ -129,11 +129,12 @@
     const list = (k) => {
       const prev = k === "plus" ? "base" : k === "full" ? "plus" : null, have = new Set(prev ? P[prev].features : []);
       const items = P[k].features.filter((f) => !have.has(f)).map((f) => `<li>${esc(FEAT[f] || f)}</li>`).join("");
-      return (prev ? `<li class="inh">Everything in ${planName(prev)}, plus:</li>` : "") + items;
+      const mins = P[k].minutes != null ? `<li>${P[k].minutes.toLocaleString()} dialer minutes a month${b.overage?.on ? `, then $${(+b.overage.rate).toFixed(3).replace(/0$/, "")}/min` : ""}</li>` : "";
+      return (prev ? `<li class="inh">Everything in ${planName(prev)}, plus:</li>` : "") + items + mins;
     };
     const keys = (opts.only || ["base", "plus", "full"]).filter((k) => P[k] && k !== "early");
     const showEarly = b.earlyOpen && P.early && (!opts.only || opts.only.includes("early"));
-    const early = showEarly ? `<div class="hpt-early"><span class="tag">Early access${b.earlyEnds ? ` · ends ${day(b.earlyEnds)}` : ""}</span><div><b>Early Access</b><p>Everything in Full Access, for early members while early access lasts.</p></div><div class="pr">${money(P.early.price)}<small>/month</small></div>
+    const early = showEarly ? `<div class="hpt-early"><span class="tag">Early access${b.earlyEnds ? ` · ends ${day(b.earlyEnds)}` : ""}</span><div><b>Early Access</b><p>Everything in Full Access, for early members while early access lasts.${P.early.minutes != null ? ` Includes ${P.early.minutes.toLocaleString()} dialer minutes a month.` : ""}</p></div><div class="pr">${money(P.early.price)}<small>/month</small></div>
       <button class="hpt-btn go" type="button" data-plan="early" ${cur === "early" && (live || b.comp) ? "disabled" : ""}>${cur === "early" && (live || b.comp) ? "Current plan" : live ? "Switch to Early Access" : "Join early access"}</button></div>` : "";
     const cards = keys.map((k) => `<div class="hpt-plan${cur === k ? " cur" : ""}${k === "plus" ? " pop" : ""}"><div class="nm">${esc(planName(k))}${k === "plus" ? "<em>Popular</em>" : ""}</div><div class="pr">${money(P[k].price)}<small>/month</small></div><ul>${list(k)}</ul>
       <button class="hpt-btn${!showEarly && k === "plus" ? " go" : ""}" type="button" data-plan="${k}" ${cur === k && (live || b.comp) ? "disabled" : ""}>${esc(label(k))}</button></div>`).join("");
@@ -183,6 +184,7 @@
     const m = modal(`<h2>Billing</h2>
       <div class="hpt-row" style="margin:6px 0 12px"><span class="hpt-pill">${esc(planName(admin ? "full" : b.plan))}</span>${admin ? "" : `<span class="hpt-pill ${tone}">${esc(label)}</span>`}${b.periodEnd && b.subscribed ? `<span class="hpt-muted">${b.status === "trialing" ? "Trial ends" : "Renews"} ${day(b.periodEnd)}</span>` : ""}</div>
       ${free ? `<p>${esc(free)}</p>` : ""}
+      ${b.minutes && b.minutes.included != null ? `<div class="hpt-note" style="margin:0 0 12px"><b>Dialer minutes:</b> ${b.minutes.used.toLocaleString()} of ${b.minutes.included.toLocaleString()} used this month · resets ${day(b.minutes.resets)}${b.minutes.overage != null ? ` · extra minutes $${b.minutes.overage.toFixed(3).replace(/0$/, "")} each` : ""}</div>` : b.minutes ? `<p class="hpt-muted">Dialer minutes used this month: ${b.minutes.used.toLocaleString()}</p>` : ""}
       ${b.hasCustomer ? `<div class="hpt-row" style="margin:6px 0 4px"><button class="hpt-btn" type="button" id="hptPortal">Manage card and invoices</button></div>` : ""}
       ${admin ? "" : !b.connected && !b.subscribed ? `<p class="hpt-muted">Online payments aren't connected yet.</p>${plansHtml(b, { action: () => "Ask your admin" })}` : plansHtml(b)}`, { wide: !admin });
     if (b.connected || b.subscribed) wire(m.el, b); else m.el.querySelectorAll("[data-plan]").forEach((x) => (x.disabled = true));
@@ -349,6 +351,10 @@
           <p class="hpt-muted" style="margin:10px 0 0">${s.earlyMembers} agent${s.earlyMembers === 1 ? " is" : "s are"} on Early Access.${ended && s.early.endedTo ? ` Early access ended ${day(s.early.ends)}${s.early.endedTo === "keep" ? "; early members kept their price." : `; early members moved to ${planName(s.early.endedTo)}.`}` : ""}</p>
           ${s.earlyMembers ? `<div class="hpt-row" style="margin-top:10px"><span class="hpt-muted">End early access and move them to</span><select class="hpt-in" id="eTo"><option value="full">Full Access (${money(s.prices.full)})</option><option value="plus">Pro (${money(s.prices.plus)})</option><option value="base">Base (${money(s.prices.base)})</option><option value="keep">Keep their ${money(s.prices.early)} price</option></select><button class="hpt-btn danger sm" type="button" id="eEnd">End early access</button></div>
             <p class="hpt-muted" style="margin:6px 0 0">Each subscription switches from its next renewal, with no extra charge for the month they already paid.</p>` : ""}</div>
+        <div class="hpt-sec"><h3>Dialer minutes per month</h3><div class="hpt-grid">
+          ${["early", "base", "plus", "full"].map((k) => `<label>${PLAN_NAME[k]}<input class="hpt-in" data-min="${k}" type="number" min="0" step="100" placeholder="No limit" value="${s.minutes[k] == null ? "" : esc(s.minutes[k])}"></label>`).join("")}</div>
+          <p class="hpt-muted" style="margin:8px 0 0">Each connected call counts, rounded up to the minute. Leave blank for no limit. Limits only apply once payment is required; admins and free-access agents are never limited.</p>
+          <label class="hpt-chk"><input type="checkbox" id="ovOn" ${s.overage.on ? "checked" : ""} ${s.connected ? "" : "disabled"}><span><b>Bill extra minutes instead of stopping.</b> Agents keep dialing past their plan's minutes and Stripe adds each extra minute to their next bill at <input class="hpt-in" id="ovRate" type="number" min="0.001" step="0.005" value="${esc(s.overage.rate)}" style="width:86px;display:inline-block;margin:0 4px"> dollars a minute.${s.connected ? "" : " (Connect Stripe first.)"}</span></label></div>
         <div class="hpt-sec"><h3>What each plan includes</h3><div class="hpt-wrap"><table class="hpt-tbl mx"><thead><tr><th>Feature</th><th>Base</th><th>Pro</th><th>Full / Early</th></tr></thead><tbody>
           ${feats.map((f) => `<tr><td>${esc(FEAT[f] || names[f])}</td>${["base", "plus"].map((p) => `<td><input type="checkbox" data-mx="${p}" value="${f}" ${f === "crm" || s.features[p].includes(f) ? "checked" : ""} ${f === "crm" ? "disabled" : ""} aria-label="${esc(PLAN_NAME[p] + ": " + (FEAT[f] || f))}"></td>`).join("")}<td><input type="checkbox" checked disabled aria-label="Full Access includes it"></td></tr>`).join("")}
           </tbody></table></div></div>
@@ -357,8 +363,9 @@
       $("#bGo", el).onclick = async () => {
         const prices = {}; el.querySelectorAll("[data-price]").forEach((i) => (prices[i.dataset.price] = +i.value));
         const features = { base: [], plus: [] }; el.querySelectorAll("[data-mx]:checked").forEach((c) => features[c.dataset.mx].push(c.value));
+        const minutes = {}; el.querySelectorAll("[data-min]").forEach((i) => (minutes[i.dataset.min] = i.value === "" ? null : +i.value));
         try {
-          await call("/api/team/settings", { prices, features, trialDays: +$("#bT", el).value, defaultPlan: $("#bD", el).value, required: $("#bR", el).checked, early: { on: $("#eOn", el).checked, ends: $("#eEnds", el).value || null } });
+          await call("/api/team/settings", { prices, features, minutes, ...(s.connected ? { overage: { on: $("#ovOn", el).checked, rate: +$("#ovRate", el).value } } : {}), trialDays: +$("#bT", el).value, defaultPlan: $("#bD", el).value, required: $("#bR", el).checked, early: { on: $("#eOn", el).checked, ends: $("#eEnds", el).value || null } });
           toast("Saved"); show("billing");
         } catch (e) { $("#bMsg", el).innerHTML = `<div class="hpt-err">${esc(e.message)}</div>`; }
       };
