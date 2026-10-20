@@ -203,8 +203,10 @@
   }
 
   /* ---------- open, close, move between panel and window ---------- */
+  const NEEDS = { script: "scripts", quote: "quoter", live: "dialer" };
   function open(k, opts = {}) {
     if (!KINDS[k]) return null;
+    if (window.hpTeam?.can?.(NEEDS[k]) === false) { if (!opts.restore) window.hpTeam.upgrade(NEEDS[k]); return null; } // not in this plan
     const fl = floating(k);
     let w = W.get(k);
     if (w && w.docked === fl) { drop(k); w = null; } // it's moving between the panel and a window
@@ -701,7 +703,7 @@
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
         if (AIH.lead !== id) return;
-        if (!ok) { AIH.status = j.code === "unavailable" || j.code === "bad_key" || j.code === "no_credit" ? "off" : "err"; return; }
+        if (!ok) { AIH.status = ["unavailable", "bad_key", "no_credit", "plan", "billing"].includes(j.code) ? "off" : "err"; return; }
         const out = JSON.parse((String(j.text || "").match(/\{[\s\S]*\}/) || ["{}"])[0]);
         const V = medVocab(), got = [];
         for (const c of Array.isArray(out.conditions) ? out.conditions : []) { const y = c?.years_ago; if (q.COND[c?.key]) got.push(condItem(c.key, y != null && y !== "" && +y >= 0 ? Date.now() - +y * YR : null, "ai", c.quote ? String(c.quote).slice(0, 200) : "")); }

@@ -18,7 +18,9 @@ Twilio carries the calls.
 | `src/desk.mjs` | Leads, appointments and call logs (private per login); crew cards and settings (shared); lobby presence; Highpoint Bot |
 | `src/dialer/*` | The Twilio dialer: browser phone, 1–3 line power dial, local numbers, voicemail drop, recordings, live transcripts, analytics, texting, DNC |
 | `src/lib/store.mjs` | Key/value storage with safe concurrent writes, on D1 |
-| `test/cf-sim.mjs` | 54 end-to-end checks run locally (`npm test`) |
+| `src/lib/team.mjs` | Plans, Stripe billing, early access, invite links and the admin Team panel's API |
+| `src/lib/spotify.mjs` | Spotify per agent: each login connects its own Spotify account |
+| `test/cf-sim.mjs`, `test/billing.mjs` | End-to-end checks run locally (`npm test`) |
 
 ## One-time setup (about 10 minutes, free)
 
@@ -39,6 +41,8 @@ Twilio carries the calls.
 | `HP_INVITE_CODE` | a team code agents type when they create an account, e.g. `HIGHPOINT2026` |
 | `HP_PUBLIC_URL` | your site address, e.g. `https://highpoint-dialer.pages.dev` |
 | `ANTHROPIC_API_KEY` | *(optional)* turns on Highpoint Bot and call summaries |
+| `STRIPE_SECRET_KEY` | *(optional)* turns on paid plans (see Plans and billing) |
+| `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | *(optional)* lets each agent connect their own Spotify (see Spotify) |
 
 6. **Redeploy.** Go to **Deployments → ⋯ on the latest → Retry deployment** so the settings take effect.
 7. **Open your site, then click Create account.** Use the admin email. Admin emails don't need the team code.
@@ -56,6 +60,29 @@ fetch('/api/auth/reset',{method:'POST',headers:{'content-type':'application/json
 ```
 
 That returns a temporary password to give the agent.
+
+## Plans and billing
+| Plan | Price | Includes |
+|---|---|---|
+| Early Access | $40/mo | Everything, while early access is open |
+| Base | $50/mo | CRM (with calendar and lead import), client list, quoter, health screener, call scripts |
+| Pro | $75/mo | Base, plus Highpoint Bot and the IUL illustrator |
+| Full Access | $150/mo | Everything: the dialer, live transcripts and Copilot, crew lobby and games, Spotify |
+
+- Admins change prices, what Base and Pro include, the free trial, and early access in **Team → Plans and billing**. The site and the server both enforce each plan.
+- To charge: in Stripe, go to **Developers → API keys** and copy the secret key. Add it in Cloudflare as the secret `STRIPE_SECRET_KEY`, redeploy, then turn on **Require payment**. The site creates the products, prices and payment webhook in Stripe on the first checkout.
+- Agents pick a plan at checkout and switch plans in **Billing**. Stripe prorates the difference. **Manage card and invoices** opens Stripe's portal.
+- **End early access** stops new Early Access sign-ups. It moves early members to the plan you pick from their next renewal, or lets them keep $40.
+- Until payment is required, agents get whatever plan their admin sets. Everyone starts on Full Access, so nobody loses anything.
+
+## Spotify
+Each agent connects their own Spotify account to their login. With Spotify Premium, music plays inside the desk: their playlists, controls, and a pause when a call starts. Spotify Free accounts and agents who haven't connected get Spotify's embedded player.
+
+Setup, once:
+1. At developer.spotify.com, create an app. The app's owner needs Premium.
+2. Add the redirect URI `https://highpoint-dialer.pages.dev/api/spotify/callback` and select **Web API** and **Web Playback SDK**.
+3. Add `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in Cloudflare as secrets, then redeploy.
+4. Spotify keeps new apps in development mode, which allows only a few people (5 per app for apps made after February 2026). Add each agent's Spotify email under the app's **User Management**.
 
 ## Free-plan limits (Cloudflare, as of 2025; check their pricing page)
 - Pages Functions: 100,000 requests a day.

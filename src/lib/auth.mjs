@@ -1,6 +1,6 @@
 // Highpoint accounts: email + password, sessions in D1, HttpOnly cookie.
 import { D1, ensureSchema } from "./store.mjs";
-import { ensureTeam, member, addMember, accessFor, billingSettings, useInvite, markInviteUsed, TERMS_VERSION } from "./team.mjs";
+import { ensureTeam, member, addMember, accessFor, billingSettings, useInvite, markInviteUsed, TERMS_VERSION, normPlan, FEATURES, plansWith } from "./team.mjs";
 
 const env = (k, d = "") => globalThis.__ENV?.[k] ?? d;
 const COOKIE = "hp_session";
@@ -23,7 +23,7 @@ export function httpErr(status, msg) { const e = new Error(msg); e.status = stat
 function shape(u, m, settings) {
   const email = String(u.email).toLowerCase(), owner = admins().includes(email);
   const out = { id: u.id, email, name: u.name || email.split("@")[0], owner, admin: owner || m?.role === "admin", identity: "hp_" + String(u.id).replace(/[^A-Za-z0-9_]/g, "").slice(0, 100) };
-  if (m !== undefined) { out.role = owner ? "owner" : m?.role || "agent"; out.plan = m?.plan || "pro"; out.access = accessFor(m, settings, owner); out.needsAgree = !owner && m?.agreed_ver !== TERMS_VERSION; out.disabled = !!m?.disabled; }
+  if (m !== undefined) { out.role = owner ? "owner" : m?.role || "agent"; out.plan = normPlan(m?.plan) || "full"; out.access = accessFor(m, settings, owner); out.needsAgree = !owner && m?.agreed_ver !== TERMS_VERSION; out.disabled = !!m?.disabled; }
   return out;
 }
 async function withMember(u) {
@@ -50,7 +50,7 @@ export async function currentUser(req) {
   const row = await D1().prepare("SELECT u.id, u.email, u.name, s.expires FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?1").bind(await sha(m[1])).first();
   if (!row || row.expires < Date.now()) return null;
   const user = await withMember(row);
-  cache.set(m[1], { user, exp: Date.now() + 30_000 });
+  if (user.access?.ok !== false) cache.set(m[1], { user, exp: Date.now() + 30_000 }); // someone waiting on a payment is always re-checked
   return user;
 }
 export async function requireUser(req) {
@@ -60,12 +60,16 @@ export async function requireUser(req) {
   if (u.access && !u.access.ok) throw Object.assign(httpErr(402, u.access.reason === "past_due" ? "Your last payment didn't go through. Update your card to keep using the desk." : "Choose a plan to keep using the desk."), { code: "billing" });
   return u;
 }
-// the dialer needs a plan that includes it
-export async function requireDialer(req) {
+// a feature this person's plan must include (any one of the keys)
+export async function requireFeature(req, ...keys) {
   const u = await requireUser(req);
-  if (u.access && !u.access.dialer) throw Object.assign(httpErr(402, "The dialer is part of the Pro plan. Upgrade in Billing to use it."), { code: "plan" });
+  if (u.access?.features && !keys.some((k) => u.access.features.includes(k))) {
+    const names = plansWith(keys[0], await billingSettings());
+    throw Object.assign(httpErr(402, `${FEATURES[keys[0]].split(":")[0]} ${names.length ? `is part of ${names.join(" and ")}` : "isn't in your plan"}. Upgrade in Billing to use it.`), { code: "plan", feature: keys[0] });
+  }
   return u;
 }
+export const requireDialer = (req) => requireFeature(req, "dialer");
 export const clearUserCache = () => cache.clear();
 
 // POST /api/auth/{signup|login|logout|password}, GET /api/auth/me

@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Highpoint Desk + Highpoint Dialer on Cloudflare Pages (Functions + D1) with Twilio",
   "scripts": {
-    "test": "node test/cf-sim.mjs",
+    "test": "node test/cf-sim.mjs && node test/billing.mjs",
     "local": "node test/serve.mjs"
   }
 }

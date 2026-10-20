@@ -355,6 +355,7 @@
     } catch (e) { toast("Couldn't check this number, so the call didn't go through" + (e.message ? ": " + e.message : "")); return false; }
   }
   async function dialLead(lead, fromSession) {
+    if (window.hpTeam?.can?.("dialer") === false) { window.hpTeam.upgrade("dialer"); return; } // the plan doesn't include the dialer
     if (S.via === "phone") { if (!S.ps) phoneCall(lead); return; }
     if (S.ps && !fromSession) return;
     if (S.call || S.power) return;
@@ -460,6 +461,7 @@
 
   /* ================= power dialing ================= */
   async function startPower() {
+    if (window.hpTeam?.can?.("dialer") === false) { window.hpTeam.upgrade("dialer"); return; }
     if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Get a number in the <b>Number groups</b> tab (about $1 a month), or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast("Phone is still connecting…"); return; }
     if (!(await micCheck())) return;
@@ -1734,9 +1736,10 @@
   function renderMusic() {
     const el = $("#hphMusic"); if (!el) return;
     const sp = window.hpSpotify;
+    el.style.display = sp?.locked ? "none" : ""; if (sp?.locked) return; // Spotify isn't in this plan
     if (!sp) { el.innerHTML = `<span class="hph-splogo">${SP_LOGO}</span><div class="hph-spt"><b>Music</b><span>Loading Spotify…</span></div>`; return; }
     el.innerHTML = `<span class="hph-splogo">${SP_LOGO}</span>
-      <div class="hph-spt"><b>${sp.playing ? "Now playing on Spotify" : sp.ready ? "Spotify paused" : "Spotify"}</b><span>${sp.playing ? "Pauses on its own when a lead picks up" : sp.ready ? "Press play to bring it back" : "Open the player and pick a playlist"}</span></div>
+      <div class="hph-spt"><b>${sp.playing ? "Now playing on Spotify" : sp.ready ? "Spotify paused" : "Spotify"}</b><span>${sp.playing ? "Pauses on its own when a lead picks up" : sp.ready ? "Press play to bring it back" : sp.connected === false ? "Connect your Spotify in the player" : "Open the player and pick a playlist"}</span></div>
       <button type="button" class="hph-spplay" id="hphSpPlay" aria-label="${sp.playing ? "Pause music" : "Play music"}">${sp.playing ? I.pause : I.play}</button>
       <button type="button" class="btn" id="hphSpOpen">${sp.isOpen ? "Hide player" : "Player"}</button>
       <label class="hph-spauto"><input type="checkbox" id="hphSpAuto" ${sp.autoPause ? "checked" : ""}> Spotify pauses on calls</label>`;

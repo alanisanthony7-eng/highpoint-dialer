@@ -46,7 +46,10 @@ let view=(location.hash||"").slice(1);
 if(!["pipeline","contacts","import","dialer","quoter","iul","assistant","screen","scripts","calendar","crew"].includes(view)) view=ls.get("hp.view","pipeline");
 const CRUMB={crew:"Crew lobby",calendar:"Calendar",quoter:"Quote & compare",iul:"IUL illustrator",pipeline:"My CRM",contacts:"Clients",screen:"Screen a client",assistant:"Highpoint Bot",scripts:"Scripts",dialer:"Highpoint Dialer",import:"Import leads"};
 function syncNav(){ $$(".nav").forEach(b=>b.setAttribute("aria-current",b.dataset.view===view?"page":"false")); $("#crumb").textContent=CRUMB[view]||""; }
-function go(v){ if(!document.getElementById("v-"+v))v="pipeline"; view=v; {const g=ls.get("hp.gs",{});if(!g[v]){g[v]=Date.now();ls.set("hp.gs",g)}} ls.set("hp.view",v); $$("section[data-v]").forEach(s=>s.hidden=s.id!=="v-"+v); syncNav(); renderAll(); if(typeof crewPresence==="function")crewPresence(v); window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
+let goReady=false;
+function go(v){ if(!document.getElementById("v-"+v))v="pipeline";
+  {const T=window.hpTeam;if(T?.viewLocked?.(v)){if(goReady){T.upgrade(T.viewFeature(v));return}v="pipeline"}} // a page your plan doesn't include
+  view=v; {const g=ls.get("hp.gs",{});if(!g[v]){g[v]=Date.now();ls.set("hp.gs",g)}} ls.set("hp.view",v); $$("section[data-v]").forEach(s=>s.hidden=s.id!=="v-"+v); syncNav(); renderAll(); if(typeof crewPresence==="function")crewPresence(v); window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
 $$(".nav").forEach(b=>b.onclick=()=>{if(b.dataset.view)go(b.dataset.view)});
 $$("[data-new]").forEach(b=>b.onclick=()=>openDrawer(null));
 $$("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
@@ -1862,6 +1865,6 @@ function renderAll(){
   if(view==="crew")renderCrew(); else if(view==="calendar")renderCalendar(); else if(view==="screen")renderScreen(); else if(view==="scripts")renderScripts(); else if(view==="pipeline")renderPipeline(); else if(view==="contacts")renderContacts(); else if(view==="dialer")renderDialer(); else if(view==="quoter")renderQuoter(); else if(view==="iul")renderIul(); else if(view==="import")renderImport();
   if(drawerId&&!leads.get(drawerId))closeDrawer();
 }
-go(view);
+go(view);goReady=true;
 initDb();
 })();

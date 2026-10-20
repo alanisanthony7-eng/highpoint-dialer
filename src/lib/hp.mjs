@@ -48,7 +48,7 @@ export async function requireUser(req) {
 export function httpErr(status, msg) { const e = new Error(msg); e.status = status; return e; }
 export const wrap = (fn) => async (req, ctx) => {
   try { return await fn(req, ctx); }
-  catch (e) { console.error(e); return bad(e.message || "Server error", e.status || 500); }
+  catch (e) { if (!e.status || e.status >= 500) console.error(e); return bad(e.message || "Server error", e.status || 500); }
 };
 
 /* ---------- Twilio REST (no SDK) ---------- */

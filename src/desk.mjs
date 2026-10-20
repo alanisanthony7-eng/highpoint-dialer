@@ -1,7 +1,7 @@
 // Desk APIs: per-user documents (leads, appointments, calls), team docs (crew, settings),
 // names, lobby presence, and the Highpoint Bot.
 import { D1, ensureSchema } from "./lib/store.mjs";
-import { requireUser } from "./lib/auth.mjs";
+import { requireUser, requireFeature } from "./lib/auth.mjs";
 import { redact } from "./lib/redact.mjs";
 
 const env = (k, d = "") => globalThis.__ENV?.[k] ?? d;
@@ -106,7 +106,7 @@ export async function roomRoute(req, action) {
 
 // Highpoint Bot + call summaries (needs ANTHROPIC_API_KEY)
 export async function aiRoute(req) {
-  await requireUser(req);
+  await requireFeature(req, "bot", "dialer"); // Highpoint Bot, or the dialer's call summaries and Copilot
   const key = String(env("ANTHROPIC_API_KEY") || "").trim();
   if (!key) return json({ error: "The assistant isn't turned on yet. An admin needs to add ANTHROPIC_API_KEY in Cloudflare Pages → Settings → Variables and secrets.", code: "unavailable" }, 503);
   const b = await req.json().catch(() => ({}));

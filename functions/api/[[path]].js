@@ -12,6 +12,7 @@ import vm from "../../src/dialer/dialer-vm.mjs";
 import calls from "../../src/dialer/dialer-calls.mjs";
 import sms from "../../src/dialer/dialer-sms.mjs";
 import { telnyxRoute } from "../../src/telnyx/tx.mjs";
+import { spotifyRoute } from "../../src/lib/spotify.mjs";
 
 const DIALER = { setup, token, voice, events, power, numbers, vm, calls, sms };
 const json = (b, s) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -33,12 +34,13 @@ export async function onRequest(ctx) {
       case "ai": return await aiRoute(req);
       case "dialer": { const h = DIALER[parts[1]]; if (h) return await h(req, c); break; }
       case "telnyx": return await telnyxRoute(req, parts[1]);
+      case "spotify": return await spotifyRoute(req, parts[1]);
       case "config": return json({ snapClientId: ctx.env.HP_SNAP_CLIENT_ID || "" }, 200);
       case "health": return json({ ok: true, db: !!ctx.env.DB, twilio: !!(ctx.env.TWILIO_ACCOUNT_SID && ctx.env.TWILIO_AUTH_TOKEN), telnyx: !!ctx.env.TELNYX_API_KEY }, 200);
     }
     return json({ error: "Not found" }, 404);
   } catch (e) {
     if (!e.status || e.status >= 500) console.error(e);
-    return new Response(JSON.stringify({ error: e.message || "Server error", ...(e.code ? { code: e.code } : {}) }), { status: e.status || 500, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+    return new Response(JSON.stringify({ error: e.message || "Server error", ...(e.code ? { code: e.code } : {}), ...(e.feature ? { feature: e.feature } : {}) }), { status: e.status || 500, headers: { "content-type": "application/json", "cache-control": "no-store" } });
   }
 }
