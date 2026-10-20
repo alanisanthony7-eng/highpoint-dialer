@@ -9,15 +9,20 @@
 
 /* ---------- 0. glass tokens ---------- */
 html.hp-pro{
-  --gl-base:rgba(15,9,26,.80);
-  --gl-base-2:rgba(11,7,19,.86);
-  --gl-sheen:linear-gradient(160deg,rgba(255,255,255,.085) 0%,rgba(255,255,255,.022) 38%,rgba(255,255,255,0) 62%,rgba(255,46,136,.05) 100%);
-  --gl-edge:linear-gradient(180deg,rgba(255,255,255,.22) 0,rgba(255,255,255,0) 2px);
-  --gl-line:rgba(255,255,255,.10);
-  --gl-line-hot:rgba(255,79,163,.45);
-  --gl-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 -1px 0 rgba(0,0,0,.28),0 24px 48px -28px rgba(0,0,0,.85);
-  --gl-glow:0 30px 56px -26px rgba(255,46,136,.45),0 0 0 1px rgba(255,79,163,.22);
-  --gl-r:20px;
+  /* frosted body: a lavender-white tint over deep plum, so panels read as glass, not dark boxes */
+  --gl-base:linear-gradient(180deg,rgba(60,34,86,.42),rgba(22,12,38,.70));
+  --gl-base-2:linear-gradient(180deg,rgba(48,26,72,.50),rgba(16,9,28,.78));
+  /* a diagonal light streak across the top-left, like light through a pane */
+  --gl-sheen:linear-gradient(115deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,.07) 22%,rgba(255,255,255,0) 46%,rgba(255,255,255,0) 72%,rgba(255,255,255,.05) 100%);
+  --gl-edge:linear-gradient(180deg,rgba(255,255,255,.34) 0,rgba(255,255,255,0) 2px);
+  /* iridescent 1px edge: pink → white → sky, drawn once by a masked ::before ring */
+  --gl-ring:linear-gradient(135deg,rgba(255,79,163,.75) 0%,rgba(255,255,255,.55) 28%,rgba(255,255,255,.18) 50%,rgba(61,184,255,.45) 78%,rgba(255,158,61,.55) 100%);
+  --gl-ring-dim:linear-gradient(135deg,rgba(255,255,255,.34),rgba(255,255,255,.10) 45%,rgba(255,255,255,.06) 60%,rgba(255,255,255,.26));
+  --gl-line:rgba(255,255,255,.14);
+  --gl-line-hot:rgba(255,79,163,.55);
+  --gl-shadow:inset 0 1px 0 rgba(255,255,255,.18),inset 0 -1px 0 rgba(0,0,0,.30),inset 0 0 0 1px rgba(255,255,255,.03),0 30px 60px -30px rgba(0,0,0,.95),0 18px 44px -30px rgba(255,46,136,.40);
+  --gl-glow:0 30px 56px -26px rgba(255,46,136,.5),0 0 0 1px rgba(255,79,163,.28);
+  --gl-r:24px;
   --gl-ease:cubic-bezier(.2,.8,.2,1);
 }
 
@@ -58,22 +63,69 @@ html.hp-pro #spDock{-webkit-backdrop-filter:none!important;backdrop-filter:none!
 
 /* ---------- 3. one glass for every surface ---------- */
 html.hp-pro :is(.panel,.hero,.kpis>div,.col,.rank-card,.tiles>*,.hph-card,.hph-bar,.hph-usage,.hph-ready,.hph-sound,.hph-music,.hpd-kpis>div,.tablewrap,.chat,.queue,.hstats>div,.gs-card){
+  position:relative;
   background:var(--gl-edge),var(--gl-sheen),var(--gl-base)!important;
-  border:1px solid var(--gl-line)!important;
+  border:1px solid transparent!important;
   border-radius:var(--gl-r)!important;
   box-shadow:var(--gl-shadow)!important;
-  transition:border-color .25s var(--gl-ease),transform .4s var(--gl-ease)!important;
+  transition:transform .4s var(--gl-ease)!important;
 }
-html.hp-pro :is(.kpis>div,.tiles>*,.hstats>div,.hpd-kpis>div,.rank-card){border-radius:16px!important}
-html.hp-pro .col{border-top:2px solid rgba(255,79,163,.5)!important}
-html.hp-pro .hero{border-radius:26px!important;
+/* the iridescent edge: a 1px gradient ring, masked so only the border shows. Painted once, no per-frame cost. */
+html.hp-pro :is(.panel,.hero,.kpis>div,.col,.rank-card,.tiles>*,.hph-card,.hph-bar,.hph-usage,.hph-ready,.hph-sound,.hph-music,.hpd-kpis>div,.tablewrap,.chat,.queue,.hstats>div,.gs-card)::before{
+  content:"";position:absolute;inset:-1px;width:auto;height:auto;border-radius:inherit;padding:1px;pointer-events:none;z-index:2;
+  background:var(--gl-ring-dim);box-shadow:none;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;
+  opacity:1;transition:opacity .3s var(--gl-ease)}
+html.hp-pro :is(.hero,.panel,.col,.tablewrap,.chat,.queue)::before{background:var(--gl-ring)}
+html.hp-pro :is(.kpis>div,.tiles>*,.hstats>div,.hpd-kpis>div,.rank-card){border-radius:18px!important}
+html.hp-pro .col{border-top:0!important}
+html.hp-pro .col::before{background:linear-gradient(135deg,rgba(255,79,163,.85) 0%,rgba(255,255,255,.5) 30%,rgba(255,255,255,.12) 55%,rgba(255,158,61,.5) 100%)}
+html.hp-pro .hero{border-radius:28px!important;
   background:var(--gl-edge),
-    radial-gradient(120% 90% at 100% 0%,rgba(255,46,136,.18),transparent 55%),
-    radial-gradient(90% 80% at 0% 100%,rgba(61,184,255,.10),transparent 55%),
-    var(--gl-sheen),var(--gl-base-2)!important}
-html.hp-pro .rail{background:linear-gradient(180deg,#0e0818,#06040c)!important;border-right:1px solid var(--gl-line)!important;box-shadow:12px 0 40px -28px rgba(255,46,136,.35)!important}
-html.hp-pro :is(.bigseg,.seg2,.seg){background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.03))!important;border:1px solid var(--gl-line)!important}
-html.hp-pro .toast{background:linear-gradient(180deg,rgba(28,12,40,.98),rgba(13,8,22,.98))!important}
+    radial-gradient(70% 90% at 100% 0%,rgba(255,46,136,.30),transparent 60%),
+    radial-gradient(60% 70% at 0% 100%,rgba(61,184,255,.16),transparent 60%),
+    linear-gradient(115deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.05) 26%,rgba(255,255,255,0) 50%),
+    var(--gl-base-2)!important;
+  box-shadow:var(--gl-shadow),0 0 0 6px rgba(255,255,255,.025),0 40px 90px -40px rgba(255,46,136,.55)!important}
+html.hp-pro .hero::before{inset:-1px!important;height:auto!important;background:var(--gl-ring)!important;box-shadow:none!important}
+
+/* the side rail: deep glass with a soft pink light leaking from the content side */
+html.hp-pro .rail{background:linear-gradient(180deg,rgba(22,12,38,.96),rgba(8,5,14,.98))!important;border-right:1px solid rgba(255,255,255,.08)!important;
+  box-shadow:inset -1px 0 0 rgba(255,255,255,.04),12px 0 50px -30px rgba(255,46,136,.45)!important}
+html.hp-pro .rail .nav{border-radius:14px!important;border:1px solid transparent!important;transition:background-color .18s,border-color .18s,transform .18s var(--gl-ease)!important}
+html.hp-pro .rail .nav:hover{background:rgba(255,255,255,.055)!important;border-color:rgba(255,255,255,.08)!important}
+html.hp-pro .rail .nav[aria-current=page]{
+  background:linear-gradient(90deg,rgba(255,79,163,.22),rgba(255,255,255,.05) 55%,rgba(255,255,255,.03))!important;
+  border-color:rgba(255,255,255,.14)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.14),inset 3px 0 0 #FF4FA3,0 12px 28px -18px rgba(255,46,136,.7)!important}
+
+/* segmented controls, toasts, inputs */
+html.hp-pro :is(.bigseg,.seg2,.seg){background:linear-gradient(180deg,rgba(0,0,0,.30),rgba(0,0,0,.18))!important;border:1px solid rgba(255,255,255,.12)!important;box-shadow:inset 0 2px 6px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)!important}
+html.hp-pro .toast{background:var(--gl-edge),var(--gl-sheen),linear-gradient(180deg,rgba(40,18,60,.98),rgba(14,8,24,.98))!important;border:1px solid rgba(255,255,255,.16)!important;border-radius:16px!important}
+html.hp-pro :is(input,select,textarea).field,html.hp-pro .field :is(input,select,textarea),html.hp-pro .hpd :is(input,select,textarea):not([type=checkbox]):not([type=range]):not([type=file]){
+  background:linear-gradient(180deg,rgba(0,0,0,.32),rgba(0,0,0,.20))!important;border:1px solid rgba(255,255,255,.13)!important;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)!important;transition:border-color .18s,box-shadow .18s!important}
+html.hp-pro :is(input,select,textarea).field:focus,html.hp-pro .field :is(input,select,textarea):focus{border-color:rgba(255,79,163,.7)!important;box-shadow:inset 0 2px 6px rgba(0,0,0,.35),0 0 0 3px rgba(255,79,163,.22)!important;outline:none!important}
+
+/* big numbers: pink → gold → white, lit from above */
+html.hp-pro :is(.kpis>div .num,.hstats>div b,.hpd-kpis>div b){
+  background:linear-gradient(180deg,#fff 0%,#ffd9ec 45%,#FF4FA3 100%);-webkit-background-clip:text;background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent;
+  text-shadow:none!important;filter:drop-shadow(0 0 14px rgba(255,79,163,.45))}
+html.hp-pro .kpis>div .label{letter-spacing:.14em;color:rgba(255,255,255,.62)!important}
+
+/* glass pill buttons: lit top edge, deeper base, no filter() on hover */
+html.hp-pro .btn:not(.primary):not([data-new]):not(.hph-go){
+  background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,.05))!important;border:1px solid rgba(255,255,255,.16)!important;color:#F4F1FA!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -1px 0 rgba(0,0,0,.25),0 8px 20px -14px rgba(0,0,0,.9)!important}
+html.hp-pro .btn:not(.primary):not([data-new]):not(.hph-go):hover{background:linear-gradient(180deg,rgba(255,255,255,.20),rgba(255,255,255,.08))!important;border-color:rgba(255,255,255,.28)!important;transform:translateY(-1px)}
+html.hp-pro .topbar .btn:not(.primary):not([data-new]){background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.045))!important;border-color:rgba(255,255,255,.15)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.18)!important}
+html.hp-pro .topbar .btn:not(.primary):not([data-new]):hover{background:linear-gradient(180deg,rgba(255,255,255,.19),rgba(255,255,255,.08))!important}
+html.hp-pro .topbar{background:linear-gradient(180deg,rgba(26,14,44,.78),rgba(10,6,18,.72))!important}
+
+/* table headers and rows read through the glass */
+html.hp-pro .tablewrap thead th{background:rgba(255,255,255,.04)!important;border-bottom:1px solid rgba(255,255,255,.10)!important;letter-spacing:.14em}
+html.hp-pro .tablewrap tbody tr{transition:background-color .15s}
+html.hp-pro .tablewrap tbody tr:hover{background:rgba(255,79,163,.07)!important}
 
 /* hover: the border lights and a spotlight fades in (opacity only, no shadow/background transitions) */
 html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col){position:relative;isolation:isolate}
@@ -81,19 +133,21 @@ html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col)::after{conte
   transition:opacity .3s var(--gl-ease);will-change:opacity;
   background:radial-gradient(440px circle at var(--mx,50%) var(--my,0%),rgba(255,79,163,.24),rgba(255,158,61,.07) 42%,transparent 66%)}
 html.hp-pro :is(.hero,.kpis>div,.tiles>*,.rank-card,.hph-card,.col).hp3-hot::after{opacity:1}
-html.hp-pro .hp3-hot{background:var(--gl-edge),var(--gl-sheen),var(--gl-base)!important;box-shadow:var(--gl-shadow)!important;border-color:var(--gl-line-hot)!important}
+html.hp-pro .hp3-hot{background:var(--gl-edge),var(--gl-sheen),var(--gl-base)!important;box-shadow:var(--gl-shadow)!important;border-color:transparent!important}
+html.hp-pro :is(.kpis>div,.tiles>*,.rank-card,.hph-card).hp3-hot::before{background:var(--gl-ring)}
 html.hp-pro .hero.hp3-hot{background:var(--gl-edge),
-    radial-gradient(120% 90% at 100% 0%,rgba(255,46,136,.18),transparent 55%),
-    radial-gradient(90% 80% at 0% 100%,rgba(61,184,255,.10),transparent 55%),
-    var(--gl-sheen),var(--gl-base-2)!important}
-html.hp-pro .col.hp3-hot{border-top-color:rgba(255,79,163,.8)!important}
+    radial-gradient(70% 90% at 100% 0%,rgba(255,46,136,.30),transparent 60%),
+    radial-gradient(60% 70% at 0% 100%,rgba(61,184,255,.16),transparent 60%),
+    linear-gradient(115deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.05) 26%,rgba(255,255,255,0) 50%),
+    var(--gl-base-2)!important;
+  box-shadow:var(--gl-shadow),0 0 0 6px rgba(255,255,255,.025),0 40px 90px -40px rgba(255,46,136,.55)!important}
 html.hp-pro :is(.kpis>div,.tiles>*,.rank-card){will-change:transform}
 html.hp-pro .kpis>div:hover{box-shadow:var(--gl-shadow)!important}
 
 /* pipeline cards: lift with transform, glow with an opacity-faded ring */
 html.hp-pro .card{position:relative;isolation:isolate;
-  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.028))!important;border:1px solid rgba(255,255,255,.09)!important;border-radius:14px!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 10px 22px -16px rgba(0,0,0,.9)!important;
+  background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.04))!important;border:1px solid rgba(255,255,255,.14)!important;border-radius:16px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 12px 26px -16px rgba(0,0,0,.9)!important;
   transition:transform .22s var(--gl-ease),border-color .2s!important}
 html.hp-pro .card::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;z-index:-1;opacity:0;transition:opacity .25s var(--gl-ease);box-shadow:var(--gl-glow)}
 html.hp-pro .card:hover{transform:translateY(-2px);border-color:var(--gl-line-hot)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 10px 22px -16px rgba(0,0,0,.9)!important}
