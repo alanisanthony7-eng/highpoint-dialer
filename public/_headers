@@ -50,3 +50,13 @@
   Cache-Control: no-cache
 /hp-copilot.css
   Cache-Control: no-cache
+/hp-leadpost.js
+  Cache-Control: no-cache
+/hp-booking.js
+  Cache-Control: no-cache
+/booking.html
+  Cache-Control: no-cache
+/booking
+  Cache-Control: no-cache
+/spotify-dock.js
+  Cache-Control: no-cache

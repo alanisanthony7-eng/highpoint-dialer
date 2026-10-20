@@ -17,7 +17,7 @@ http.createServer(async (req, res) => {
     const h = Object.fromEntries(r.headers); if (h["set-cookie"]) h["set-cookie"] = h["set-cookie"].replace("; Secure", "");
     res.writeHead(r.status, h); res.end(Buffer.from(await r.arrayBuffer())); return;
   }
-  let f = path.join("public", url.pathname === "/" ? "index.html" : url.pathname);
+  let f = path.join("public", url.pathname === "/" ? "index.html" : /^\/book(\/|$)/.test(url.pathname) ? "booking.html" : url.pathname);
   if (!fs.existsSync(f)) f = "public/index.html";
   res.writeHead(200, { "content-type": types[path.extname(f)] || "application/octet-stream" }); fs.createReadStream(f).pipe(res);
 }).listen(8788, () => console.log("on 8788"));

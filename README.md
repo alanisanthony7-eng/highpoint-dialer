@@ -92,6 +92,15 @@ On **Import leads**, each agent can make a secret posting URL per lead vendor (o
 - Agents can turn on a **New lead** automatic text (Highpoint Dialer → Inbox & settings → Automatic texts) that goes out right away. Only use it for vendors that collect consent to text.
 - Each URL takes up to 600 leads an hour. **New secret URL** replaces a leaked URL; the old one stops working at once.
 
+## Booking link and Google Calendar
+
+On **Calendar**, each agent has a booking link (`/book/their-name`) to send clients in a text, email or voicemail. Clients pick an open time on a simple page made for phones, enter their details and agree to be called, and get a confirmation with add-to-calendar buttons and a cancel link.
+
+- Open times come from the agent's weekly hours, call length, break between calls, earliest booking and how far ahead to show, minus their desk appointments.
+- **Busy times from Google Calendar:** paste the calendar's *Secret address in iCal format* (Google Calendar → Settings → your calendar → Integrate calendar). Busy events (including repeating ones) are blocked; event details are never shown. Outlook and Apple calendar links work too.
+- A booking adds the client to the CRM (or updates them if their number is already there) in the Appointment stage with their consent recorded, puts the call on the desk calendar, emails the client and the agent (with `RESEND_API_KEY`), and schedules the reminder texts if those are on.
+- **Desk appointments in Google Calendar:** *Make my calendar link* gives a private `.ics` link of appointments and callbacks. In Google Calendar choose **Other calendars → + → From URL**. Google refreshes subscribed calendars every few hours.
+
 ## Email
 Password reset links and emailed invites go through Resend (resend.com, free for small volumes).
 1. Create a Resend account and add your domain (for example highpointfinancial.co) under **Domains**, then add the DNS records it shows.
