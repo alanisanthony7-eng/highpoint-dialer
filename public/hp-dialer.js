@@ -41,6 +41,7 @@
     sidByLead: new Map(), txByLead: new Map(), liveTimer: 0, greetings: [], numbers: [], tab: null,
     via: lsGet("hpd.via", "line"), // "line" = browser phone line (Twilio), "phone" = the agent's own phone
     ps: null, // phone session {ids, i, cur}
+    wrapSec: +lsGet("hpd.wrapSec", 30) || 30, wrap: null,
   };
 
   /* ================= API ================= */
@@ -140,7 +141,8 @@
         <button type="button" data-mode="single" aria-pressed="${S.mode === "single"}" ${live ? "disabled" : ""}>Click to call</button>
         <button type="button" data-mode="power" aria-pressed="${S.mode === "power"}" ${live ? "disabled" : ""}>Power dial</button>
       </div>
-      ${S.mode === "power" ? `<div class="hpd-linesel">Lines ${[1, 2, 3].map((n) => `<button type="button" data-lines="${n}" aria-pressed="${S.lines === n}" ${n > maxL || live ? "disabled" : ""}>${n}</button>`).join("")}<span style="margin-left:auto" class="hpd-sm">${S.lines > 1 ? "First to say hello connects" : "One at a time"}</span></div>` : ""}
+      ${S.mode === "power" ? (S.provider === "telnyx" || S.via === "phone" ? `<p class="hpd-sm" style="margin:0">${S.via === "phone" ? "Your phone is one line at a time." : "Telnyx browser calling is one line at a time."}</p>` : `<div class="hpd-linesel">Lines ${[1, 2, 3].map((n) => `<button type="button" data-lines="${n}" aria-pressed="${S.lines === n}" ${n > maxL || live ? "disabled" : ""}>${n}</button>`).join("")}<span style="margin-left:auto" class="hpd-sm">${S.lines > 1 ? "First to say hello connects" : "One at a time"}</span></div>`) : ""}
+      ${S.mode === "power" ? `<label class="field"><span>Wrap-up after a live call (seconds)</span><input id="hpdWrap" type="number" min="10" max="120" value="${Math.min(120, Math.max(10, +S.wrapSec || 30))}" ${live ? "disabled" : ""}></label>` : ""}
       <label class="field"><span>Your cell number</span><input id="hpdCell" value="${S.prefs.cellPhone ? esc(fmt(S.prefs.cellPhone)) : ""}" placeholder="(305) 555-0123" inputmode="tel"></label><label class="field"><span>Caller ID</span><select id="hpdCid" ${live ? "disabled" : ""}><option value="">Auto: local number for each lead</option>${myNums.map((n) => `<option value="${esc(n.e164)}" ${S.prefs.defaultCallerId === n.e164 ? "selected" : ""}>${esc(fmt(n.e164))}${n.label ? " · " + esc(n.label) : ""}${n.health?.status === "flagged" ? " (flagged)" : ""}</option>`).join("")}</select></label>
       <div class="hpd-actions" id="hpdActs"></div>
       ${live ? "" : `<details class="hpkp-sec" id="hpdDialSec" ${S.padSec !== false ? "open" : ""}><summary>${I.pad}<span>Dial a number</span></summary><div class="hpd hpkp inline" id="hpdDialPad"></div></details>`}
@@ -159,6 +161,7 @@
       <div class="hpd-sm">Shortcuts: <span class="hpd-kbd">Alt</span>+<span class="hpd-kbd">C</span> call · <span class="hpd-kbd">Alt</span>+<span class="hpd-kbd">H</span> hang up · <span class="hpd-kbd">Alt</span>+<span class="hpd-kbd">V</span> drop VM · <span class="hpd-kbd">Alt</span>+<span class="hpd-kbd">M</span> mute</div>`;
     $$("[data-mode]", el).forEach((b) => (b.onclick = () => { S.mode = b.dataset.mode; lsSet("hpd.mode", S.mode); renderPhone(); }));
     $$("[data-lines]", el).forEach((b) => (b.onclick = () => { S.lines = +b.dataset.lines; lsSet("hpd.lines", S.lines); savePrefs({ lines: S.lines }); renderPhone(); }));
+    $("#hpdWrap")?.addEventListener("change", (e) => { S.wrapSec = Math.min(120, Math.max(10, +e.target.value || 30)); lsSet("hpd.wrapSec", S.wrapSec); });
     $("#hpdCid").onchange = (e) => savePrefs({ defaultCallerId: e.target.value });
     $("#hpdCell").onchange = (e) => savePrefs({ cellPhone: e.target.value });
     $("#hpdMute").onclick = toggleMute;
@@ -485,7 +488,7 @@
     S.call = null; S.muted = false; clearTimeout(S.liveTimer);
     window.hpDesk.callStop();
     renderPhone(); renderFloat(); if (PF.id) renderProfile();
-    if (leadId && S.callSid) { pullLive(S.callSid, leadId, true); note(`<b>Call ended.</b> Pick a result on the left to log it${S.settings.record ? " (recording and transcript are attached automatically)" : ""}.`); }
+    if (leadId && S.callSid) { pullLive(S.callSid, leadId, true); startWrap(leadId); }
   }
   function hangup() {
     if (S.call) { S.call.disconnect(); return; }
@@ -563,6 +566,7 @@
     if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Get a number in the <b>Number groups</b> tab (about $1 a month), or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast("Phone is still connecting…"); return; }
     if (!(await micCheck())) return;
+    if (S.provider === "telnyx" || S.via === "phone") S.lines = 1;
     note("");
     try {
       const r = await api("/power/start", { method: "POST", body: { lines: S.lines } });
@@ -619,7 +623,7 @@
           P.auto.add(line.leadId); P.waitingDispo = null;
         } else if (S.autoResult?.leadId === P.waitingDispo) {
           window.hpDesk.autoLog(S.autoResult.leadId, S.autoResult.label, {}); P.waitingDispo = null; S.autoResult = null;
-        } else if (P.waitingDispo) note("<b>Call ended.</b> Log the result on the left and the next leads will dial.", "");
+        } else if (P.waitingDispo) startWrap(P.waitingDispo);
         setChip("ready", P.paused ? "Paused" : "Dialing"); renderActions(); if (PF.id) renderProfile();
       }
       if (st.live) drawTx(st.live.lines, st.live.partial);
@@ -645,8 +649,29 @@
   }
   function togglePause() { const P = S.power; if (!P) return; P.paused = !P.paused; if (!P.paused) nextBatch(); renderPhone(); renderFloat(S.lastTiles); }
   async function stopPower() { const P = S.power; if (!P) return; try { await api("/power/end", { method: "POST", body: { session: P.session } }); } catch {} P.conf?.disconnect(); finishPower(); }
+  function clearWrap() { if (S.wrap?.timer) clearTimeout(S.wrap.timer); S.wrap = null; }
+  function startWrap(leadId) {
+    if (!leadId) return;
+    clearWrap();
+    const sec = Math.min(120, Math.max(10, +S.wrapSec || 30));
+    S.wrap = { leadId, t0: Date.now(), sec };
+    const tick = () => {
+      if (!S.wrap || S.wrap.leadId !== leadId) return;
+      const left = Math.ceil((S.wrap.t0 + S.wrap.sec * 1000 - Date.now()) / 1000);
+      if (left <= 0) {
+        clearWrap();
+        window.hpDesk?.autoLog?.(leadId, "Contacted", {});
+        const P = S.power;
+        if (P && P.waitingDispo === leadId) { P.waitingDispo = null; setTimeout(nextBatch, 400); }
+        return;
+      }
+      note(`<b>Call ended.</b> Log the result (${left}s) or we'll mark Contacted${S.power ? " and keep going" : ""}${S.settings.record ? " · recording and transcript attach automatically" : ""}.`, "");
+      S.wrap.timer = setTimeout(tick, 1000);
+    };
+    tick();
+  }
   function finishPower() {
-    const P = S.power; if (!P) return; clearTimeout(P.timer); S.power = null; S.muted = false;
+    const P = S.power; if (!P) return; clearTimeout(P.timer); clearWrap(); S.power = null; S.muted = false;
     if (S.status === "ready") setStatus("acw", true);
     window.hpDesk.callStop(); window.dispatchEvent(new Event("hp:callend"));
     renderPhone(); renderFloat(); if (PF.id) renderProfile(); $("#hpdLive").hidden = true; toast(`Session done · ${P.attempted.size} lead${P.attempted.size === 1 ? "" : "s"} dialed`);
@@ -657,6 +682,7 @@
   function onDispo(leadId, label, note2) {
     const sid = S.sidByLead.get(leadId);
     if (sid) api("/calls/dispo", { method: "POST", body: { sid, disposition: label, note: note2 || "", leadId } }).catch(() => {});
+    clearWrap();
     const P = S.power;
     if (P && P.waitingDispo === leadId) {
       P.waitingDispo = null;
@@ -673,7 +699,8 @@
   function meta(leadId) {
     const sid = S.sidByLead.get(leadId); const tx = S.txByLead.get(leadId) || [];
     const who = (t) => t.speaker || (t.track === "inbound_track" ? (S.mode === "power" ? "Lead" : "Agent") : (S.mode === "power" ? "Agent" : "Lead"));
-    return sid ? { hpSid: sid, transcript: tx.map((l) => `${who(l)}: ${l.text}`).join("\n") } : {};
+    const transcript = tx.map((l) => `${who(l)}: ${l.text}`).join("\n");
+    return { ...(sid ? { hpSid: sid } : {}), ...(transcript ? { transcript } : {}) };
   }
 
   /* ================= incoming calls ================= */
@@ -1830,7 +1857,10 @@
   campaignQueue = function () {
     const c = S.src.startsWith("c:") && S.camps.find((x) => x.id === S.src.slice(2));
     if (c?.paused) return [];
+    const st = document.getElementById("dqStage")?.value || "";
+    const pr = document.getElementById("dqProduct")?.value || "";
     return applyFilter(sourceLeads(), S.filter).filter((l) => S.demo || leadClock(l).ok)
+      .filter((l) => (!st || (l.stage || "new") === st) && (!pr || l.product === pr))
       .sort((a, b) => ((a.callbackAt && a.callbackAt <= Date.now() ? 0 : 1) - (b.callbackAt && b.callbackAt <= Date.now() ? 0 : 1)) || (a.lastCallAt || 0) - (b.lastCallAt || 0) || (a.createdAt || 0) - (b.createdAt || 0));
   };
   function saveCamps() { lsSet("hpd.camps", S.camps); savePrefs({ camps: S.camps.map((c) => ({ ...c, ids: c.ids.slice(0, 5000) })) }); }
@@ -2211,7 +2241,7 @@
     }
     catch (e) { toast(e.message); return false; }
   }
-  window.hpDialer = { recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
+  window.hpDialer = { recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, queue: () => campaignQueue(), sendSms: (to, body, leadId) => api("/sms/send", { method: "POST", body: { to, body, leadId } }), refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
   window.addEventListener("hp:leadchange", () => { if (!S.call && !S.power) renderActions(); if (!$("#hpdHome")?.hidden) renderHome(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();

@@ -79,7 +79,7 @@ try {
   await page.locator('script[src="/hp-dialer.js"]').waitFor({ state: "attached" });
   check(await page.locator('script[src="/hp-dialer.js"]').count() === 1, "dialer loads once on first visit");
 
-  const themes = ["executive", "modern-light", "midnight", "miami", "halloween", "brazil", "vegas", "america"];
+  const themes = ["executive", "modern-light", "midnight", "miami", "halloween"];
   if (shots) await mkdir(artifacts, { recursive: true });
   for (const theme of themes) {
     const audit = await page.evaluate((id) => {
@@ -103,7 +103,7 @@ try {
         const el = document.querySelector(selector), s = el && getComputedStyle(el);
         return !!s && s.display !== "none" && Number.parseFloat(s.opacity || "1") > .15;
       };
-      return { scene: visible(".vscene") || visible(".hp-fx-hall") || visible(".hp-fx-br") || visible(".hp-fx-vg") || visible(".hp-fx-us") || visible(".hp-fx-day"), planes: visible("#sky"), floor: visible(".hp-floor") };
+      return { scene: visible(".vscene") || visible(".hp-fx-hall") || visible(".hp-fx-day"), planes: visible("#sky"), floor: visible(".hp-floor") };
     });
     check(atmosphere.scene && atmosphere.planes && atmosphere.floor, `${theme} keeps the animated aviation atmosphere`);
     check(await page.locator('script[src*="hp-tilt.js"]').count() === 1, `${theme} keeps pointer depth on dashboard surfaces`);

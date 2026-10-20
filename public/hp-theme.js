@@ -11,9 +11,6 @@
     midnight: { id: "midnight", label: "Midnight", note: "Near-black, indigo and electric blue", color: "#070A12" },
     miami: { id: "miami", label: "Miami", note: "Pink, coral and sunset neon", color: "#12091C" },
     halloween: { id: "halloween", label: "Halloween", note: "Haunted hangar night", color: "#12080A" },
-    brazil: { id: "brazil", label: "Brazil", note: "Christ the Redeemer over Rio", color: "#06140C" },
-    vegas: { id: "vegas", label: "Vegas", note: "Felt, neon, cash and a cold martini", color: "#12080C" },
-    america: { id: "america", label: "America", note: "White House and the Beast", color: "#07101C" },
   };
   const alias = (v) => v === "classic" ? "executive" : v;
   const valid = (v) => Object.prototype.hasOwnProperty.call(THEMES, v);
@@ -42,7 +39,7 @@
       this.look = id; this.label = THEMES[id].label;
       document.documentElement.dataset.theme = id;
       document.documentElement.style.colorScheme = id === "modern-light" ? "light" : "dark";
-      document.title = ({ miami: "Highpoint Miami Desk", halloween: "Highpoint Halloween Desk", brazil: "Highpoint Brazil Desk", vegas: "Highpoint Vegas Desk", america: "Highpoint America Desk" })[id] || "Highpoint Desk";
+      document.title = ({ miami: "Highpoint Miami Desk", halloween: "Highpoint Halloween Desk" })[id] || "Highpoint Desk";
       try { localStorage.setItem(KEY, id); } catch {}
       const m = meta(); if (m) m.content = THEMES[id].color;
       document.dispatchEvent(new CustomEvent("hp:theme", { detail: THEMES[id] }));

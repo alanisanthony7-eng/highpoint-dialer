@@ -36,6 +36,8 @@
     meds: { label: "Medications", ask: "What medications do you take right now?" },
     hw: { label: "Height / weight", ask: "About how tall are you, and what do you weigh?" },
     beneficiary: { label: "Beneficiary", ask: "Who would you want as your beneficiary?" },
+    income: { label: "Monthly income", ask: "How much would you say you are currently bringing in?" },
+    expenses: { label: "Monthly expenses", ask: "And how much of that goes away toward your expenses?" },
     coverage: { label: "Coverage wanted", ask: "How much would you want to leave behind?" },
     budget: { label: "Monthly budget", ask: "What monthly amount would feel comfortable?" },
     existing: { label: "Existing coverage", ask: "Do you have any life insurance right now, through work or on your own?" },
@@ -47,13 +49,13 @@
     lender: { label: "Lender", core: "lender", ask: "Who's the mortgage with?" },
     goal: { label: "IUL goal", ask: "Is this mostly for protection, retirement income, or both?" },
   };
-  const ORDER = ["consent", "age", "dob", "tobacco", "health", "meds", "hw", "beneficiary", "coverage", "budget", "existing", "draft", "mortgageBalance", "mortgagePayment", "lender", "goal", "concern", "decision"];
+  const ORDER = ["consent", "age", "dob", "tobacco", "health", "meds", "hw", "beneficiary", "income", "expenses", "coverage", "budget", "existing", "draft", "mortgageBalance", "mortgagePayment", "lender", "goal", "concern", "decision"];
   const CHECK = {
-    FE: ["consent", "age", "tobacco", "health", "meds", "hw", "beneficiary", "coverage", "budget", "existing", "draft"],
+    FE: ["consent", "age", "tobacco", "health", "meds", "hw", "beneficiary", "income", "expenses", "coverage", "existing", "draft"],
     MP: ["consent", "age", "tobacco", "health", "meds", "mortgageBalance", "mortgagePayment", "lender", "beneficiary", "budget", "existing"],
     IUL: ["consent", "age", "tobacco", "health", "goal", "budget", "beneficiary", "existing"],
   };
-  const SHORT = { consent: "Disclosure", age: "Age / DOB", dob: "DOB", tobacco: "Tobacco", health: "Health", meds: "Meds", hw: "Ht / wt", beneficiary: "Beneficiary", coverage: "Coverage", budget: "Budget", existing: "Current policy", draft: "Draft date", mortgageBalance: "Balance", mortgagePayment: "Payment", lender: "Lender", goal: "Goal" };
+  const SHORT = { consent: "Disclosure", age: "Age / DOB", dob: "DOB", tobacco: "Tobacco", health: "Health", meds: "Meds", hw: "Ht / wt", beneficiary: "Beneficiary", income: "Income", expenses: "Expenses", coverage: "Coverage", budget: "Budget", existing: "Current policy", draft: "Draft date", mortgageBalance: "Balance", mortgagePayment: "Payment", lender: "Lender", goal: "Goal" };
 
   /* ============ objections → your talking points (edit freely) ============ */
   const OBJ = [
@@ -76,6 +78,7 @@
   /* ============ helpers ============ */
   const W = { five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12, fifteen: 15, twenty: 20, "twenty five": 25, "twenty-five": 25, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100 };
   const money = (n) => "$" + Math.round(n).toLocaleString();
+  const usd = (n) => "$" + (Math.round((+n + Number.EPSILON) * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cap = (s) => String(s || "").replace(/^./, (c) => c.toUpperCase());
   const MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
   const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -120,7 +123,7 @@
     const F = {}, tasks = [], objs = [], mem = [], conflicts = {}, flags = [];
     const set = (k, value, i, conf = "high") => {
       if (value == null || value === "") return;
-      const prev = F[k]; if (prev && prev.value !== value && ["budget", "coverage", "beneficiary", "age"].includes(k)) conflicts[k] = prev.value;
+      const prev = F[k]; if (prev && prev.value !== value && ["budget", "income", "expenses", "coverage", "beneficiary", "age"].includes(k)) conflicts[k] = prev.value;
       F[k] = { value, line: i, conf, quote: lines[i]?.text || "" };
     };
     const addTask = (t) => { const key = t.kind + ":" + t.label; if (!tasks.some((x) => x.key === key)) tasks.push({ ...t, key }); };
@@ -167,8 +170,27 @@
       const isExisting = !!ex || /\b(?:already have|i have|i've got|got)\b[^.?!]{0,20}\b(?:a policy|coverage|life insurance)\b/i.test(tx);
       if (ex) { const ends = /\b(?:might|may|will|could)\s+(?:end|stop|lapse|go away)|\bends?\s+when|\bexpires?\b/i.test(tx); const amt = tx.match(/\$\s?\d[\d,]*(?:\s?k\b)?/i) || tx.match(/\b(?:\w+[- ])?thousand\b/i); set("existing", `${amt ? amt[0].replace(/\s/g, "") + " " : ""}through ${ex[2].toLowerCase().replace(/^the /, "")}${ends ? " (may end)" : ""}`, i); if (ends) addTask({ kind: "reminder", label: "Check when their current policy ends", at: null, exact: false, line: i, quote: tx }); }
       else if (/insurance|coverage|policy/.test(prevQ) && /^\s*(?:no|none|nope|nothing|not right now)\b/i.test(tx)) set("existing", "None", i);
-      // monthly budget
-      if ((m = tx.match(/(?:\$\s?(\d{2,3})|\b(thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)\b)(?:\s*dollars)?\s*(?:a|per|each|every)\s*month/i))) { const n = m[1] ? +m[1] : W[m[2].toLowerCase()]; const max = /more than|no more|at most|max|over|afford|tight|top/i.test(tx); set("budget", `${money(n)}/mo${max ? " max" : ""}`, i); }
+      // income / expenses → leftover × 10% (same math as the FEX script)
+      const payN = (t) => {
+        const s = String(t || "").replace(/,/g, "");
+        let mm = s.match(/\$\s*(\d{3,5}(?:\.\d{1,2})?)/) || s.match(/\b(\d{3,5}(?:\.\d{1,2})?)\b/);
+        if (mm) { const n = +mm[1]; if (n >= 400 && n <= 20000) return Math.round(n); }
+        mm = s.match(/\b(eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\s+hundred\b/i);
+        if (mm) return ({ eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50 }[mm[1].toLowerCase()]) * 100;
+        mm = s.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten)\s+thousand\b/i);
+        if (mm) return ({ one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 }[mm[1].toLowerCase()]) * 1000;
+        return null;
+      };
+      const askedIn = /bring(?:ing)? in|take[- ]home|how much.*(?:make|income|get paid)|social security|monthly (?:income|check)/i.test(prevQ);
+      const askedOut = /expenses?|bills?|goes away|going out|spend(?:ing)? toward/i.test(prevQ);
+      if (askedIn || /(?:i(?:'?m| am)? (?:bring(?:ing)? in|take home|make)|my (?:income|check|social security)(?: is)?|social security is)\b/i.test(tx)) {
+        const n = payN(tx); if (n && !/expenses?|bills?|goes away/i.test(tx)) set("income", `${money(n)}/mo`, i);
+      }
+      if (askedOut || /(?:expenses?|bills?) (?:are|is|run|come to)|goes? (?:away|out) toward|i spend\b/i.test(tx)) {
+        const n = payN(tx); if (n) set("expenses", `${money(n)}/mo`, i);
+      }
+      // monthly budget they name out loud (does not override the 10% leftover calc)
+      if ((m = tx.match(/(?:\$\s?(\d{2,3})|\b(thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)\b)(?:\s*dollars)?\s*(?:a|per|each|every)\s*month/i))) { const n = m[1] ? +m[1] : W[m[2].toLowerCase()]; const max = /more than|no more|at most|max|over|afford|tight|top/i.test(tx); if (!F.budget || !/10%|leftover/.test(F.budget.value)) set("budget", `${money(n)}/mo${max ? " max" : ""}`, i); }
       // coverage wanted
       if (!isExisting) for (const sn of tx.split(/(?<=[.?!])\s+/)) {
         if (/\bmonth|mortgage|owe\b/i.test(sn)) continue;
@@ -196,6 +218,13 @@
       if ((m = tx.match(/\bmy\s+(grandkids|grandchildren|grandson|granddaughter|dog|cat|church|garden|boat)\b/i))) mem.push({ text: `Mentions their ${m[1].toLowerCase()}`, line: i });
       if (/\b(?:widow|widower|lost my (?:wife|husband)|passed away)\b/i.test(tx)) mem.push({ text: "Recently lost someone close; be gentle", line: i });
     });
+    // leftover × 10% = the monthly number we pitch from (same note as the FEX script)
+    const payNum = (s) => { const mm = String(s ?? "").replace(/,/g, "").match(/(\d+(?:\.\d+)?)/); return mm ? Math.round(+mm[1]) : null; };
+    const incN = payNum(F.income?.value), expN = payNum(F.expenses?.value);
+    if (incN != null && expN != null) {
+      const left = incN - expN, ten = left > 0 ? Math.max(1, Math.round(left * 0.1)) : null;
+      if (ten) set("budget", `${money(ten)}/mo (10% leftover)`, F.expenses?.line ?? F.income.line, "med");
+    }
     // a callback covers the "talk to family" follow-up
     if (tasks.some((t) => t.kind === "callback" && t.at)) { for (let k = tasks.length - 1; k >= 0; k--) if (tasks[k].fam) tasks.splice(k, 1); const cb = tasks.find((t) => t.kind === "callback"); if (F.decision && cb) cb.label = `Callback with ${F.decision.value.toLowerCase()} on the line`; }
     const seen = new Set();
@@ -226,6 +255,7 @@
     s.ex = extract(s.lines, skip);
     // where the call is in the FEX script (agent lines only; see hp-fex-script.js)
     s.fex = window.HP_FEX_TRACK && window.HP_FEX ? window.HP_FEX_TRACK.track(s.lines, window.HP_FEX.stages) : null;
+    aiSay(s);
   }
 
   /* ============ events from the dialer ============ */
@@ -268,6 +298,7 @@
     clearTimeout(s.aiNotes?.timer); if (s.aiNotes) s.aiNotes.busy = false;
     CP.pending = [...CP.pending.filter((x) => x.id !== s.id), s]; savePending();
     if (s.lines.length >= 6) aiPass(s); // Highpoint Bot writes the summary (the local one stays if it can't)
+    draftSms(s);
     schedule();
     setTimeout(() => { if (!DL()?.busy && DL()?.profileId === s.leadId && !CP.modal && s.state === "review") openModal(s.id); }, 300);
   }
@@ -276,7 +307,7 @@
     const F = s.ex.F, v = (k) => F[k]?.value, first = s.first || "The client";
     const P = { FE: "final expense", MP: "mortgage protection", IUL: "IUL" }[s.product];
     const bits = [`${first} is looking at ${P} coverage${v("concern") ? ", mainly for " + v("concern").split(";")[0].toLowerCase() : ""}.`];
-    const want = [v("coverage") && `about ${v("coverage")} in coverage`, v("budget") && `a budget of ${v("budget")}`].filter(Boolean);
+    const want = [v("coverage") && `about ${v("coverage")} in coverage`, v("income") && v("expenses") && `income ${v("income")} / expenses ${v("expenses")}`, v("budget") && `a budget of ${v("budget")}`].filter(Boolean);
     if (want.length) bits.push(`Wants ${want.join(" with ")}.`);
     const facts = [v("age") && `Age ${v("age")}`, v("tobacco") && `tobacco: ${v("tobacco").toLowerCase()}`, v("health") && `health: ${v("health").toLowerCase()}`, v("beneficiary") && `beneficiary ${v("beneficiary")}`].filter(Boolean);
     if (facts.length) bits.push(facts.join("; ") + ".");
@@ -307,14 +338,62 @@ Never include Social Security, bank, card or account numbers. Transcript:
       if (j.summary) s.summary = redact(String(j.summary).trim());
       if (Array.isArray(j.memory)) j.memory.slice(0, 4).forEach((t) => { const text = redact(String(t)).trim(); if (text && !s.ex.mem.some((m) => m.text.toLowerCase() === text.toLowerCase())) { s.ex.mem.push({ text, ai: true }); s.sel["m:" + (s.ex.mem.length - 1)] = true; } });
       s.ai = "done";
+      if (!s.smsDraft) draftSms(s);
     } catch (e) { s.ai = ["unavailable", "bad_key", "no_credit", "plan", "billing"].includes(e.code) ? "off" : ""; }
     savePending(); schedule();
+  }
+  function aiSay(s) {
+    const obj = s.ex?.objs?.[s.ex.objs.length - 1];
+    const a = (s.aiSay = s.aiSay || { at: 0, seen: 0, busy: false, text: "", key: "" });
+    if (!obj || s.consent !== "agreed" || s.state !== "live" || a.busy) return;
+    const key = obj.id + ":" + obj.line;
+    if (a.key === key || s.lines.length - obj.line > 8) return;
+    a.busy = true; a.key = key;
+    const tx = s.lines.slice(-12).map((l) => `${l.who}: ${l.text}`).join("\n").slice(-2500);
+    bot("You coach a licensed life insurance agent mid-call. Reply with JSON only.",
+      `The client just objected: ${obj.label}. Their words: "${redact(obj.quote || "")}". Product: ${s.product}. Give one short line the agent can say next. No premiums, no guarantees, no government affiliation. Return {"say":"..."}.\n\nRecent talk:\n${tx}`)
+      .then((j) => { a.text = redact(String(j.say || "").trim()).slice(0, 220); a.at = Date.now(); })
+      .catch(() => { a.text = obj.tips?.[0] || ""; })
+      .finally(() => { a.busy = false; schedule(); });
+  }
+  function ensureStop(t) {
+    t = redact(String(t || "").trim());
+    if (!/reply stop to opt out/i.test(t)) t = (t ? t.replace(/\s*$/, "") + " " : "") + "Reply STOP to opt out.";
+    return t.slice(0, 320);
+  }
+  function draftSms(s) {
+    if (s.smsDraft || s.smsBusy) return;
+    s.smsBusy = true;
+    const first = s.first || "there";
+    const prod = { FE: "final expense", MP: "mortgage protection", IUL: "IUL" }[s.product] || "life insurance";
+    const fallback = `Hi ${first}, this is Highpoint following up on our call. Reply if you'd like to keep going. Reply STOP to opt out.`;
+    const tx = (s.lines || []).slice(-40).map((l) => `${l.who}: ${l.text}`).join("\n").slice(-4000);
+    bot("You draft one SMS a licensed life insurance agent can send after a call. Reply with JSON only.",
+      `Draft one text after this ${prod} call. 1-2 short sentences. No premiums, no guarantees, no government affiliation. Always include "Reply STOP to opt out." Return {"sms":"..."}. Client first name: ${first}. Summary: ${s.summary || ""}\n\nTranscript:\n${tx}`)
+      .then((j) => { s.smsDraft = ensureStop(j.sms || fallback); })
+      .catch(() => { s.smsDraft = fallback; })
+      .finally(() => { s.smsBusy = false; savePending(); schedule(); });
+  }
+  function writeup(leadId) {
+    const s = sessionOf(leadId);
+    if (!s || s.consent !== "agreed") return {};
+    const transcript = (s.lines || []).map((l) => `${l.who}: ${l.text}`).join("\n");
+    const summary = s.summary || (s.ex ? localSummary(s) : "");
+    return { ...(summary ? { summary } : {}), ...(transcript ? { transcript } : {}) };
+  }
+  function sessionOf(leadId) {
+    if (CP.cur && (!leadId || CP.cur.leadId === leadId)) return CP.cur;
+    return leadId ? CP.pending.filter((x) => x.leadId === leadId).slice(-1)[0] || null : null;
+  }
+  function fieldsOf(leadId) {
+    const s = sessionOf(leadId);
+    return s && s.consent === "agreed" && s.ex ? s.ex.F : {};
   }
 
   /* ============ notes during the call: suggestions you add with one tap ============
      From the call itself (what the copilot heard: needs, coverage, beneficiary, objections, callbacks, personal
      details) and from Highpoint Bot, which reads the redacted conversation every so often and writes short notes. */
-  const NOTE_KEYS = ["concern", "coverage", "budget", "beneficiary", "existing", "decision", "health", "meds", "tobacco", "age", "hw", "draft", "mortgageBalance", "mortgagePayment", "lender", "goal"];
+  const NOTE_KEYS = ["concern", "coverage", "income", "expenses", "budget", "beneficiary", "existing", "decision", "health", "meds", "tobacco", "age", "hw", "draft", "mortgageBalance", "mortgagePayment", "lender", "goal"];
   const nid = (t) => { let h = 0; for (const c of String(t).toLowerCase()) h = (h * 31 + c.charCodeAt(0)) | 0; return "n" + (h >>> 0).toString(36); };
   function suggestions(s, l) {
     if (!s?.ex) return [];
@@ -450,7 +529,7 @@ Never include Social Security, bank, card or account numbers. Transcript:
       if (s && prod === "FE" && window.HP_FEX && window.HP_FEX_TRACK) body += stageHTML(s.fex || window.HP_FEX_TRACK.track([], window.HP_FEX.stages), l);
       const obj = ex.objs[ex.objs.length - 1];
       const fresh = obj && s && s.lines.length - obj.line <= 6;
-      if (fresh) body += `<div class="hpc-alert"><b>Objection · ${esc(obj.label)}</b><ul>${obj.tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`;
+      if (fresh) body += `<div class="hpc-alert"><b>Objection · ${esc(obj.label)}</b>${s.aiSay?.text ? `<div class="hpc-next"><span>Say this</span>“${esc(s.aiSay.text)}”</div>` : ""}<ul>${obj.tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`;
       const sett = DL()?.settings || {};
       const fl = ex.flags?.[ex.flags.length - 1]; if (s && fl && s.lines.length - fl.line <= 6) body += `<div class="hpc-alert bad"><b>Check this wording · ${esc(fl.label)}</b>${esc(fl.tip)}</div>`;
       if (s?.redacted) body += `<div class="hpc-alert info"><b>Sensitive info hidden</b>${s.redacted} number${s.redacted === 1 ? "" : "s"} (SSN, bank or card) kept out of the transcript and notes. Take payment details on the carrier's secure application.</div>`;
@@ -459,6 +538,7 @@ Never include Social Security, bank, card or account numbers. Transcript:
       const got = list.filter(have).length;
       const missing = list.find((k) => !have(k));
       if (s && missing && FIELDS[missing].ask && !fresh) body += `<div class="hpc-ask"><span>Ask next</span>${esc(FIELDS[missing].ask)}</div>`;
+      body += quoteHTML(s, l);
       body += `<div class="hpc-sec">${prod === "FE" ? "Final expense" : prod === "MP" ? "Mortgage protection" : "IUL"} app <em>${got}/${list.length}</em></div><div class="hpc-bar"><i style="width:${Math.round((got / list.length) * 100)}%"></i></div>
         <div class="hpc-chk">${list.map((k) => `<span class="${ex.F[k] || (k === "age" && ex.F.dob) ? "ok" : have(k) ? "file" : "need"}" title="${ex.F[k] ? "Heard on this call" : have(k) ? "Already on file" : "Still needed"}">${ex.F[k] || (k === "age" && ex.F.dob) ? "✓ " : have(k) ? "• " : ""}${SHORT[k]}</span>`).join("")}</div>`;
       const keys = ORDER.filter((k) => ex.F[k] && k !== "consent");
@@ -512,6 +592,9 @@ Never include Social Security, bank, card or account numbers. Transcript:
       <div class="hpc-stats"><div><b>${s.imported ? "—" : Math.floor(secs / 60) + ":" + String(secs % 60).padStart(2, "0")}</b><span>${s.imported ? "Imported" : "Talk time"}</span></div><div><b>${keys.length}</b><span>Fields</span></div><div><b>${ex.tasks.length}</b><span>To-dos</span></div></div>
       <div class="hpc-sec">Summary ${s.ai === "running" ? "<em>Highpoint Bot is writing…</em>" : s.ai === "done" ? "<em>by Highpoint Bot</em>" : s.ai !== "off" && s.lines.length ? `<button type="button" class="hpc-ai" data-act="polish" title="Sends the redacted transcript to Highpoint Bot" style="cursor:pointer;background:none;border:0;color:inherit;font:inherit;text-decoration:underline">Polish with Highpoint Bot</button>` : ""}</div>
       <textarea class="hpc-sum" data-sum rows="4" aria-label="Call summary">${esc(s.summary)}</textarea>
+      <div class="hpc-sec">Follow-up text ${s.smsBusy ? "<em>Drafting…</em>" : ""}</div>
+      <textarea class="hpc-notes" data-sms rows="3" aria-label="Follow-up text">${esc(s.smsDraft || "")}</textarea>
+      <div class="hpc-acts"><button type="button" class="btn" data-act="sms-copy">Copy text</button><button type="button" class="btn primary" data-act="sms-send">Send text</button></div>
       ${(() => { const left = suggestions(s, l); return `<div class="hpc-sec">Your notes ${left.length ? `<button type="button" class="hpc-addall" data-addall>Add ${left.length} suggestion${left.length === 1 ? "" : "s"}</button>` : ""}</div><textarea class="hpc-notes" data-revnotes rows="${Math.min(10, Math.max(3, (s.notes || "").split("\n").length + 1))}" placeholder="Notes for the client's file" aria-label="Your notes">${esc(s.notes || "")}</textarea>`; })()}
       <p class="hpc-empty">Recording consent: ${s.imported ? "the agent confirmed the disclosure on an imported call" : s.consentAt ? "the client agreed on this call at " + new Date(s.consentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "not recorded"}.</p>
       ${(s.ex.flags || []).length ? `<div class="hpc-alert bad"><b>Compliance check</b><ul>${s.ex.flags.map((f) => `<li><b>${esc(f.label)}.</b> ${esc(f.tip)}${f.quote ? ` <em>"${esc(f.quote.slice(0, 160))}"</em>` : ""}</li>`).join("")}</ul>Review the wording before saving. Flags do not block anything.</div>` : ""}
@@ -522,10 +605,55 @@ Never include Social Security, bank, card or account numbers. Transcript:
       <div class="hpc-acts"><button type="button" class="btn primary" data-act="save">Save to ${esc(s.first || "client")}'s file</button><button type="button" class="btn" data-act="later">Review later</button><button type="button" class="btn danger" data-act="drop">Discard</button></div>`;
   }
 
+  function quoteHTML(s, l) {
+    const fn = window.hpQuoter?.liveQuote; if (!fn) return "";
+    const F = s?.ex?.F || {};
+    const key = JSON.stringify({ id: l?.id, p: s?.product || prodOf(l), a: F.age?.value || l?.age, d: F.dob?.value || l?.dob, x: l?.sex || l?.gender, t: F.tobacco?.value, h: F.health?.value, m: F.meds?.value, hw: F.hw?.value, c: F.coverage?.value, b: F.budget?.value, inc: F.income?.value, exp: F.expenses?.value, bal: F.mortgageBalance?.value });
+    if (!s) {
+      const idle = fn({ lead: l, F: {}, product: prodOf(l), pitch: false });
+      if (idle.ok && idle.carriers[0]?.monthly) return `<div class="hpc-price"><span>On-file quote</span><b>${esc(usd(idle.carriers[0].monthly))}/mo</b><small>${esc(idle.plan)} · ${esc(idle.carriers[0].n)} · ${esc(idle.carriers[0].src)}</small><button type="button" class="btn sm" data-qopen>Open full quote</button></div>`;
+      return `<div class="hpc-price wait"><span>Live quote</span>${esc(idle.ask || "On the call, Copilot prices from what they say — same rates as Quote & compare.")}</div>`;
+    }
+    if (s.consent !== "agreed") return "";
+    if (s.liveQ?.key === key) return paintQuote(s.liveQ.r);
+    const r = fn({ lead: l, F, product: s.product || prodOf(l), pitch: true });
+    s.liveQ = { key, r };
+    return paintQuote(r);
+  }
+  function paintQuote(r) {
+    if (!r) return "";
+    const missMap = { age: "Age", sex: "Sex", tobacco: "Tobacco", health: "Health", income: "Income", expenses: "Expenses", budget: "Budget" };
+    if (!r.ok) return `<div class="hpc-price wait"><span>Live quote</span>${esc(r.ask || "Need a few more answers.")}<small>${esc((r.missing || []).map((x) => missMap[x] || x).join(" · "))}${r.note ? " · " + esc(r.note) : ""}</small></div>`;
+    const opts = r.options || [];
+    if (opts.length) {
+      const math = r.math;
+      const mathLine = math?.calc && math.income != null
+        ? `${money(math.income)} in − ${money(math.expenses)} out = ${money(math.leftover)} leftover → 10% = ${usd(math.calc)}/mo`
+        : math?.used ? `Pitching at ${usd(math.used)}/mo · ${math.method}` : "";
+      const rec = opts.find((o) => o.rec) || opts[1] || opts[0];
+      const rows = opts.map((o) => `<div class="hpc-opt${o.rec ? " rec" : ""}"><i>${esc(o.label)}</i><span>${esc(money(o.face))}</span><b>${esc(usd(o.monthly))}/mo</b></div>`).join("");
+      const p1 = opts[0], p2 = opts[1], p3 = opts[2];
+      const say = `The first option is ${money(p1.face)} for ${usd(p1.monthly)} a month.${p2 ? ` Then they had ${money(p2.face)} for ${usd(p2.monthly)}.` : ""}${p3 ? ` And lastly, that gold plan is ${money(p3.face)} for ${usd(p3.monthly)}.` : ""} Out of these three — ${opts.map((o) => usd(o.monthly)).join(", ")} — which one is most comfortable?`;
+      return `<div class="hpc-price"><span>Pitch · ${esc(r.carrier?.n || rec.n)}</span><b>${esc(usd(rec.monthly))}/mo</b><small>${esc(r.plan)} · ${esc(r.carrier?.n || rec.n)} · ${esc(r.carrier?.src || rec.src)}${r.bmi ? " · BMI " + r.bmi : ""}</small>${mathLine ? `<div class="hpc-math">${esc(mathLine)}</div>` : ""}<div class="hpc-opts">${rows}</div><div class="hpc-next"><span>You can say</span>“${esc(say)}”</div><p class="hpc-empty">${esc(r.note || "")}</p><button type="button" class="btn sm" data-qopen>Open full quote</button></div>`;
+    }
+    const top = r.carriers[0];
+    const more = r.carriers.slice(1).map((c) => `${c.n} ${c.monthly != null ? usd(c.monthly) + "/mo" : (c.face ? money(c.face) : "")}`).join(" · ");
+    const main = r.mode === "budget" && top?.face ? money(top.face) : (top?.monthly != null ? usd(top.monthly) + "/mo" : "—");
+    const sub = r.mode === "budget" ? `${esc(r.plan)} · best face under ${esc(usd(r.budget))}/mo · ${esc(top?.n || "")}` : `${esc(r.plan)}${r.face ? " · " + esc(money(r.face)) : ""}${top ? " · " + esc(top.n) + " · " + esc(top.src) : ""}`;
+    const say = top?.monthly != null ? `Based on what you told me, you're looking at about ${usd(top.monthly)} a month for ${money(r.face)} on a ${r.plan.toLowerCase()} plan.` : "";
+    return `<div class="hpc-price"><span>Live quote</span><b>${esc(main)}</b><small>${sub}${r.assumedFace ? " · $15k default" : ""}${r.bmi ? " · BMI " + r.bmi : ""}</small>${more ? `<em>${esc(more)}</em>` : ""}${say ? `<div class="hpc-next"><span>You can say</span>“${esc(say)}”</div>` : ""}<p class="hpc-empty">${esc(r.note || "From Quote & compare. Confirm in the carrier guide.")}</p><button type="button" class="btn sm" data-qopen>Open full quote</button></div>`;
+  }
   function wireLive(slot, s, l) {
     $$("[data-ct]", slot).forEach((b) => (b.onclick = () => { CP.tab = b.dataset.ct; lsSet("hpc.tab", CP.tab); schedule(true); }));
     $$("[data-q]", slot).forEach((b) => (b.onclick = () => { CP.openQuote = CP.openQuote === b.dataset.q ? null : b.dataset.q; schedule(true); }));
     $$("[data-consent]", slot).forEach((b) => (b.onclick = () => (b.dataset.consent === "agreed" ? agree(s) : decline(s))));
+    const qo = $("[data-qopen]", slot);
+    if (qo) qo.onclick = () => {
+      const F = s?.ex?.F || {};
+      window.hpQuoter?.applyQuoteFacts?.({ lead: l, F, product: s?.product || prodOf(l) }, true);
+      if (window.hpPop?.toggle) window.hpPop.toggle("quote");
+      else window.hpQuoter?.open?.();
+    };
     const im = $("[data-import]", slot); if (im) im.onclick = () => openImport(l);
     if (s) {
       const ta = $("[data-notes]", slot); if (ta) { ta.oninput = () => { s.notes = ta.value; }; ta.onblur = () => schedule(true); }
@@ -542,9 +670,34 @@ Never include Social Security, bank, card or account numbers. Transcript:
     $$("[data-ed]", box).forEach((c) => (c.onchange = () => { s.edits[c.dataset.ed] = c.value.trim(); s.sel["f:" + c.dataset.ed] = true; savePending(); }));
     $$("[data-at]", box).forEach((c) => (c.onchange = () => { const v = c.value ? +new Date(c.value) : null; s.edits["t:" + c.dataset.at] = v; s.ex.tasks[+c.dataset.at].exact = true; if (v) s.sel["t:" + c.dataset.at] = true; savePending(); }));
     const sum = $("[data-sum]", box); if (sum) sum.onchange = () => { s.summary = redact(sum.value.trim()); savePending(); };
+    const sms = $("[data-sms]", box); if (sms) sms.onchange = () => { s.smsDraft = ensureStop(sms.value); savePending(); };
     const rn = $("[data-revnotes]", box); if (rn) rn.onchange = () => { s.notes = redact(rn.value); savePending(); };
     const aa = $("[data-addall]", box); if (aa) aa.onclick = () => { if (rn) s.notes = redact(rn.value); addNotes(s, suggestions(s, lead(s.leadId))); savePending(); box.innerHTML = reviewHTML(s, !!box.closest("#hpcModal")); wireReview(box, s); };
-    $$("[data-act]", box).forEach((b) => (b.onclick = async () => { const a = b.dataset.act; if (a === "save") { b.disabled = true; try { await save(s); } catch (e) { toast("Couldn't save: " + (e.message || e)); b.disabled = false; } } else if (a === "later") later(s); else if (a === "polish") { b.disabled = true; aiPass(s); } else drop(s); }));
+    $$("[data-act]", box).forEach((b) => (b.onclick = async () => {
+      const a = b.dataset.act;
+      if (a === "save") { b.disabled = true; try { await save(s); } catch (e) { toast("Couldn't save: " + (e.message || e)); b.disabled = false; } }
+      else if (a === "later") later(s);
+      else if (a === "polish") { b.disabled = true; aiPass(s); }
+      else if (a === "sms-copy") {
+        const t = ensureStop((sms && sms.value) || s.smsDraft || "");
+        try { await navigator.clipboard.writeText(t); toast("Text copied"); } catch { toast("Select the text to copy it"); }
+      } else if (a === "sms-send") {
+        const l = lead(s.leadId), t = ensureStop((sms && sms.value) || s.smsDraft || "");
+        if (!l?.phone) { toast("No phone number on this lead"); return; }
+        if (!t) { toast("Draft a text first"); return; }
+        b.disabled = true;
+        try {
+          if (typeof DL()?.sendSms === "function") await DL().sendSms(l.phone, t, l.id);
+          else {
+            const r = await fetch("/api/dialer/sms/send", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ to: l.phone, body: t, leadId: l.id }) });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.error || "Couldn't send");
+          }
+          toast("Text sent");
+        } catch (e) { toast(e.message || "Couldn't send that text"); }
+        b.disabled = false;
+      } else drop(s);
+    }));
     const x = $("[data-close]", box); if (x) x.onclick = closeModal;
   }
 
@@ -609,10 +762,9 @@ Never include Social Security, bank, card or account numbers. Transcript:
 
   /* for the pop-outs (public/hp-pop.js): what the copilot has heard, and the same consent buttons as the profile */
   window.hpCopilot = {
-    session(leadId) {
-      if (CP.cur && (!leadId || CP.cur.leadId === leadId)) return CP.cur;
-      return leadId ? CP.pending.filter((x) => x.leadId === leadId).slice(-1)[0] || null : null;
-    },
+    session: sessionOf,
+    fields: fieldsOf,
+    writeup,
     agree() { if (CP.cur) agree(CP.cur); },
     decline() { if (CP.cur) decline(CP.cur); },
     FIELDS, OBJ, CHECK,

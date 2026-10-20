@@ -22,10 +22,11 @@ html.hp-pro .col{background:linear-gradient(180deg,rgba(18,12,30,.86),rgba(9,7,1
 html.hp-pro .col.over,html.hp-pro .col[data-over]{border-color:rgba(255,79,163,.7)!important;box-shadow:0 0 0 1px rgba(255,79,163,.4),0 0 28px -8px rgba(255,46,136,.7)}
 html.hp-pro .col .card{transition:transform .16s cubic-bezier(.2,.8,.2,1),border-color .2s,box-shadow .2s}
 html.hp-pro .col .card:hover{transform:translateY(-2px);border-color:rgba(255,79,163,.4)!important;box-shadow:0 12px 26px -16px rgba(255,46,136,.7)}
+.col .card .card-call{margin-left:auto;padding:2px 8px;font-size:11px;line-height:1.3;position:relative;z-index:2}
 
 /* ---------- forms ---------- */
 html.hp-pro input:not([type=checkbox]):not([type=radio]):not([type=range]),html.hp-pro select,html.hp-pro textarea{transition:border-color .15s,box-shadow .15s,background .15s}
-html.hp-pro input:not([type=checkbox]):not([type=radio]):not([type=range]):focus,html.hp-pro select:focus,html.hp-pro textarea:focus{outline:none!important;border-color:rgba(255,79,163,.75)!important;box-shadow:0 0 0 3px rgba(255,46,136,.18),0 0 18px -6px rgba(255,46,136,.7)!important}
+html.hp-pro input:not([type=checkbox]):not([type=radio]):not([type=range]):focus,html.hp-pro select:focus,html.hp-pro textarea:focus{outline:none!important;border-color:var(--theme-accent)!important;box-shadow:0 0 0 3px var(--theme-soft),0 0 18px -6px var(--theme-glow)!important}
 
 /* ---------- tables ---------- */
 html.hp-pro table tbody tr{transition:background .15s}
@@ -84,7 +85,7 @@ html.hp-pro .topbar #hpdBar .hpd-srch{flex:1 1 160px}
 .gs-top h3{margin:0;font-size:17px}.gs-top p{margin:2px 0 0;font-size:13px}
 .gs-top>div:first-child{flex:1;min-width:0}
 .gs-bar{flex:0 1 220px;height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
-.gs-bar i{display:block;height:100%;background:linear-gradient(90deg,#FF2E88,#FF9E3D);box-shadow:0 0 10px rgba(255,46,136,.6);transition:width .4s}
+.gs-bar i{display:block;height:100%;background:var(--pro-grad,linear-gradient(90deg,var(--theme-accent),var(--theme-accent-2)));box-shadow:0 0 10px var(--theme-glow);transition:width .4s}
 .gs-list{list-style:none;margin:14px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
 .gs-list button{all:unset;cursor:pointer;box-sizing:border-box;display:flex;gap:10px;align-items:flex-start;width:100%;height:100%;padding:11px 12px;border-radius:12px;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.09);transition:border-color .2s,background .2s}
 .gs-list button:hover,.gs-list button:focus-visible{border-color:rgba(255,79,163,.5);background:rgba(255,79,163,.06)}

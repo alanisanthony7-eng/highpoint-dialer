@@ -6,7 +6,7 @@ html.hp-pro{
   --pro-card:rgba(13,15,24,.84);--pro-card-2:rgba(19,21,33,.9);--pro-sunk:rgba(255,255,255,.035);
   --pro-line:rgba(255,255,255,.075);--pro-line-2:rgba(255,255,255,.13);
   --pro-ink:#F3F4F7;--pro-mut:#9BA1AE;--pro-faint:#6C7383;
-  --pro-a:#FF2E88;--pro-b:#FF9E3D;--pro-grad:linear-gradient(90deg,#FF2E88,#FF9E3D);
+  --pro-a:var(--theme-accent,#FF2E88);--pro-b:var(--theme-accent-2,#FF9E3D);--pro-grad:linear-gradient(110deg,var(--theme-accent,#FF2E88),var(--theme-accent-2,#FF9E3D));
   --pro-ok:#3BD38B;--pro-warn:#FFB547;--pro-bad:#FF5A6A;
   --pro-r:16px;--pro-r-sm:11px;
   --pro-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 24px 48px -28px rgba(0,0,0,.85);
@@ -32,7 +32,7 @@ html.hp-pro .nav:hover{background:rgba(255,255,255,.045)!important;color:#fff!im
 html.hp-pro .nav:hover svg{opacity:1}
 html.hp-pro .nav[aria-current=page]{background:linear-gradient(90deg,rgba(255,46,136,.20),rgba(255,158,61,.05) 70%,transparent)!important;color:#fff!important;box-shadow:none!important}
 html.hp-pro .nav[aria-current=page]::before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--pro-grad);box-shadow:0 0 12px var(--pro-a)}
-html.hp-pro .nav[aria-current=page] svg{opacity:1;color:#FF7AB8}
+html.hp-pro .nav[aria-current=page] svg{opacity:1;color:var(--theme-accent,#FF7AB8)}
 html.hp-pro .nav:focus-visible{outline:2px solid var(--pro-a);outline-offset:1px}
 @media (max-width:900px){html.hp-pro .nav[aria-current=page]::before{left:20%;right:20%;top:auto;bottom:-6px;width:auto;height:3px;border-radius:3px 3px 0 0}}
 
@@ -56,7 +56,7 @@ html.hp-pro .hero h1 em,html.hp-pro .hero h1 span{-webkit-text-fill-color:transp
 html.hp-pro section[data-v] > .head{padding-bottom:16px;margin-bottom:20px!important;border-bottom:1px solid var(--pro-line);position:relative}
 html.hp-pro section[data-v] > .head::after{content:"";position:absolute;left:0;bottom:-1px;width:72px;height:2px;background:var(--pro-grad);border-radius:2px}
 html.hp-pro section[data-v] > .head p{color:#BFC3CC!important;max-width:70ch;line-height:1.55;margin-top:8px!important}
-html.hp-pro .eyebrow{letter-spacing:.24em!important;color:#FF9E3D!important;font-weight:700!important}
+html.hp-pro .eyebrow{letter-spacing:.24em!important;color:var(--theme-accent-2,#FF9E3D)!important;font-weight:700!important}
 html.hp-pro section[data-v]:not([hidden]){animation:proIn .32s cubic-bezier(.2,.8,.2,1)}
 @keyframes proIn{from{opacity:0;transform:translateY(8px)}}
 
@@ -87,14 +87,14 @@ html.hp-pro .btn:focus-visible{outline:2px solid #fff;outline-offset:2px}
 html.hp-pro input:not([type=checkbox]):not([type=radio]):not([type=range]),html.hp-pro select,html.hp-pro textarea{
   background-color:rgba(255,255,255,.04)!important;border:1px solid var(--pro-line-2)!important;border-radius:var(--pro-r-sm)!important;color:var(--pro-ink)!important;transition:border-color .15s,box-shadow .15s,background-color .15s}
 html.hp-pro input:not([type=checkbox]):not([type=radio]):not([type=range]):hover,html.hp-pro select:hover,html.hp-pro textarea:hover{border-color:rgba(255,255,255,.22)!important}
-html.hp-pro input:not([type=checkbox]):not([type=radio]):not([type=range]):focus,html.hp-pro select:focus,html.hp-pro textarea:focus{outline:none!important;border-color:#FF4FA3!important;box-shadow:0 0 0 3px rgba(255,79,163,.2)!important;background-color:rgba(255,255,255,.06)!important}
+html.hp-pro input:not([type=checkbox]):not([type=radio]):not([type=range]):focus,html.hp-pro select:focus,html.hp-pro textarea:focus{outline:none!important;border-color:var(--theme-accent,#FF4FA3)!important;box-shadow:0 0 0 3px var(--theme-soft,rgba(255,79,163,.2))!important;background-color:rgba(255,255,255,.06)!important}
 html.hp-pro input::placeholder,html.hp-pro textarea::placeholder{color:var(--pro-faint)!important}
 html.hp-pro .hpd-status select{background-color:transparent!important;border:0!important;box-shadow:none!important}
 html.hp-pro .bigseg{background:rgba(255,255,255,.035)!important;border:1px solid var(--pro-line)!important}
 html.hp-pro .field>span{color:var(--pro-mut)!important;font-weight:650;letter-spacing:.01em}
 
 /* ---- toasts, scrollbars, selection ---- */
-html.hp-pro .toast{background:rgba(14,15,24,.96)!important;color:#fff!important;border:1px solid var(--pro-line-2);border-left:3px solid #FF4FA3;border-radius:12px!important;box-shadow:0 18px 40px -16px rgba(0,0,0,.8);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+html.hp-pro .toast{background:rgba(14,15,24,.96)!important;color:#fff!important;border:1px solid var(--pro-line-2);border-left:3px solid var(--theme-accent,#FF4FA3);border-radius:12px!important;box-shadow:0 18px 40px -16px rgba(0,0,0,.8);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
 html.hp-pro ::selection{background:rgba(255,46,136,.45);color:#fff}
 html.hp-pro *{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent}
 html.hp-pro ::-webkit-scrollbar{width:10px;height:10px}
@@ -126,26 +126,26 @@ html.hp-pro ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.26);bac
 html.hp-pro .hpk-top input{border:0!important;box-shadow:none!important;background:transparent!important;padding:0!important;border-radius:0!important}
 html.hp-pro .hpd-srch input[readonly]{cursor:pointer}
 
-/* ===== Buttons v2: deeper magenta→coral, glass highlight, crisp edges, light sweep ===== */
-html.hp-pro{--pro-a:#FF3D7F;--pro-b:#FF8A4C;--pro-grad:linear-gradient(110deg,#D3176A 0%,#FF3D7F 40%,#FF7148 78%,#FF9F4D 100%);
+/* ===== Buttons: theme accent, glass highlight, crisp edges ===== */
+html.hp-pro{
   --btn2-face:linear-gradient(180deg,rgba(255,255,255,.2) 0%,rgba(255,255,255,.05) 46%,rgba(0,0,0,0) 54%,rgba(0,0,0,.16) 100%);
-  --btn2-ring:inset 0 1px 0 rgba(255,255,255,.42),inset 0 -1px 0 rgba(0,0,0,.28),0 0 0 1px rgba(255,61,127,.32);
-  --btn2-glow:0 12px 28px -14px rgba(255,61,127,.85),0 2px 6px -2px rgba(0,0,0,.65)}
+  --btn2-ring:inset 0 1px 0 rgba(255,255,255,.42),inset 0 -1px 0 rgba(0,0,0,.28),0 0 0 1px color-mix(in srgb,var(--theme-accent) 32%,transparent);
+  --btn2-glow:0 12px 28px -14px var(--theme-glow,rgba(255,61,127,.85)),0 2px 6px -2px rgba(0,0,0,.65)}
 html.hp-pro .btn.primary,html.hp-pro .topbar [data-new],html.hp-pro .hph-go,html.hp-pro .hpd .btn.primary{
   background:var(--btn2-face),var(--pro-grad)!important;border:1px solid rgba(255,255,255,.12)!important;border-radius:12px!important;
   box-shadow:var(--btn2-ring),var(--btn2-glow)!important;color:#fff!important;text-shadow:0 1px 1px rgba(80,0,30,.35);font-weight:650!important;letter-spacing:.01em;
   position:relative;overflow:hidden;isolation:isolate;transition:transform .16s cubic-bezier(.2,.8,.2,1),box-shadow .2s,filter .2s!important}
 html.hp-pro .btn.primary::after,html.hp-pro .topbar [data-new]::after,html.hp-pro .hph-go::after{content:"";position:absolute;inset:-1px;z-index:-1;pointer-events:none;
   background:linear-gradient(105deg,transparent 32%,rgba(255,255,255,.38) 50%,transparent 68%);transform:translateX(-130%);transition:transform .75s cubic-bezier(.2,.8,.2,1)}
-html.hp-pro .btn.primary:hover,html.hp-pro .topbar [data-new]:hover,html.hp-pro .hph-go:hover{transform:translateY(-1px);filter:saturate(1.08) brightness(1.05)!important;box-shadow:var(--btn2-ring),0 16px 34px -14px rgba(255,61,127,.95),0 2px 6px -2px rgba(0,0,0,.65)!important}
+html.hp-pro .btn.primary:hover,html.hp-pro .topbar [data-new]:hover,html.hp-pro .hph-go:hover{transform:translateY(-1px);filter:saturate(1.08) brightness(1.05)!important;box-shadow:var(--btn2-ring),0 16px 34px -14px var(--theme-glow),0 2px 6px -2px rgba(0,0,0,.65)!important}
 html.hp-pro .btn.primary:hover::after,html.hp-pro .topbar [data-new]:hover::after,html.hp-pro .hph-go:hover::after{transform:translateX(130%)}
-html.hp-pro .btn.primary:active,html.hp-pro .topbar [data-new]:active,html.hp-pro .hph-go:active{transform:translateY(0) scale(.985);box-shadow:inset 0 2px 6px rgba(0,0,0,.35),0 0 0 1px rgba(255,61,127,.4)!important}
+html.hp-pro .btn.primary:active,html.hp-pro .topbar [data-new]:active,html.hp-pro .hph-go:active{transform:translateY(0) scale(.985);box-shadow:inset 0 2px 6px rgba(0,0,0,.35),0 0 0 1px color-mix(in srgb,var(--theme-accent) 40%,transparent)!important}
 html.hp-pro .btn.primary:disabled,html.hp-pro .hph-go:disabled{filter:grayscale(.6) brightness(.7)!important;box-shadow:none!important;transform:none}
 html.hp-pro .btn.primary:focus-visible,html.hp-pro .hph-go:focus-visible{outline:2px solid #fff;outline-offset:2px}
 /* secondary: dark glass with a top highlight; the edge lights up on hover */
 html.hp-pro .btn:not(.primary){background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.025))!important;border:1px solid rgba(255,255,255,.11)!important;border-radius:12px!important;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 1px 2px rgba(0,0,0,.4)!important;transition:border-color .2s,background .2s,box-shadow .2s,transform .16s!important}
-html.hp-pro .btn:not(.primary):hover{background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.04))!important;border-color:rgba(255,120,150,.45)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 3px rgba(255,61,127,.08),0 6px 18px -10px rgba(255,61,127,.6)!important}
+html.hp-pro .btn:not(.primary):hover{background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.04))!important;border-color:color-mix(in srgb,var(--theme-accent) 45%,var(--theme-line-strong))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 3px var(--theme-soft),0 6px 18px -10px var(--theme-glow)!important}
 html.hp-pro .btn:not(.primary):active{transform:scale(.985)}
 /* Sold: success green in the same finish */
 html.hp-pro .btn.sold{background:var(--btn2-face),linear-gradient(110deg,#0E9F6E,#2FD08A 60%,#7BE3A8)!important;border:1px solid rgba(255,255,255,.12)!important;color:#fff!important;font-weight:700!important;
@@ -153,4 +153,4 @@ html.hp-pro .btn.sold{background:var(--btn2-face),linear-gradient(110deg,#0E9F6E
 html.hp-pro .btn.sold:hover{filter:brightness(1.06)!important;transform:translateY(-1px)}
 
 /* segmented tab thumb (Dial / Call history …) in the same finish */
-html.hp-pro .segthumb{background:var(--btn2-face),var(--pro-grad)!important;border-radius:12px!important;box-shadow:var(--btn2-ring),0 10px 24px -14px rgba(255,61,127,.9)!important}
+html.hp-pro .segthumb{background:var(--btn2-face),var(--pro-grad)!important;border-radius:12px!important;box-shadow:var(--btn2-ring),0 10px 24px -14px var(--theme-glow)!important}

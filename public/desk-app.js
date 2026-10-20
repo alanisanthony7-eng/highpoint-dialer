@@ -69,6 +69,15 @@ function ensureDialer(){
   });
   return dialerLoad;
 }
+async function startLeadCall(l){
+  if(!l){toast("That lead isn't in your book.");return}
+  if(!normPhone(l.phone)){toast("No phone number on this lead");return}
+  if(l.dnc){toast("This number is on Do Not Call");return}
+  try{await ensureDialer()}catch(e){openDrawer(l.id);toast(e.message||"The dialer couldn't load.");return}
+  if(!window.hpDialer?.ready){go("dialer");toast("Turn the dialer on, then press Call.");return}
+  if(window.hpDialer.busy){toast("Finish the current call first");openDrawer(l.id);return}
+  dCurId=l.id; go("dialer"); window.hpDialer.dialLead(l);
+}
 function go(v){ if(!document.getElementById("v-"+v))v="pipeline";
   {const T=window.hpTeam;if(T?.viewLocked?.(v)){if(goReady){T.upgrade(T.viewFeature(v));return}v="pipeline"}} // a page your plan doesn't include
   view=v; {const g=ls.get("hp.gs",{});if(!g[v]){g[v]=Date.now();ls.set("hp.gs",g)}} ls.set("hp.view",v);
@@ -122,12 +131,12 @@ function renderToday(){
   const now=Date.now(),today=new Date().toDateString(),end=new Date();end.setHours(23,59,59,999);
   const callbacks=[...leads.values()].filter(l=>l.callbackAt&&l.callbackAt<=end.getTime()&&!["sold","lost"].includes(l.stage)).sort((a,b)=>a.callbackAt-b.callbackAt).slice(0,4);
   const meetings=typeof appts!=="undefined"?[...appts.values()].filter(a=>!a.done&&new Date(a.at).toDateString()===today).sort((a,b)=>a.at-b.at).slice(0,4):[];
-  const ready=[...leads.values()].filter(l=>normPhone(l.phone)&&!["sold","lost"].includes(l.stage)&&!l.dnc&&!l.scrub?.blocked).sort((a,b)=>(a.lastCallAt||0)-(b.lastCallAt||0)).slice(0,4);
+  const ready=dialQueue().slice(0,4);
   const list=(items,empty,draw)=>items.length?items.map(draw).join(""):`<span class="today-empty">${empty}</span>`;
   host.innerHTML=`<article><header><span>Callbacks</span><b>${callbacks.length}</b></header>${list(callbacks,"Nothing due today",l=>`<button data-today-lead="${esc(l.id)}"><span><b>${esc(fullName(l))}</b><small>${l.callbackAt<now?"Overdue · ":""}${new Date(l.callbackAt).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</small></span><i>→</i></button>`)}</article>
     <article><header><span>Appointments</span><b>${meetings.length}</b></header>${list(meetings,"Your calendar is clear",a=>`<button data-today-lead="${esc(a.leadId||"")}" data-today-view="calendar"><span><b>${esc(a.leadName||a.title||"Appointment")}</b><small>${new Date(a.at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})} · ${esc(a.type||"Call")}</small></span><i>→</i></button>`)}</article>
-    <article><header><span>Ready to call</span><b>${ready.length}</b></header>${list(ready,"Import leads to build a queue",l=>`<button data-today-lead="${esc(l.id)}"><span><b>${esc(fullName(l))}</b><small>${esc(stageName(l.stage))} · ${esc(fmtPhone(l.phone))}</small></span><i>→</i></button>`)}</article>`;
-  host.querySelectorAll("[data-today-lead]").forEach(b=>b.onclick=()=>{const id=b.dataset.todayLead;if(b.dataset.todayView==="calendar"){go("calendar");return}if(id)openDrawer(id)});
+    <article><header><span>Ready to call</span><b>${ready.length}</b></header>${list(ready,"Import leads to build a queue",l=>`<button data-today-lead="${esc(l.id)}" data-today-call="1"><span><b>${esc(fullName(l))}</b><small>${esc(stageName(l.stage))} · ${esc(fmtPhone(l.phone))}</small></span><i>Call</i></button>`)}</article>`;
+  host.querySelectorAll("[data-today-lead]").forEach(b=>b.onclick=()=>{const id=b.dataset.todayLead;if(b.dataset.todayView==="calendar"){go("calendar");return}if(!id)return;if(b.dataset.todayCall){startLeadCall(leads.get(id));return}openDrawer(id)});
 }
 function renderPipeline(){renderStart();
   const pf=$("#pipeProduct").value; const all=filteredLeads().filter(l=>!pf||l.product===pf);
@@ -140,13 +149,14 @@ function renderPipeline(){renderStart();
   $("#board").innerHTML=STAGES.map(([id,n,c])=>{
     const items=all.filter(l=>(l.stage||"new")===id).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
     return `<div class="col" data-stage="${id}"><header><h3><i style="background:${c}"></i>${n}</h3><span class="muted num">${items.length}</span></header>
-      ${items.slice(0,150).map(l=>`<div class="card" draggable="true" data-id="${esc(l.id)}" tabindex="0"><span class="nm">${esc(fullName(l))}</span><span class="meta"><span class="num">${esc(fmtPhone(l.phone))}</span>${l.age?`<span>${esc(l.age)} yrs</span>`:""}</span><span class="meta">${prodPill(l.product)}<span>${esc(l.state||"")}</span></span></div>`).join("")}
+      ${items.slice(0,150).map(l=>`<div class="card" draggable="true" data-id="${esc(l.id)}" tabindex="0"><span class="nm">${esc(fullName(l))}</span><span class="meta"><span class="num">${esc(fmtPhone(l.phone))}</span>${l.age?`<span>${esc(l.age)} yrs</span>`:""}</span><span class="meta">${prodPill(l.product)}<span>${esc(l.state||"")}</span>${normPhone(l.phone)?`<button type="button" class="btn sm card-call" data-call="${esc(l.id)}">Call</button>`:""}</span></div>`).join("")}
       ${items.length>150?`<div class="empty-col">+${items.length-150} more in Contacts</div>`:""}
       ${!items.length?`<div class="empty-col">${leads.size?"No leads here":(id==="new"?"Import a CSV or add a lead to start":"—")}</div>`:""}</div>`}).join("");
   $$("#board .card").forEach(c=>{
     c.onclick=()=>openDrawer(c.dataset.id); c.onkeydown=e=>{if(e.key==="Enter")openDrawer(c.dataset.id)};
-    c.ondragstart=e=>{e.dataTransfer.setData("text/plain",c.dataset.id);e.dataTransfer.effectAllowed="move"};
+    c.ondragstart=e=>{if(e.target.closest("[data-call]")){e.preventDefault();return}e.dataTransfer.setData("text/plain",c.dataset.id);e.dataTransfer.effectAllowed="move"};
   });
+  $$("#board [data-call]").forEach(b=>{b.onclick=e=>{e.preventDefault();e.stopPropagation();startLeadCall(leads.get(b.dataset.call))};b.onpointerdown=e=>e.stopPropagation()});
   $$("#board .col").forEach(cl=>{
     cl.ondragover=e=>{e.preventDefault();cl.classList.add("over")};
     cl.ondragleave=()=>cl.classList.remove("over");
@@ -158,7 +168,7 @@ $("#pipeProduct").onchange=renderPipeline;
 
 /* ---------- contacts ---------- */
 const stageOpts=(withAll)=>(withAll?`<option value="">All stages</option>`:"")+STAGES.map(([i,n])=>`<option value="${i}">${n}</option>`).join("");
-$("#fStage").innerHTML=stageOpts(true); $("#impStage").innerHTML=stageOpts(false); $("#dqStage").innerHTML=stageOpts(false);
+$("#fStage").innerHTML=stageOpts(true); $("#impStage").innerHTML=stageOpts(false); $("#dqStage").innerHTML=stageOpts(true);
 function contactRows(){
   const q=$("#q").value.trim().toLowerCase(), st=$("#fStage").value, pr=$("#fProduct").value, so=$("#fSource").value;
   const qd=digits(q);
@@ -170,9 +180,10 @@ function renderContacts(){
   const cur=$("#fSource").value; $("#fSource").innerHTML=`<option value="">All sources</option>`+sources.map(s=>`<option ${s===cur?"selected":""}>${esc(s)}</option>`).join("");
   const rows=contactRows();
   $("#contactCount").textContent=`${rows.length} of ${leads.size} leads`;
-  $("#rows").innerHTML=rows.slice(0,500).map(l=>`<tr data-id="${esc(l.id)}" tabindex="0"><td><b>${esc(fullName(l))}</b></td><td class="num">${esc(fmtPhone(l.phone))}</td><td>${prodPill(l.product)}</td><td><span class="stage"><i style="background:${stageColor(l.stage)}"></i>${stageName(l.stage)}</span></td><td>${esc(l.state||"")}</td><td class="num">${esc(l.age||"")}</td><td>${esc(l.source||"")}</td><td class="muted">${ago(l.updatedAt)}</td></tr>`).join("")
-    || `<tr><td colspan="8" class="muted" style="text-align:center;padding:28px">${leads.size?"No leads match these filters.":"No leads yet. Use Import to upload a CSV, or add one with + New lead."}</td></tr>`;
+  $("#rows").innerHTML=rows.slice(0,500).map(l=>`<tr data-id="${esc(l.id)}" tabindex="0"><td><b>${esc(fullName(l))}</b></td><td class="num">${esc(fmtPhone(l.phone))}</td><td>${normPhone(l.phone)?`<button type="button" class="btn sm" data-call="${esc(l.id)}">Call</button>`:""}</td><td>${prodPill(l.product)}</td><td><span class="stage"><i style="background:${stageColor(l.stage)}"></i>${stageName(l.stage)}</span></td><td>${esc(l.state||"")}</td><td class="num">${esc(l.age||"")}</td><td>${esc(l.source||"")}</td><td class="muted">${ago(l.updatedAt)}</td></tr>`).join("")
+    || `<tr><td colspan="9" class="muted" style="text-align:center;padding:28px">${leads.size?"No leads match these filters.":"No leads yet. Use Import to upload a CSV, or add one with + New lead."}</td></tr>`;
   $$("#rows tr[data-id]").forEach(r=>{r.onclick=()=>openDrawer(r.dataset.id);r.onkeydown=e=>{if(e.key==="Enter")openDrawer(r.dataset.id)}});
+  $$("#rows [data-call]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();startLeadCall(leads.get(b.dataset.call))});
 }
 ["#q","#fStage","#fProduct","#fSource"].forEach(s=>$(s).addEventListener("input",renderContacts));
 
@@ -322,10 +333,17 @@ document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("#hpShar
 /* ---------- dialer ---------- */
 let dCurId=null; const sess=ls.get("hp.sess",{d:0,c:0,a:0,day:""}); const today=new Date().toDateString(); if(sess.day!==today){sess.d=sess.c=sess.a=0;sess.day=today}
 function saveSess(){ls.set("hp.sess",sess);$("#sDials").textContent=sess.d;$("#sContacts").textContent=sess.c;$("#sAppts").textContent=sess.a}
-$("#dqStage").value=ls.get("hp.dqStage","new");
-function dialQueue(){const st=$("#dqStage").value,pr=$("#dqProduct").value;
-  return filteredLeads().filter(l=>(l.stage||"new")===st&&(!pr||l.product===pr)&&normPhone(l.phone))
+$("#dqStage").value=ls.get("hp.dqStage","");
+function dialQueue(){
+  if(typeof window.hpDialer?.queue==="function") return window.hpDialer.queue();
+  const st=$("#dqStage").value,pr=$("#dqProduct").value;
+  return filteredLeads().filter(l=>(!st||(l.stage||"new")===st)&&(!pr||l.product===pr)&&normPhone(l.phone)&&!["sold","lost"].includes(l.stage)&&!l.dnc)
     .sort((a,b)=>(a.callbackAt||0)-(b.callbackAt||0)||(a.lastCallAt||0)-(b.lastCallAt||0)||(a.createdAt||0)-(b.createdAt||0))}
+function callWriteup(id){
+  const hpm=window.hpDialer?.meta(id)||{};
+  const cop=window.hpCopilot?.writeup?.(id)||{};
+  return {...hpm,summary:hpm.summary||cop.summary||"",transcript:hpm.transcript||cop.transcript||""};
+}
 const SCRIPTS={
   FE:l=>`Hey ${esc(l.first||"…")}? This is [your name] giving you a call, we spoke right around a month or so ago, I was helping you out with your life insurance and sent a packet out to you at the ${esc(l.address||"[address]")} address, should of been a bigggg white packet, did you ever get a chance to look at that?`,
   MP:l=>`Hi ${esc(l.first||"…")}, this is [your name]. I'm following up on the mortgage protection form you sent back${l.lender?` about your loan with ${esc(l.lender)}`:""}. It's the coverage that pays off or keeps up the house payment if something happens to you. Did I catch you at an okay time to go over it for a few minutes?`,
@@ -338,7 +356,7 @@ function dialerUpsell(){const v=$("#v-dialer");if(!v)return false;let n=$("#dUps
 function renderDialer(){dialerUpsell();
   const q=dialQueue(); $("#dqCount").textContent=`${q.length} to call`;
   if(!q.find(l=>l.id===dCurId)) dCurId=q[0]?.id||null;
-  $("#queue").innerHTML=q.slice(0,300).map(l=>`<button data-id="${esc(l.id)}" aria-current="${l.id===dCurId}"><span>${esc(fullName(l))}</span><span class="muted num">${l.callCount?l.callCount+"×":""}${l.callbackAt?` · ${new Date(l.callbackAt).toLocaleDateString(undefined,{month:"short",day:"numeric"})}`:""}</span></button>`).join("")||`<div class="empty-col">No leads with phone numbers in ${stageName($("#dqStage").value)}.</div>`;
+  $("#queue").innerHTML=q.slice(0,300).map(l=>`<button data-id="${esc(l.id)}" aria-current="${l.id===dCurId}"><span>${esc(fullName(l))}</span><span class="muted num">${l.callCount?l.callCount+"×":""}${l.callbackAt?` · ${new Date(l.callbackAt).toLocaleDateString(undefined,{month:"short",day:"numeric"})}`:""}</span></button>`).join("")||`<div class="empty-col">No leads in this queue${$("#dqStage").value?" for "+stageName($("#dqStage").value):""}.</div>`;
   $$("#queue button").forEach(b=>b.onclick=()=>{dCurId=b.dataset.id;renderDialer()});
   const l=leads.get(dCurId);
   if(!l){$("#dCur").innerHTML=`<h2>Queue is empty</h2><p class="muted" style="margin:0">Pick another stage above, or import leads to start dialing.</p>`;saveSess();return}
@@ -374,7 +392,7 @@ async function dispo(l,kind){
   sess.d++; if(["cbgo","appt","apptgo","ni","sold"].includes(kind))sess.c++; if(kind==="appt"||kind==="apptgo")sess.a++;
   const at=new Date($("#cbAt")?.value||"").getTime();
   const dur=callLead===l.id&&callT0?Date.now()-callT0:0; callStop();
-  const hpm=window.hpDialer?.meta(l.id)||{}; window.hpDialer?.onDispo(l.id,lab,note);
+  const hpm=callWriteup(l.id); window.hpDialer?.onDispo(l.id,lab,note);
   logCall({leadId:l.id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:"",...hpm});
   const q=dialQueue(); const idx=q.findIndex(x=>x.id===l.id); const nextId=q[idx+1]?.id||null;
   try{await patchLead(l.id,patch);dCurId=nextId;
@@ -386,7 +404,7 @@ $("#wavvCsv")?.addEventListener("click",()=>{const q=dialQueue();if(!q.length){t
   offerFile(`queue-${$("#dqStage").value}-${new Date().toISOString().slice(0,10)}.csv`,toCSV(["First Name","Last Name","Phone","Email","State","Notes"],q.map(l=>[l.first||"",l.last||"",normPhone(l.phone),l.email||"",l.state||"",[PROD[l.product],l.source].filter(Boolean).join(" · ")])))});
 
 /* ---------- Highpoint Dialer hooks ---------- */
-window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLead,renderDialer,openDrawer,ensureDialer,openPhoto,
+window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLead,renderDialer,openDrawer,ensureDialer,startLeadCall,openPhoto,liveQuote,
   currentId:()=>dCurId,setCurrent(id){dCurId=id;if(view==="dialer")renderDialer()},
   get calls(){return calls},get appts(){return appts},putAppt,addNoteObj,stageName,STAGES,PROD,go,
   async dispoDirect(id,kind,o={}){const l=leads.get(id);if(!l)return;const note=o.note||"";
@@ -396,7 +414,7 @@ window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLe
     if(kind==="cb")patch.callbackAt=o.at||Date.now()+864e5;
     sess.d++;if(["cb","appt","ni","sold"].includes(kind))sess.c++;if(kind==="appt")sess.a++;saveSess();
     const dur=callLead===id&&callT0?Date.now()-callT0:0;callStop();
-    const hpm=window.hpDialer?.meta(id)||{};window.hpDialer?.onDispo(id,lab,note);
+    const hpm=callWriteup(id);window.hpDialer?.onDispo(id,lab,note);
     logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:"",...hpm});
     await patchLead(id,patch);
     if((kind==="appt"||kind==="cb")&&o.at)await putAppt({leadId:id,leadName:fullName(l),title:fullName(l),at:o.at,dur:30,type:kind==="cb"?"Callback":"Phone call",done:false,createdAt:Date.now()});
@@ -406,7 +424,7 @@ window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLe
   callStop(){callStop();if(view==="dialer"&&dTab==="dial")renderDialer()},
   async autoLog(id,lab,meta={}){const l=leads.get(id);if(!l)return;const patch={callCount:(l.callCount||0)+1,lastCallAt:Date.now(),lastDisposition:lab,notes:addNoteObj(l,`Call: ${lab} (Highpoint Dialer)`)};
     if(lab==="Bad number"||lab==="Do not call")patch.stage="lost";sess.d++;saveSess();
-    logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur:0,note:"",transcript:"",summary:"",...meta});
+    logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur:0,note:"",transcript:"",summary:"",...callWriteup(id),...meta});
     try{await patchLead(id,patch)}catch{}if(view==="dialer"&&dTab==="dial")renderDialer()}};
 
 /* ---------- quoting engines (illustrative) ---------- */
@@ -917,6 +935,7 @@ window.hpQuoter={
   priceAt(name,face){const was=Q.FE.mode;Q.FE.mode="face";try{const r=this.cfg().rows().find(x=>x.n===name);return r&&!r.why?r.price(face):null}finally{Q.FE.mode=was}},
   setLead(id){const sel=$("#qLead");if(!sel)return;leadOptions(sel);if([...sel.options].some(o=>o.value===id))sel.value=id},
   attach:(leadId,q)=>attachQuote(leadId,q),
+  liveQuote, applyQuoteFacts,
   open(){go("quoter")}
 };
 
@@ -1045,13 +1064,139 @@ $("#aiClear").onclick=()=>{if(aiBusy)aiBusy.abort();aiTurns=[];$("#msgs").innerH
 function renderScreen(){const cur=$("#scrLead").value;const l=[...leads.values()].sort((a,b)=>fullName(a).localeCompare(fullName(b)));
   $("#scrLead").innerHTML=`<option value="">Don't attach</option>`+l.slice(0,1000).map(x=>`<option value="${esc(x.id)}" ${x.id===cur?"selected":""}>${esc(fullName(x))}</option>`).join("")}
 $("#scrLead").onchange=()=>{const l=leads.get($("#scrLead").value);if(!l)return;if(l.age)$("#scrAge").value=l.age;if(l.product)$("#scrProd").value=l.product};
-$("#scrForm").onsubmit=e=>{e.preventDefault();const v=k=>$("#"+k).value.trim();const l=leads.get(v("scrLead"));
-  const p=`Screen this client like a field underwriter for ${({FE:"final expense",MP:"mortgage protection",IUL:"IUL"})[v("scrProd")]}.${l?` The client is ${fullName(l)} (in my CRM).`:""}
-Age ${v("scrAge")}, ${v("scrSex")}, ${v("scrHt")}, ${v("scrWt")} lbs, tobacco: ${v("scrTob")}.
-Conditions: ${v("scrCond")||"none"}.
-Medications: ${v("scrMeds")||"none"}.
-Hospital stays/surgeries in last 5 years: ${v("scrHosp")||"none"}.
-Tell me: the likely plan type or rate class, which answers on a typical application would knock them out of level or preferred, the follow-up questions I should ask, and which carrier types tend to be most lenient for this profile. Keep it short.${l?" Then add a one-line note to this client's file summarizing the screen.":""}`;
+function parseHt(s){const t=String(s||"");let m=t.match(/(\d)\s*['′]\s*(\d{1,2})/);if(m)return{ft:+m[1],inch:+m[2]};m=t.match(/(\d{2,3})\s*(?:in|")/i);if(m){const n=+m[1];return{ft:Math.floor(n/12),inch:n%12}}return{ft:"",inch:""}}
+function dateFromText(text){const t=String(text||"");const y=t.match(/since (\d{4})/i);if(y&&+y[1]>1900&&+y[1]<2100)return+new Date(+y[1],6,1);const n=t.match(/(\d+)\s*(?:years?|yrs?)\s+ago/i);if(n)return Date.now()-Number(n[1])*365.25*864e5;if(/\blast year\b|in the last year/i.test(t))return Date.now()-180*864e5;return null}
+function condsFromText(text){const out=[];
+  [["high blood pressure|hypertension|\\bhbp\\b","hbp"],["cholesterol","chol"],["insulin|type\\s*1|type one","dmi"],["neuropath|retinopath","dmc"],["diabet","dm"],["heart attack|myocardial","mi"],["\\bstroke\\b","stroke"],["\\btia\\b|mini-stroke","tia"],["stent|bypass|angina|coronary","cad"],["congestive|\\bchf\\b","chf"],["a-?fib|irregular heart","afib"],["\\bcopd\\b|emphysema","copd"],["oxygen","o2"],["asthma","asthma"],["sleep apnea","apnea"],["current cancer|on chemo","cancerNow"],["cancer","cancerPast"],["dialysis","dialysis"],["kidney","ckd"],["cirrhosis|liver","liver"],["hepatitis","hepc"],["alzheimer|dementia","dementia"],["parkinson","parkinsons"],["multiple sclerosis|\\bms\\b","ms"],["lupus","lupus"],["rheumatoid","ra"],["bipolar","bipolar"],["schizo","schizo"],["depression|anxiety","depression"],["alcohol|drug abuse|rehab","alcohol"],["\\bhiv\\b|\\baids\\b","hiv"],["transplant","transplant"],["amput","amput"],["wheelchair","wheelchair"],["hip|knee replacement","joint"],["thyroid","thyroid"],["pending surgery","pending"],["nursing home|hospice|hospitalized","nursing"],["terminal","terminal"]].forEach(([re,k])=>{
+    const m=String(text||"").match(new RegExp("([^.;\\n]{0,80}(?:"+re+")[^.;\\n]{0,40})","i"));if(!m||out.some(c=>c.k===k))return;out.push({k,at:dateFromText(m[1])})});
+  return out}
+function medsFromText(text){const raw=String(text||""),out=[];for(const name of Object.keys(MEDS)){if(new RegExp("\\b"+name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","i").test(raw)&&!out.includes(name))out.push(name)}return out}
+function dollarsHeard(s){const m=String(s??"").replace(/,/g,"").match(/(\d+(?:\.\d+)?)\s*(k|thousand)?/i);return m?Math.round(+m[1]*(m[2]?1000:1)):null}
+function ageFromFacts(l,F,explicit){if(+explicit>=18&&+explicit<=99)return Math.min(99,Math.max(18,+explicit));const v=F?.age?.value??F?.age;if(+v>=18&&+v<=99)return +v;if(+l?.age>=18&&+l?.age<=99)return +l.age;const dob=String(F?.dob?.value||l?.dob||"");let y,mo,d,m=dob.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m){y=+m[1];mo=+m[2];d=+m[3]}else{m=dob.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m){mo=+m[1];d=+m[2];y=+m[3]}}if(!y)return null;const b=new Date(y,mo-1,d);if(isNaN(+b))return null;const n=new Date();let a=n.getFullYear()-b.getFullYear();if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate()))a--;return a>0&&a<120?a:null}
+function sexFromFacts(l,F,explicit){const raw=explicit||F?.sex?.value||l?.sex||l?.gender||l?.fields?.Gender||l?.fields?.Sex||"";return /^f/i.test(raw)?"F":/^m/i.test(raw)?"M":""}
+function tobFromFacts(l,F,explicit){const raw=explicit??F?.tobacco?.value??l?.fields?.["Tobacco use"]??l?.fields?.Tobacco??"";if(raw===""||raw==null)return null;const t=String(raw);if(/^(no|none|n)\b/i.test(t)||/^no\b/i.test(t))return false;if(/yes|cig|smoke|tobacco|nicotine|vape|chew/i.test(t))return true;return null}
+function healthKnown(F){const h=String(F?.health?.value??F?.health??"").trim(),m=String(F?.meds?.value??F?.meds??"").trim(),hw=String(F?.hw?.value??F?.hw??"").trim();return !!(h||m||hw)}
+function healthIsClean(F){const h=String(F?.health?.value??F?.health??"").trim();return /^(none|no(?:ne)?(?: reported)?|nothing|n\/a|no conditions?)$/i.test(h)}
+function snapQuote(){return JSON.parse(JSON.stringify({tab:Q.tab,age:Q.age,sex:Q.sex,tob:Q.tob,state:Q.state,cls:Q.cls,FE:Q.FE,TERM:Q.TERM,IUL:Q.IUL}))}
+function restoreQuote(s){Q.tab=s.tab;Q.age=s.age;Q.sex=s.sex;Q.tob=s.tob;Q.state=s.state;Q.cls=s.cls;Q.FE=s.FE;Q.TERM=s.TERM;Q.IUL=s.IUL}
+function applyQuoteFacts(input={},persist){
+  const l=input.lead||(input.leadId?leads.get(input.leadId):null);
+  const F=input.F||{};
+  const v=k=>F[k]?.value??F[k];
+  const product=input.product||(l?.product==="MP"||l?.product==="IUL"?l.product:"FE");
+  const age=ageFromFacts(l,F,input.age),sex=sexFromFacts(l,F,input.sex),tob=tobFromFacts(l,F,input.tob);
+  const ht=parseHt(v("hw")||input.height||"");const wt=String(v("hw")||input.weight||"").match(/(\d{2,3})\s*(?:lbs|pounds)\b/i)||String(input.weight||"").match(/^(\d{2,3})$/);
+  const conds=condsFromText([v("health"),input.health,input.hosp].filter(Boolean).join("; "));
+  const meds=medsFromText([v("meds"),input.meds].filter(Boolean).join(" "));
+  for(const m of meds){const k=MEDS[m];if(k&&!conds.some(c=>c.k===k))conds.push({k,at:null})}
+  const cov=dollarsHeard(v("coverage")??input.coverage);
+  const inc=dollarsHeard(v("income")??input.income),exp=dollarsHeard(v("expenses")??input.expenses);
+  const stated=dollarsHeard(v("budget")??input.budget);
+  const leftover=(inc!=null&&exp!=null)?inc-exp:null;
+  const calc=leftover!=null&&leftover>0?Math.max(1,Math.round(leftover*0.1)):null;
+  const bud=calc||stated;
+  const bal=dollarsHeard(v("mortgageBalance")??l?.mortgageBalance);
+  if(age)Q.age=age;if(sex)Q.sex=sex;if(tob!=null)Q.tob=tob?"1":"0";
+  if(l?.state&&STATES.includes(l.state))Q.state=l.state;else if(input.state&&STATES.includes(input.state))Q.state=input.state;
+  Q.tab=product==="MP"?"TERM":product==="IUL"?"IUL":"FE";
+  Object.assign(Q.FE,{dob:{m:"",d:"",y:""},ft:ht.ft,inch:ht.inch,lb:wt?+wt[1]:"",nic:tob?"cig":"none",conds,meds,plan:"best",
+    mode:bud&&!cov?"budget":"face",amt:Q.tab==="FE"?Math.min(50000,Math.max(5000,Math.round((cov||15000)/5000)*5000)):Q.FE.amt,
+    budget:Math.min(500,Math.max(50,Math.round((bud||50)/50)*50))});
+  if(Q.tab==="TERM")Q.TERM.amt=Math.max(50000,Math.round((cov||bal||250000)/5000)*5000);
+  if(Q.tab==="IUL"){if(cov)Q.IUL.amt=Math.max(50000,Math.round(cov/5000)*5000);Q.cls=tob?"1.45":"1"}
+  if(persist){saveQ();window.hpQuoter?.changed?.()}
+  return{product,age,sex,tob,conds,meds,cov,bud,bal,inc,exp,leftover,calc,stated,assumedFace:Q.tab==="FE"&&!cov&&!bud}
+}
+function feSchedule(r){
+  const out=[];if(!r||r.why||typeof r.price!=="function")return out;
+  for(let f=5000;f<=50000;f+=1000){const m=r.price(f);if(m>0)out.push({face:f,monthly:m})}
+  return out}
+function pickThree(sched,target){
+  if(!sched.length)return[];
+  let mid=null;for(const x of sched)if(x.monthly<=target)mid=x;
+  if(!mid)mid=sched[0];
+  const used=new Set([mid.face]);
+  const near=(t)=>{let best=null,bd=1e9;for(const x of sched){if(used.has(x.face))continue;const d=Math.abs(x.monthly-t);if(d<bd){best=x;bd=d}}return best};
+  const lo=near(Math.max(15,target*0.7));if(lo)used.add(lo.face);
+  const hi=near(Math.max(target+8,target*1.3));
+  const sorted=[lo,mid,hi].filter(Boolean).filter((x,i,a)=>a.findIndex(y=>y.face===x.face)===i).sort((a,b)=>a.face-b.face);
+  for(const x of sched){if(sorted.length>=3)break;if(!sorted.some(s=>s.face===x.face)){sorted.push(x);sorted.sort((a,b)=>a.face-b.face)}}
+  const labels=["Option 1","Option 2","Gold"];
+  return sorted.slice(0,3).map((x,i)=>({face:x.face,monthly:x.monthly,label:labels[i]||`Option ${i+1}`,rec:sorted.length===1||(sorted.length===3?i===1:i===0)}))}
+function bestBook(books,target){
+  let best=null,score=-1;
+  for(const b of books){
+    let fit=null;for(const x of b.sched)if(x.monthly<=target)fit=x;
+    const face=fit?.face||0,bonus=b.exact?2:b.checked?1:0,s=face*10+bonus;
+    if(face&&(s>score||(s===score&&fit.monthly<(best?.fit?.monthly||1e9)))){best={...b,fit};score=s}
+  }
+  if(best)return best;
+  for(const b of books){const x=b.sched[0];if(!x)continue;const s=1/(x.monthly||1e9);if(s>score){best={...b,fit:x};score=s}}
+  return best}
+function liveQuote(input={}){
+  const l=input.lead||(input.leadId?leads.get(input.leadId):null);
+  const F=input.F||{};
+  const product=input.product||(l?.product==="MP"||l?.product==="IUL"?l.product:"FE");
+  const pitch=input.pitch!==false;
+  const age=ageFromFacts(l,F,input.age),sex=sexFromFacts(l,F,input.sex),tob=tobFromFacts(l,F,input.tob);
+  const inc=dollarsHeard((F.income?.value??F.income)??input.income),exp=dollarsHeard((F.expenses?.value??F.expenses)??input.expenses);
+  const stated=dollarsHeard((F.budget?.value??F.budget)??input.budget);
+  const leftover=(inc!=null&&exp!=null)?inc-exp:null;
+  const calc=leftover!=null&&leftover>0?Math.max(1,Math.round(leftover*0.1)):null;
+  const used=calc||stated||null;
+  const missing=[];if(!age)missing.push("age");if(!sex)missing.push("sex");if(tob==null)missing.push("tobacco");
+  if(product==="FE"&&!healthKnown(F)&&!healthIsClean(F)&&!input.health&&!input.meds)missing.push("health");
+  if(product==="MP"&&!healthKnown(F)&&!healthIsClean(F)&&!input.health)missing.push("health");
+  if(pitch&&product==="FE"&&!used){if(inc==null)missing.push("income");else if(exp==null)missing.push("expenses");else missing.push("budget")}
+  const ask={age:"How old are you?",sex:"I need male or female to price this.",tobacco:"Any tobacco or nicotine in the last 12 months?",health:"Any health conditions or medications right now?",
+    income:"How much would you say you are currently bringing in?",expenses:"And how much of that goes away toward your expenses?",
+    budget:leftover!=null&&leftover<=0?"That doesn't leave much after bills. What monthly amount would still feel comfortable?":"What monthly amount would feel comfortable?"}[missing[0]]||"Need a couple more answers before I can price this.";
+  if(missing.length)return{ok:false,product,age,sex,tob,inc,exp,leftover,calc,stated,used,missing,ask,carriers:[],options:[],plan:"",note:"Don't guess a premium until these are answered."};
+  const snap=snapQuote();
+  try{
+    const applied=applyQuoteFacts({...input,lead:l,F,product,age,sex,tob});
+    if(Q.tab==="FE"){
+      Q.FE.mode="face";
+      const cfg=feCfg(),uw=cfg.uw;
+      const books=cfg.rows().map(r=>{const src=r.exact?"carrier rate":r.checked?"market-checked":"model";
+        return{n:r.n,exact:!!r.exact,checked:!!r.checked,src,plan:r.tier==null?"":(TIERS[r.tier]||r.sub||""),why:r.why||"",tier:r.tier,sched:feSchedule(r)}}).filter(b=>b.sched.length);
+      const pick=used?bestBook(books,used):null;
+      const options=pick?pickThree(pick.sched,used).map(o=>({...o,n:pick.n,src:pick.src,plan:pick.plan})):[]
+      const rec=options.find(o=>o.rec)||options[1]||options[0];
+      const faceAmt=applied.cov||15000;
+      const rows=books.map(b=>{const hit=b.sched.find(x=>x.face===faceAmt)||b.sched.find(x=>x.face>=faceAmt)||b.sched[b.sched.length-1];
+        return{n:b.n,monthly:hit?.monthly||null,face:hit?.face||faceAmt,exact:b.exact,checked:b.checked,src:b.src,plan:b.plan,why:b.why,tier:b.tier}}).filter(r=>r.monthly>0).sort((a,b)=>a.monthly-b.monthly);
+      const follow=[];if(applied.conds.some(c=>c.k==="dm"||c.k==="dmi"||c.k==="dmc"))follow.push("A1C and whether they are on insulin.");if(applied.conds.some(c=>/mi|stroke|cad|chf/.test(c.k)))follow.push("When was the last cardiac event?");if(tob)follow.push("What they smoke and last use.");
+      const math=used?{income:applied.inc,expenses:applied.exp,leftover:applied.leftover,calc:applied.calc,stated:applied.stated,used,method:applied.calc?"10% of leftover (bring in − expenses)":"Monthly amount they named"}:null;
+      const note=options.length?(applied.calc?`Budget is 10% of ${money(applied.leftover)} leftover. Three options on ${pick.n}.`:`Three options on ${pick.n} around ${money(used)}/mo.`):rows.length?(applied.assumedFace?"Priced at $15,000 until they name a face or budget.":"From Quote & compare. Confirm in the carrier guide."):"No carrier in the book will issue this profile.";
+      return{ok:!!(options.length||rows.length),product:"FE",age,sex,tob,bmi:uw.bmi,plan:TIERS[uw.t],tier:uw.t,face:rec?.face||faceAmt,budget:used,mode:used?"budget":"face",assumedFace:applied.assumedFace&&!used,state:Q.state,reasons:uw.reasons.map(r=>`${TIERS[r.tier]}: ${r.txt}`),knockouts:uw.reasons.filter(r=>r.tier>=2).map(r=>r.txt),conds:applied.conds.map(c=>COND[c.k]?.n||c.k),meds:applied.meds,carriers:rows.slice(0,3),options,carrier:pick?{n:pick.n,src:pick.src,plan:pick.plan,tier:pick.tier}:null,math,follow,missing:[],ask:"",note}
+    }
+    if(Q.tab==="TERM"){
+      const cfg=QCFG.TERM,amt=Q.TERM.amt,rows=cfg.rows().map(r=>({n:r.n,monthly:r.why?null:r.price(amt),face:amt,exact:false,checked:!!r.checked,src:r.checked?"market-checked":"model",plan:cfg.cur()+"-year",why:r.why||""})).filter(r=>r.monthly>0).sort((a,b)=>a.monthly-b.monthly);
+      return{ok:!!rows.length,product:"MP",age,sex,tob,plan:cfg.cur()+"-year term",tier:null,face:amt,assumedFace:!applied.cov&&!applied.bal,state:Q.state,reasons:[],knockouts:[],conds:applied.conds.map(c=>COND[c.k]?.n||c.k),meds:applied.meds,carriers:rows.slice(0,3),follow:[],missing:[],ask:"",note:rows.length?"Term estimate from Quote & compare. Confirm class in the carrier guide.":"No term price for this age / term."}
+    }
+    const cfg=QCFG.IUL,amt=Q.IUL.amt,rows=cfg.rows().map(r=>({n:r.n,monthly:r.why?null:r.price(amt),face:amt,exact:false,checked:false,src:"illustration",plan:"IUL",why:r.why||""})).filter(r=>r.monthly>0).sort((a,b)=>a.monthly-b.monthly);
+    return{ok:!!rows.length,product:"IUL",age,sex,tob,plan:"IUL illustration",tier:null,face:amt,assumedFace:!applied.cov,state:Q.state,reasons:[],knockouts:[],conds:[],meds:[],carriers:rows.slice(0,3),follow:[],missing:[],ask:"",note:"Illustration only — not a carrier premium. Run the IUL illustrator before you quote a number."}
+  }catch(e){return{ok:false,product,age,sex,tob,missing:["quote"],ask:"The quoter couldn't price that.",carriers:[],plan:"",note:String(e.message||e)}}
+  finally{restoreQuote(snap)}
+}
+function screenBrief(){const v=k=>$("#"+k).value.trim();
+  return liveQuote({pitch:false,product:v("scrProd")||"FE",age:v("scrAge"),sex:v("scrSex"),tob:v("scrTob"),health:[v("scrCond"),v("scrHosp")].filter(Boolean).join("; "),meds:v("scrMeds"),height:v("scrHt"),weight:v("scrWt")+" lbs",F:{hw:{value:v("scrHt")+" "+v("scrWt")+" lbs"},health:{value:[v("scrCond"),v("scrHosp")].filter(Boolean).join("; ")},meds:{value:v("scrMeds")}}})}
+$("#scrForm").onsubmit=e=>{e.preventDefault();const brief=screenBrief();const l=leads.get($("#scrLead").value);
+  if(l)patchLead(l.id,{notes:addNoteObj(l,`Screen: ${brief.plan||brief.missing?.join(", ")||"incomplete"}${brief.bmi?" · BMI "+brief.bmi:""}`)}).catch(()=>{});
+  const names=(brief.carriers||[]).map(c=>c.n||c).join(", ");
+  const p=brief.ok?`Narrate this Highpoint underwriting screen for the agent. Do not invent a premium or change the plan type. The model already decided the plan.
+
+Client${l?" "+fullName(l):""}: age ${brief.age}, ${brief.sex}, tobacco ${brief.tob?"yes":"no"}, BMI ${brief.bmi||"unknown"}.
+Conditions: ${(brief.conds||[]).join("; ")||"none"}. Meds: ${(brief.meds||[]).join(", ")||"none"}.
+Likely plan: ${brief.plan}.
+Reasons: ${(brief.reasons||[]).join(" | ")||"none"}.
+Heavier answers: ${(brief.knockouts||[]).join("; ")||"none"}.
+Ask next: ${(brief.follow||[]).join(" ")}
+Carriers priced: ${names||"none in the book"}${brief.carriers?.[0]?.monthly!=null?`. Lowest shown: ${brief.carriers[0].n} ${money(brief.carriers[0].monthly,2)}/mo (${brief.carriers[0].src})`:""}.
+
+Give a short field-underwriter brief: the plan type, 2-4 follow-ups, and which carriers look most lenient. Remind them to confirm in the carrier guide. Never invent a monthly premium.`:
+  `The Highpoint underwriter could not price this screen yet. Missing: ${(brief.missing||[]).join(", ")||"answers"}. Tell the agent what to ask next. Do not invent a premium.`;
   go("assistant"); ask(p)};
 
 /* ---------- scripts ---------- */

@@ -105,9 +105,9 @@ html.hp-pro .rail .nav[aria-current=page] svg{filter:drop-shadow(0 0 6px rgba(25
 html.hp-pro :is(.bigseg,.seg2,.seg){background:linear-gradient(180deg,rgba(0,0,0,.30),rgba(0,0,0,.18))!important;border:1px solid rgba(255,255,255,.12)!important;box-shadow:inset 0 2px 6px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)!important}
 html.hp-pro .toast{background:var(--gl-edge),var(--gl-sheen),linear-gradient(180deg,rgba(40,18,60,.98),rgba(14,8,24,.98))!important;border:1px solid rgba(255,255,255,.16)!important;border-radius:16px!important}
 html.hp-pro :is(input,select,textarea).field,html.hp-pro .field :is(input,select,textarea),html.hp-pro .hpd :is(input,select,textarea):not([type=checkbox]):not([type=range]):not([type=file]){
-  background:linear-gradient(180deg,rgba(0,0,0,.32),rgba(0,0,0,.20))!important;border:1px solid rgba(255,255,255,.13)!important;
-  box-shadow:inset 0 2px 6px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)!important;transition:border-color .18s,box-shadow .18s!important}
-html.hp-pro :is(input,select,textarea).field:focus,html.hp-pro .field :is(input,select,textarea):focus{border-color:rgba(255,79,163,.7)!important;box-shadow:inset 0 2px 6px rgba(0,0,0,.35),0 0 0 3px rgba(255,79,163,.22)!important;outline:none!important}
+  background:linear-gradient(180deg,color-mix(in srgb,#fff 6%,transparent),transparent 50%),var(--theme-menu,var(--theme-sunk))!important;border:1px solid var(--theme-line-strong,rgba(255,255,255,.13))!important;
+  box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 8%,transparent)!important;transition:border-color .18s,box-shadow .18s!important}
+html.hp-pro :is(input,select,textarea).field:focus,html.hp-pro .field :is(input,select,textarea):focus{border-color:var(--theme-accent)!important;box-shadow:0 0 0 3px var(--theme-soft)!important;outline:none!important}
 
 /* big numbers: pink → gold → white, lit from above */
 html.hp-pro :is(.kpis>div .num,.hstats>div b,.hpd-kpis>div b){
@@ -125,9 +125,9 @@ html.hp-pro .topbar .btn:not(.primary):not([data-new]){background:linear-gradien
 html.hp-pro .topbar .btn:not(.primary):not([data-new]):hover{background:linear-gradient(180deg,rgba(255,255,255,.25),rgba(255,255,255,.10))!important;border-color:rgba(255,255,255,.36)!important}
 /* primary buttons: a hot neon ring and under-glow (static, no filter on hover) */
 html.hp-pro .btn.primary,html.hp-pro .topbar [data-new],html.hp-pro .hph-go{
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),inset 0 -1px 0 rgba(0,0,0,.25),0 0 0 1px rgba(255,255,255,.18),0 0 26px -4px rgba(255,61,127,.75),0 16px 34px -14px rgba(255,61,127,.95)!important}
+  box-shadow:var(--btn2-ring),var(--btn2-glow)!important}
 html.hp-pro .btn.primary:hover,html.hp-pro .topbar [data-new]:hover,html.hp-pro .hph-go:hover{filter:none!important;transform:translateY(-1px);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.25),0 0 0 1px rgba(255,255,255,.28),0 0 34px -2px rgba(255,61,127,.9),0 20px 40px -14px rgba(255,61,127,1)!important}
+  box-shadow:var(--btn2-ring),0 16px 34px -14px var(--theme-glow)!important}
 html.hp-pro .topbar{background:linear-gradient(180deg,rgba(44,22,74,.80),rgba(12,7,22,.74))!important;border-bottom:1px solid rgba(255,255,255,.14)!important;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 1px 0 rgba(255,79,163,.18),0 14px 36px -24px rgba(0,0,0,.95)!important}
 

@@ -40,7 +40,7 @@ Delete `.local/highpoint.sqlite` (and its `-wal`/`-shm` companions) to reset loc
 
 ### Appearance
 
-Use **Account → Appearance** to switch instantly between Midnight (default), Modern Light, Miami, Halloween, Brazil, Vegas and America. Executive is the owner look and only appears for admins. The choice is saved in the browser and restored before the desk renders. For previews and screenshot automation, append `?theme=midnight`, `?theme=modern-light`, `?theme=miami`, `?theme=halloween`, `?theme=brazil`, `?theme=vegas`, `?theme=america` or `?theme=executive` to the local URL.
+Use **Account → Appearance** to switch instantly between Midnight (default), Modern Light, Miami and Halloween. Executive is the owner look and only appears for admins. The choice is saved in the browser and restored before the desk renders. For previews and screenshot automation, append `?theme=midnight`, `?theme=modern-light`, `?theme=miami`, `?theme=halloween` or `?theme=executive` to the local URL.
 
 Run `npm run test:themes` to verify every theme at desktop and mobile sizes and write screenshots to `test/artifacts/`.
 

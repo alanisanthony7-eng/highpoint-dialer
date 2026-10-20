@@ -117,12 +117,40 @@
 
   /* ---------- Highpoint Bot ---------- */
   async function sample(turns, opts = {}) {
-    const msgs = (Array.isArray(turns) ? turns : [{ role: "user", content: String(turns) }]).map((t) => ({ role: t.role === "assistant" ? "assistant" : "user", content: typeof t.content === "string" ? t.content : JSON.stringify(t.content) }));
+    const tools = Array.isArray(opts.tools) ? opts.tools : [];
+    const toolHint = tools.length
+      ? `\n\nYou can use tools. To call one, reply with JSON only in this shape: {"tool":"<name>","args":{...}}. Available tools:\n`
+        + tools.map((t) => `- ${t.name}: ${t.description} args=${JSON.stringify(t.inputSchema || {})}`).join("\n")
+        + `\nAfter you have the results you need, answer the agent in plain language. Do not mention the JSON format.`
+      : "";
+    const system = [opts.system, toolHint].filter(Boolean).join("\n");
+    let msgs = (Array.isArray(turns) ? turns : [{ role: "user", content: String(turns) }]).map((t) => ({ role: t.role === "assistant" ? "assistant" : "user", content: typeof t.content === "string" ? t.content : JSON.stringify(t.content) }));
+    const parseTool = (text) => {
+      const raw = String(text || "").trim();
+      const blob = raw.match(/\{[\s\S]*\}/);
+      if (!blob) return null;
+      try {
+        const j = JSON.parse(blob[0]);
+        const name = j.tool || j.name;
+        if (!name || !tools.some((t) => t.name === name)) return null;
+        return { name, args: j.args || j.input || {} };
+      } catch { return null; }
+    };
     try {
-      const r = await fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: msgs, system: opts.system, mode: opts.mode }), signal: opts.signal });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw Object.assign(new Error(j.error || "Assistant unavailable"), { code: j.code || (r.status === 429 ? "rate_limited" : "error") });
-      opts.onText?.({ text: j.text }); return { text: j.text };
+      for (let i = 0; i < 5; i++) {
+        const r = await fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: msgs, system, mode: opts.mode }), signal: opts.signal });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw Object.assign(new Error(j.error || "Assistant unavailable"), { code: j.code || (r.status === 429 ? "rate_limited" : "error") });
+        const call = parseTool(j.text);
+        if (!call) { opts.onText?.({ text: j.text }); return { text: j.text }; }
+        const tool = tools.find((t) => t.name === call.name);
+        opts.onText?.({ text: `Using ${call.name}…` });
+        let result;
+        try { result = await tool.execute(call.args || {}, { signal: opts.signal }); }
+        catch (err) { result = { error: err.message || String(err) }; }
+        msgs = [...msgs, { role: "assistant", content: String(j.text || "") }, { role: "user", content: `Tool ${call.name} result:\n${JSON.stringify(result).slice(0, 12000)}` }];
+      }
+      throw Object.assign(new Error("The assistant used too many tools on that question. Ask again more specifically."), { code: "error" });
     } catch (e) { if (e.name === "AbortError") throw Object.assign(new Error("Stopped"), { code: "cancelled", text: "" }); throw e; }
   }
 

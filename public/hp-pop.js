@@ -316,7 +316,7 @@
   const liveId = () => DL()?.liveLead || null;
   const ctxId = () => liveId() || DL()?.profileId || null;
   const session = (id) => { try { return CO()?.session(id) || null; } catch { return null; } };
-  const heardF = (id) => { if (!id) return {}; const s = session(id); return s && s.leadId === id && s.consent === "agreed" && s.ex ? s.ex.F : {}; };
+  const heardF = (id) => { if (!id) return {}; const from = window.hpCopilot?.fields?.(id); if (from && Object.keys(from).length) return from; const s = session(id); return s && s.leadId === id && s.consent === "agreed" && s.ex ? s.ex.F : {}; };
   const prodOf = (l) => (["FE", "MP", "IUL"].includes(l?.product) ? l.product : "FE");
   const clock = () => { const s = Math.max(0, Math.round((Date.now() - CALL.t0) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
