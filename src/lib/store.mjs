@@ -15,6 +15,10 @@ export function ensureSchema() {
     db().prepare("CREATE TABLE IF NOT EXISTS colver (scope TEXT NOT NULL, col TEXT NOT NULL, v INTEGER NOT NULL, PRIMARY KEY (scope, col))"),
     db().prepare("CREATE TABLE IF NOT EXISTS room (user_id TEXT PRIMARY KEY, name TEXT, presence TEXT, at INTEGER NOT NULL)"),
     db().prepare("CREATE TABLE IF NOT EXISTS roomev (id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT, by TEXT, data TEXT, at INTEGER NOT NULL)"),
+    db().prepare("CREATE TABLE IF NOT EXISTS lounge_roles (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, position INTEGER NOT NULL, perms TEXT NOT NULL, locked INTEGER NOT NULL DEFAULT 0)"),
+    db().prepare("CREATE TABLE IF NOT EXISTS lounge_who (user_id TEXT NOT NULL, role_id TEXT NOT NULL, PRIMARY KEY (user_id, role_id))"),
+    db().prepare("CREATE TABLE IF NOT EXISTS lounge_chat (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, text TEXT NOT NULL, created INTEGER NOT NULL, deleted INTEGER NOT NULL DEFAULT 0)"),
+    db().prepare("CREATE TABLE IF NOT EXISTS lounge_photo (user_id TEXT PRIMARY KEY, mime TEXT NOT NULL, bin BLOB NOT NULL, updated INTEGER NOT NULL)"),
   ]).catch((e) => { ready = null; throw e; });
   return ready;
 }

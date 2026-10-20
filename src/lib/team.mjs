@@ -19,7 +19,7 @@ export const FEATURES = {
   bot: "Highpoint Bot",
   iul: "IUL illustrator",
   dialer: "Highpoint Dialer: power dialing, local numbers, texting, voicemail drop, recordings, live transcripts and Copilot",
-  crew: "Crew lobby and games",
+  crew: "Crew lobby, chat and games",
   music: "Spotify in the desk",
 };
 const ALL = Object.keys(FEATURES);

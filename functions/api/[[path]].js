@@ -17,6 +17,7 @@ import { followupsRoute, poke } from "../../src/lib/followups.mjs";
 import { leadsRoute } from "../../src/lib/leadpost.mjs";
 import { bookingRoute, calRoute } from "../../src/lib/booking.mjs";
 import { quoteRoute } from "../../src/lib/quoteshare.mjs";
+import { loungeRoute } from "../../src/lib/lounge.mjs";
 
 const DIALER = { setup, token, voice, events, power, numbers, vm, calls, sms };
 const json = (b, s) => new Response(JSON.stringify(b), { status: s, headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -66,6 +67,7 @@ export async function onRequest(ctx) {
       case "book": return await bookingRoute(req, parts.slice(1));
       case "quote": return await quoteRoute(req, parts.slice(1));
       case "cal": return await calRoute(req, parts[1]);
+      case "lounge": return await loungeRoute(req, parts.slice(1));
       case "config": return json({ snapClientId: ctx.env.HP_SNAP_CLIENT_ID || "" }, 200);
       case "health": return await health(ctx.env);
     }

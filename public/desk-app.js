@@ -77,7 +77,9 @@ function go(v){ if(!document.getElementById("v-"+v))v="pipeline";
   if(v==="dialer")ensureDialer().catch(e=>toast(e.message));
   if(v==="import")ensureFeature("/hp-leadpost.js").catch(e=>toast(e.message));
   if(v==="calendar")ensureFeature("/hp-booking.js").catch(e=>toast(e.message));
-  if(typeof crewPresence==="function")crewPresence(v); window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
+  if(typeof crewPresence==="function")crewPresence(v);
+  if(typeof loungeWatch==="function")loungeWatch(v==="crew");
+  window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
 $$(".nav").forEach(b=>b.onclick=()=>{if(b.dataset.view)go(b.dataset.view)});
 $("#navMore").onclick=()=>{
   document.querySelector(".hpn-more")?.remove();
@@ -384,7 +386,7 @@ $("#wavvCsv")?.addEventListener("click",()=>{const q=dialQueue();if(!q.length){t
   offerFile(`queue-${$("#dqStage").value}-${new Date().toISOString().slice(0,10)}.csv`,toCSV(["First Name","Last Name","Phone","Email","State","Notes"],q.map(l=>[l.first||"",l.last||"",normPhone(l.phone),l.email||"",l.state||"",[PROD[l.product],l.source].filter(Boolean).join(" · ")])))});
 
 /* ---------- Highpoint Dialer hooks ---------- */
-window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLead,renderDialer,openDrawer,ensureDialer,
+window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLead,renderDialer,openDrawer,ensureDialer,openPhoto,
   currentId:()=>dCurId,setCurrent(id){dCurId=id;if(view==="dialer")renderDialer()},
   get calls(){return calls},get appts(){return appts},putAppt,addNoteObj,stageName,STAGES,PROD,go,
   async dispoDirect(id,kind,o={}){const l=leads.get(id);if(!l)return;const note=o.note||"";
@@ -1713,7 +1715,10 @@ async function initCrew(){
   try{roomApi=await window.claude?.use?.("room")}catch{roomApi=null}
   if(roomApi){roomApi.onPeers(ch=>{crewPeers=ch.peers.filter(p=>p.kind==="viewer");if(view==="crew")renderOnline()},()=>{});
     roomApi.on("props",m=>{if(m.isMe||m.data?.to!==myId)return;const who=m.by?handleOf(m.by):"Someone";toast(`${who} sent you props 🔥`);celebrate()},()=>{});
+    roomApi.on("lounge",()=>{if(view==="crew")loungeLoad(false)},()=>{});
     crewPresence(view)}
+  if(view==="crew")loungeWatch(true);
+  refreshAcctPhoto();
 }
 function crewPresence(v){if(roomApi)roomApi.presence({status:STATUS[v]||"Online",at:Date.now()}).catch(()=>{})}
 function crewSave(){if(!crewCol||!myId)return;clearTimeout(crewTimer);crewTimer=setTimeout(()=>{const body={...myDoc,stats:myStats(),updatedAt:Date.now()};
@@ -1731,9 +1736,180 @@ function crewOnXP(n,why){const h=new Date().getHours();const inc={};
   crewBump(inc)}
 function crewOnGame(why,n){if(why.startsWith("Flight Words"))crewBump(n>5?{words:1,wordWins:1}:{words:1});else if(why.startsWith("hand played"))crewBump(n>=5?{hands:1,bjWins:1}:{hands:1})}
 
+/* ----- lounge: shared chat + Discord-style roles + profile photos ----- */
+const LG={me:null,roles:[],members:[],messages:[],timer:0,after:0,busy:false};
+const LG_COLORS=["#1abc9c","#2ecc71","#3498db","#9b59b6","#e91e63","#f1c40f","#e67e22","#e74c3c","#95a5a6","#607d8b","#11806a","#1f8b4c","#206694","#71368a","#ad1457","#c27c0e","#a84300","#992d22","#5865f2","#57f287"];
+const lgWho=id=>LG.members.find(m=>m.id===id)||{id,name:handleOf(id),color:"#b5bac1",role:"Agent",photo:false,roleIds:["agent"]};
+const lgOnline=id=>crewPeers.some(p=>(p.by||p.id||p.peerId)===id);
+async function lgCall(path,opts={}){
+  const r=await fetch(path,{method:opts.method||"GET",credentials:"same-origin",headers:opts.body!==undefined?{"content-type":"application/json"}:{},body:opts.body===undefined?undefined:JSON.stringify(opts.body)});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw Object.assign(new Error(j.error||"Request failed"),{status:r.status});
+  return j;
+}
+function lgWhen(t){
+  const d=new Date(t),n=new Date(),tm=d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+  if(d.toDateString()===n.toDateString())return`Today at ${tm}`;
+  if(new Date(n-864e5).toDateString()===d.toDateString())return`Yesterday at ${tm}`;
+  return d.toLocaleDateString([], {month:"short",day:"numeric"})+" "+tm;
+}
+function lgFace(m,sz){
+  const d=crew.get(m.id),letter=esc((m.name||handleOf(m.id)||"?")[0]);
+  const img=m.photo?`<img src="/api/lounge/photo?id=${encodeURIComponent(m.id)}" alt="" onerror="this.remove()">`:"";
+  if(!m.photo&&d?.char)return`<span class="lg-av" style="--s:${sz}px">${avatarSVG(d.char,sz)}</span>`;
+  return`<span class="lg-av" style="--s:${sz}px">${img}<i>${letter}</i></span>`;
+}
+function lgText(text){
+  let s=esc(text);
+  s=s.replace(/@everyone/gi,'<b class="lg-at">@everyone</b>');
+  for(const m of LG.members){
+    const n=m.name;if(!n||n.length<2)continue;
+    s=s.replace(new RegExp("@"+n.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"gi"),`<b class="lg-at">@${esc(n)}</b>`);
+  }
+  return s;
+}
+function loungeWatch(on){
+  clearInterval(LG.timer);LG.timer=0;
+  if(!on)return;
+  loungeLoad(true);
+  LG.timer=setInterval(()=>loungeLoad(false),2500);
+}
+async function loungeLoad(full){
+  const host=$("#loungeHost");if(!host)return;
+  if(LG.busy)return;LG.busy=true;
+  try{
+    const first=!LG.me;
+    const j=await lgCall("/api/lounge");
+    if(j.me)LG.me=j.me;if(j.roles)LG.roles=j.roles;if(j.members)LG.members=j.members;
+    LG.messages=j.messages||[];
+    LG.after=LG.messages.reduce((n,m)=>Math.max(n,m.id||0),0);
+    if(!host.querySelector(".lounge"))loungeMount(host);
+    loungePaint();
+    if(first&&view==="crew"&&crewReady)renderCrew();
+  }catch(e){
+    if(full)host.innerHTML=`<div class="panel lounge-empty"><p class="muted">${esc(e.message||"Couldn't open the crew channel.")}</p></div>`;
+  }finally{LG.busy=false}
+}
+function loungeMount(host){
+  host.innerHTML=`<div class="lounge">
+    <div class="panel lg-chat">
+      <div class="lg-head"><div><b># crew</b><span>Everyone on this desk</span></div></div>
+      <div class="lg-msgs" id="lgMsgs" aria-live="polite"></div>
+      <form class="lg-form" id="lgForm"><textarea id="lgIn" rows="1" maxlength="2000" placeholder="Message #crew" aria-label="Message the crew"></textarea><button class="btn primary" type="submit">Send</button></form>
+    </div>
+    <aside class="panel lg-side">
+      <div class="lg-head"><div><b>Members</b><span id="lgCount"></span></div><button type="button" class="btn sm" id="lgRoles" hidden>Roles</button></div>
+      <div id="lgMem"></div>
+    </aside>
+  </div>`;
+  const form=$("#lgForm"),ta=$("#lgIn");
+  form.onsubmit=async e=>{e.preventDefault();const text=ta.value.trim();if(!text)return;ta.value="";ta.style.height="auto";
+    try{await lgCall("/api/lounge/say",{method:"POST",body:{text}});await loungeLoad(false)}catch(err){toast(err.message);ta.value=text}};
+  ta.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});
+  ta.addEventListener("input",()=>{ta.style.height="auto";ta.style.height=Math.min(120,ta.scrollHeight)+"px"});
+  $("#lgRoles").onclick=openRoles;
+}
+function loungePaint(){
+  const box=$("#lgMsgs"),mem=$("#lgMem");if(!box||!mem)return;
+  const perms=LG.me?.perms||{};
+  const stick=box.scrollHeight-box.scrollTop<box.clientHeight+80;
+  box.innerHTML=LG.messages.map(m=>{
+    const who=lgWho(m.userId),mine=m.userId===LG.me?.id,canDel=mine||perms.manage_messages;
+    if(m.deleted)return`<div class="lg-m gone"><span class="muted">Message deleted</span></div>`;
+    return`<div class="lg-m" data-mid="${m.id}">${lgFace(who,40)}<div><div class="lg-meta"><b style="color:${esc(who.color)}">${esc(who.name)}</b><span class="lg-badge" style="color:${esc(who.color)};border-color:${esc(who.color)}">${esc(who.role)}</span><time>${esc(lgWhen(m.created))}</time>${canDel?`<button type="button" class="lg-del" data-del="${m.id}" aria-label="Delete message">Delete</button>`:""}</div><p>${lgText(m.text)}</p></div></div>`;
+  }).join("")||`<div class="lg-empty muted">No messages yet. Say hello to the crew.</div>`;
+  box.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{try{await lgCall("/api/lounge/msg/"+b.dataset.del,{method:"DELETE"});const row=LG.messages.find(x=>x.id===+b.dataset.del);if(row){row.deleted=true;row.text=""}loungePaint()}catch(e){toast(e.message)}});
+  if(stick||!box.dataset.ready){box.scrollTop=box.scrollHeight;box.dataset.ready="1"}
+  const roles=[...LG.roles].sort((a,b)=>b.position-a.position);
+  const used=new Set();
+  const groups=roles.map(r=>{const people=LG.members.filter(m=>!used.has(m.id)&&((m.roleIds||[])[0]===r.id||m.role===r.name));people.forEach(m=>used.add(m.id));return[r,people]}).filter(([,p])=>p.length);
+  const leftover=LG.members.filter(m=>!used.has(m.id));
+  if(leftover.length)groups.push([{id:"_",name:"Online",color:"#b5bac1"},leftover]);
+  mem.innerHTML=groups.map(([r,people])=>`<div class="lg-g"><span class="lg-gt" style="color:${esc(r.color)}">${esc(r.name).toUpperCase()} — ${people.length}</span>${people.map(m=>`<button type="button" class="lg-u" data-prof="${esc(m.id)}">${lgFace(m,32)}<span><b style="color:${esc(m.color)}">${esc(m.name)}${m.id===LG.me?.id?" (you)":""}</b><small>${lgOnline(m.id)?"Online":"Offline"}</small></span><i class="lg-dot ${lgOnline(m.id)?"on":""}"></i></button>`).join("")}</div>`).join("");
+  mem.querySelectorAll("[data-prof]").forEach(b=>b.onclick=()=>openProfile(b.dataset.prof));
+  const c=$("#lgCount");if(c)c.textContent=LG.members.length+" on the desk";
+  const rb=$("#lgRoles");if(rb)rb.hidden=!perms.manage_roles;
+  const ta=$("#lgIn");if(ta){ta.disabled=!perms.send;ta.placeholder=perms.send?"Message #crew":"Your role can't send messages"}
+}
+function openRoles(){
+  const mine=LG.me||{};if(!mine.perms?.manage_roles){toast("Your role can't manage roles");return}
+  const b=openWin("roles",{title:"Roles",sub:"Like Discord: a name, a color, and who sits above whom",w:560,h:720});
+  const draw=()=>{
+    const custom=LG.roles.filter(r=>!r.locked);
+    b.innerHTML=`<p class="muted" style="margin:0 0 10px">Built-in Owner, Admin and Agent stay in place. Custom roles sit under yours. A person's highest role colors their name in chat.</p>
+      <div class="lg-rlist">${LG.roles.map(r=>`<div class="lg-r" style="--c:${esc(r.color)}"><i></i><div><b>${esc(r.name)}</b><small>${r.locked?"Built-in":"Custom"} · ${Object.entries(r.perms||{}).filter(([,v])=>v).map(([k])=>k.replace(/_/g," ")).join(", ")||"no permissions"}</small></div>${r.locked?"":`<button type="button" class="btn sm" data-ed="${esc(r.id)}">Edit</button><button type="button" class="btn sm" data-rm="${esc(r.id)}">Delete</button>`}</div>`).join("")}</div>
+      <h3 style="margin:16px 0 8px">New role</h3>
+      <form id="lgNew" class="stack" style="gap:10px">
+        <label class="field"><span>Name</span><input id="lgRn" maxlength="32" placeholder="Closer"></label>
+        <div class="lg-sw" id="lgSw">${LG_COLORS.map((c,i)=>`<button type="button" class="swatch" data-c="${c}" aria-pressed="${i===18}" style="background:${c}" aria-label="${c}"></button>`).join("")}</div>
+        <label class="lg-ck"><input type="checkbox" id="lgPsend" checked disabled><span>Send messages</span></label>
+        <label class="lg-ck"><input type="checkbox" id="lgPmsg"><span>Manage messages (delete anyone's)</span></label>
+        <label class="lg-ck"><input type="checkbox" id="lgProle"><span>Manage roles below this one</span></label>
+        <label class="lg-ck"><input type="checkbox" id="lgPevery"><span>Mention @everyone</span></label>
+        <button class="btn primary" type="submit">Create role</button>
+      </form>
+      <h3 style="margin:18px 0 8px">Assign</h3>
+      <div id="lgAs">${LG.members.map(m=>`<div class="lg-as"><b style="color:${esc(m.color)}">${esc(m.name)}</b><span>${custom.map(r=>`<label><input type="checkbox" data-as="${esc(m.id)}" data-role="${esc(r.id)}" ${m.roleIds?.includes(r.id)?"checked":""}> ${esc(r.name)}</label>`).join(" ")||'<span class="muted">Create a role first</span>'}</span></div>`).join("")}</div>`;
+    let color="#5865f2";
+    b.querySelectorAll("#lgSw [data-c]").forEach(x=>x.onclick=()=>{color=x.dataset.c;b.querySelectorAll("#lgSw [data-c]").forEach(y=>y.setAttribute("aria-pressed",y===x))});
+    $("#lgNew",b).onsubmit=async e=>{e.preventDefault();
+      try{await lgCall("/api/lounge/role",{method:"POST",body:{name:$("#lgRn",b).value,color,perms:{send:true,manage_messages:$("#lgPmsg",b).checked,manage_roles:$("#lgProle",b).checked,mention_everyone:$("#lgPevery",b).checked}}});toast("Role created");await loungeLoad(true);draw()}catch(err){toast(err.message)}};
+    b.querySelectorAll("[data-rm]").forEach(x=>x.onclick=async()=>{if(!confirm("Delete this role?"))return;try{await lgCall("/api/lounge/role",{method:"DELETE",body:{id:x.dataset.rm}});toast("Role deleted");await loungeLoad(true);draw()}catch(err){toast(err.message)}});
+    b.querySelectorAll("[data-ed]").forEach(x=>x.onclick=()=>editRole(x.dataset.ed,draw));
+    b.querySelectorAll("[data-as]").forEach(x=>x.onchange=async()=>{try{await lgCall("/api/lounge/assign",{method:"POST",body:{userId:x.dataset.as,roleId:x.dataset.role,on:x.checked}});await loungeLoad(true);draw()}catch(err){toast(err.message);x.checked=!x.checked}});
+  };
+  draw();
+}
+function editRole(id,back){
+  const r=LG.roles.find(x=>x.id===id);if(!r)return;
+  const b=openWin("role-ed",{title:"Edit role",sub:r.name,w:420,h:520});
+  b.innerHTML=`<form id="lgEd" class="stack" style="gap:10px">
+    <label class="field"><span>Name</span><input id="lgEn" maxlength="32" value="${esc(r.name)}"></label>
+    <div class="lg-sw" id="lgEw">${LG_COLORS.map(c=>`<button type="button" class="swatch" data-c="${c}" aria-pressed="${c===r.color}" style="background:${c}" aria-label="${c}"></button>`).join("")}</div>
+    <label class="lg-ck"><input type="checkbox" id="lgEmsg" ${r.perms?.manage_messages?"checked":""}><span>Manage messages</span></label>
+    <label class="lg-ck"><input type="checkbox" id="lgErole" ${r.perms?.manage_roles?"checked":""}><span>Manage roles</span></label>
+    <label class="lg-ck"><input type="checkbox" id="lgEevery" ${r.perms?.mention_everyone?"checked":""}><span>Mention @everyone</span></label>
+    <button class="btn primary" type="submit">Save role</button></form>`;
+  let color=r.color;
+  b.querySelectorAll("[data-c]").forEach(x=>x.onclick=()=>{color=x.dataset.c;b.querySelectorAll("[data-c]").forEach(y=>y.setAttribute("aria-pressed",y===x))});
+  $("#lgEd",b).onsubmit=async e=>{e.preventDefault();
+    try{await lgCall("/api/lounge/role",{method:"POST",body:{id,r:0,name:$("#lgEn",b).value,color,perms:{send:true,manage_messages:$("#lgEmsg",b).checked,manage_roles:$("#lgErole",b).checked,mention_everyone:$("#lgEevery",b).checked}}});toast("Role saved");closeWin("role-ed");await loungeLoad(true);back?.()}catch(err){toast(err.message)}};
+}
+function resizePhoto(file){
+  return new Promise((res,rej)=>{
+    const img=new Image(),url=URL.createObjectURL(file);
+    img.onload=()=>{URL.revokeObjectURL(url);const c=document.createElement("canvas"),s=192;c.width=s;c.height=s;
+      const ctx=c.getContext("2d"),side=Math.min(img.width,img.height);
+      ctx.drawImage(img,(img.width-side)/2,(img.height-side)/2,side,side,0,0,s,s);
+      res(c.toDataURL("image/jpeg",.82))};
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error("Couldn't read that picture"))};
+    img.src=url;
+  });
+}
+function refreshAcctPhoto(){
+  const i=document.querySelector(".hp-acct-b i");if(!i||!myId)return;
+  let img=i.querySelector("img");if(!img){img=document.createElement("img");img.alt="";i.prepend(img)}
+  img.src="/api/lounge/photo?id="+encodeURIComponent(myId)+"&t="+Date.now();
+  img.onerror=()=>img.remove();
+}
+function openPhoto(){
+  const b=openWin("photo",{title:"Profile picture",sub:"Shows on your account and in the crew channel",w:400,h:420});
+  const mine=LG.members.find(m=>m.id===myId)||{photo:false,id:myId,name:handleOf(myId)||"You"};
+  const draw=()=>{
+    b.innerHTML=`<div class="lg-phprev">${lgFace({...mine,photo:mine.photo,id:myId,name:mine.name},120)}</div>
+      <p class="muted">A square photo works best. We'll crop it to a circle for chat and the account menu.</p>
+      <div class="row"><label class="btn primary" style="cursor:pointer">Choose photo<input id="lgFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label>${mine.photo?`<button type="button" class="btn" id="lgPhDel">Remove</button>`:""}</div>`;
+    $("#lgFile",b).onchange=async e=>{const f=e.target.files?.[0];if(!f)return;
+      try{const data=await resizePhoto(f);await lgCall("/api/lounge/photo",{method:"PUT",body:{data}});toast("Profile picture saved");if(LG.members.length){const m=LG.members.find(x=>x.id===myId);if(m)m.photo=true}refreshAcctPhoto();mine.photo=true;draw();if(view==="crew")loungePaint();if(view==="crew")renderCrew()}catch(err){toast(err.message)}};
+    $("#lgPhDel",b)?.addEventListener("click",async()=>{try{await lgCall("/api/lounge/photo",{method:"DELETE"});toast("Picture removed");if(LG.members.length){const m=LG.members.find(x=>x.id===myId);if(m)m.photo=false}refreshAcctPhoto();mine.photo=false;draw();if(view==="crew"){loungePaint();renderCrew()}}catch(err){toast(err.message)}});
+  };
+  draw();
+}
+
 /* ----- lobby render ----- */
-const online=id=>crewPeers.some(p=>p.by===id);
-const peerOf=id=>crewPeers.find(p=>p.by===id);
+const peerId=p=>p.by||p.id||p.peerId;
+const online=id=>crewPeers.some(p=>peerId(p)===id);
+const peerOf=id=>crewPeers.find(p=>peerId(p)===id);
 function statBox(v,l){return`<div><b class="num">${(v||0).toLocaleString()}</b><span>${l}</span></div>`}
 function achRow(d,max=8){const a=d.ach||{};const got=CREW_ACH.filter(x=>a[x[0]]);return got.slice(0,max).map(x=>`<span class="ach" title="${esc(x[1])}: ${esc(x[2])}">${x[3]}</span>`).join("")+(got.length>max?`<span class="ach more">+${got.length-max}</span>`:"")}
 function rankName(xp){return RANKS[rankOf(xp||0)][1]}
@@ -1751,14 +1927,14 @@ function renderCrew(){const root=$("#crewBody");if(!root)return;
    <div class="panel" id="crewOnline"></div>
    <div class="crewtop">
      <div class="panel mecard">
-       <div class="meav">${me.char?avatarSVG(me.char,190):`<div class="noavbig">?</div>`}</div>
+       <div class="meav">${lgWho(myId).photo?`<img class="lg-phbig" src="/api/lounge/photo?id=${encodeURIComponent(myId)}" alt="">`:me.char?avatarSVG(me.char,190):`<div class="noavbig">?</div>`}</div>
        <div class="meinfo">
          <span class="label">${me.char?"Your character":"Welcome aboard"}</span>
-         <h2>${esc(me.handle||nameCache[myId]||"New recruit")}</h2>
+         <h2 style="color:${esc(lgWho(myId).color)}">${esc(me.handle||nameCache[myId]||"New recruit")} <span class="lg-badge" style="color:${esc(lgWho(myId).color)};border-color:${esc(lgWho(myId).color)}">${esc(lgWho(myId).role)}</span></h2>
          <div class="rankline">${WINGS}<b>${rankName(XP.xp)}</b><span class="muted num">${XP.xp.toLocaleString()} XP</span></div>
          ${me.motto?`<p class="motto">“${esc(me.motto)}”</p>`:""}
          <div class="sgrid">${statBox(s.dials,"Calls")}${statBox(s.appts,"Appointments")}${statBox(s.sales,"Sales")}${statBox(s.quotes,"Quotes")}${statBox(s.kept,"Appts kept")}${statBox(Object.keys(me.ach||{}).length,"Achievements")}</div>
-         <div class="row"><button class="btn primary" id="crewEdit">${me.char?"Customize character":"Create your character"}</button><button class="btn" id="crewMine">View all achievements</button></div>
+         <div class="row"><button class="btn primary" id="crewEdit">${me.char?"Customize character":"Create your character"}</button><button class="btn" id="crewPhoto">Profile picture</button><button class="btn" id="crewMine">View all achievements</button></div>
        </div>
      </div>
      <div class="panel lbpanel">
@@ -1769,12 +1945,12 @@ function renderCrew(){const root=$("#crewBody");if(!root)return;
    </div>
    <div class="row" style="justify-content:space-between;margin:18px 0 10px"><h2>The crew</h2><span class="muted">${crew.size} member${crew.size===1?"":"s"}</span></div>
    <div class="crewgrid" id="crewGrid">${[...crew.entries()].sort((a,b)=>(b[1].stats?.xp||0)-(a[1].stats?.xp||0)).map(([id,d])=>{const st=Object.assign(emptyStats(),d.stats||{});return`
-     <button class="ccard ${id===myId?"me":""}" data-prof="${esc(id)}"><i class="dot ${online(id)?"on":""}" data-online="${esc(id)}"></i>${d.char?avatarSVG(d.char,120):`<span class="noavbig sm">?</span>`}
-      <b>${esc(handleOf(id))}${id===myId?" (you)":""}</b><small class="muted">${esc(nameCache[id]&&d.handle?nameCache[id]:"")||"&nbsp;"}</small>
+     <button class="ccard ${id===myId?"me":""}" data-prof="${esc(id)}"><i class="dot ${online(id)?"on":""}" data-online="${esc(id)}"></i>${lgWho(id).photo?`<img class="lg-phbig sm" src="/api/lounge/photo?id=${encodeURIComponent(id)}" alt="">`:d.char?avatarSVG(d.char,120):`<span class="noavbig sm">?</span>`}
+      <b style="color:${esc(lgWho(id).color)}">${esc(handleOf(id))}${id===myId?" (you)":""}</b><small class="muted">${esc(nameCache[id]&&d.handle?nameCache[id]:"")||"&nbsp;"}</small>
       <span class="rk">${rankName(st.xp)} · ${st.xp.toLocaleString()} XP</span>
       <span class="mini3"><span><b class="num">${st.dials}</b>calls</span><span><b class="num">${st.appts}</b>appts</span><span><b class="num">${st.sales}</b>sales</span></span>
       <span class="achs">${achRow(d,6)||'<span class="muted" style="font-size:11.5px">No badges yet</span>'}</span></button>`}).join("")||`<p class="muted">No one has joined yet. Create your character to be first on the board.</p>`}</div>`;
-  $("#crewEdit").onclick=openCreator;$("#crewMine").onclick=()=>openProfile(myId);
+  $("#crewEdit").onclick=openCreator;$("#crewPhoto").onclick=openPhoto;$("#crewMine").onclick=()=>openProfile(myId);
   $$("#crewSort button").forEach(b=>b.onclick=()=>{crewSort=b.dataset.s;renderCrew()});
   root.querySelectorAll("[data-prof]").forEach(b=>b.onclick=()=>openProfile(b.dataset.prof));
   renderOnline();
@@ -1783,7 +1959,7 @@ const propsAt={};
 function openProfile(id){const d=crew.get(id)||(id===myId?myDoc:null);if(!d&&id!==myId){toast("This crew member hasn't set up a profile yet");return}
   const dd=d||{};const st=Object.assign(emptyStats(),dd.stats||{});const p=peerOf(id);
   const b=openWin("prof",{title:"Crew profile",sub:handleOf(id),w:560,h:720});
-  b.innerHTML=`<div class="profhead">${dd.char?avatarSVG(dd.char,150):`<span class="noavbig">?</span>`}<div><h2 style="margin:0">${esc(handleOf(id))}</h2>${nameCache[id]&&dd.handle?`<div class="muted">${esc(nameCache[id])}</div>`:""}<div class="rankline">${WINGS}<b>${rankName(st.xp)}</b><span class="muted num">${st.xp.toLocaleString()} XP</span></div>${dd.motto?`<p class="motto">“${esc(dd.motto)}”</p>`:""}<div class="muted" style="font-size:12.5px">${p?`<i class="live"></i> ${esc(String(p.presence?.status||"Online"))}`:"Offline"}</div></div></div>
+  b.innerHTML=`<div class="profhead">${lgWho(id).photo?`<img class="lg-phbig" src="/api/lounge/photo?id=${encodeURIComponent(id)}" alt="">`:dd.char?avatarSVG(dd.char,150):`<span class="noavbig">?</span>`}<div><h2 style="margin:0;color:${esc(lgWho(id).color)}">${esc(handleOf(id))} <span class="lg-badge" style="color:${esc(lgWho(id).color)};border-color:${esc(lgWho(id).color)}">${esc(lgWho(id).role)}</span></h2>${nameCache[id]&&dd.handle?`<div class="muted">${esc(nameCache[id])}</div>`:""}<div class="rankline">${WINGS}<b>${rankName(st.xp)}</b><span class="muted num">${st.xp.toLocaleString()} XP</span></div>${dd.motto?`<p class="motto">“${esc(dd.motto)}”</p>`:""}<div class="muted" style="font-size:12.5px">${p?`<i class="live"></i> ${esc(String(p.presence?.status||"Online"))}`:"Offline"}</div></div></div>
    <div class="sgrid">${statBox(st.dials,"Calls")}${statBox(st.appts,"Appointments")}${statBox(st.sales,"Sales")}${statBox(st.quotes,"Quotes saved")}${statBox(st.kept,"Appts kept")}${statBox(st.reviews,"Calls reviewed")}${statBox(st.wordWins,"Word wins")}${statBox(st.bjWins,"Blackjack wins")}${statBox(st.imports,"Lead imports")}</div>
    <span class="label">Achievements · ${Object.keys(dd.ach||{}).length} of ${CREW_ACH.length}</span>
    <div class="achgrid">${CREW_ACH.map(([k,n,desc,ic])=>{const t=(dd.ach||{})[k];return`<div class="achcard ${t?"got":""}"><span class="ach">${ic}</span><div><b>${esc(n)}</b><small>${esc(desc)}${t?` · ${new Date(t).toLocaleDateString()}`:""}</small></div></div>`}).join("")}</div>

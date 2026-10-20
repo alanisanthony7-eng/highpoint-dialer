@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node test/cf-sim.mjs && node test/billing.mjs && node test/auth.mjs && node test/knowledge.mjs && node test/ai-bot.mjs && node test/scrub.mjs && node test/followups.mjs && node test/leadpost.mjs && node test/booking.mjs && node test/quoteshare.mjs",
+    "test": "node test/cf-sim.mjs && node test/billing.mjs && node test/auth.mjs && node test/knowledge.mjs && node test/ai-bot.mjs && node test/lounge.mjs && node test/scrub.mjs && node test/followups.mjs && node test/leadpost.mjs && node test/booking.mjs && node test/quoteshare.mjs",
     "test:smoke": "node test/smoke-browser.mjs",
     "test:themes": "node test/smoke-browser.mjs --shots",
     "test:all": "npm test && npm run test:smoke",
