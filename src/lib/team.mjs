@@ -373,6 +373,7 @@ export async function teamRoute(req, action, user) {
     if (b.comp !== undefined) { sets.push(`comp=?${vals.push(b.comp ? 1 : 0)}`); }
     if (b.disabled !== undefined) { sets.push(`disabled=?${vals.push(b.disabled ? 1 : 0)}`); }
     if (sets.length) await D1().prepare(`UPDATE members SET ${sets.join(", ")} WHERE user_id=?1`).bind(...vals).run();
+    if (b.role) { try { await (await import("./lounge.mjs")).syncLoungeRoles(); } catch {} }
     if (b.disabled) await D1().prepare("DELETE FROM sessions WHERE user_id=?1").bind(id).run();
     if (b.reset2fa) await getStore("hpd-auth").delete("2fa:" + id);
     return json({ ok: true });

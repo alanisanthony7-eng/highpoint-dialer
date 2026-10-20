@@ -78,3 +78,12 @@ ok((await call("boss", "/api/lounge/photo?id=" + encodeURIComponent(rita.id))).s
 ok((await call("boss", "/api/lounge/role", { method: "DELETE", body: { id: "owner" } })).s === 403, "built-in roles can't be deleted");
 ok((await call("boss", "/api/lounge/role", { method: "DELETE", body: { id: closer } })).s === 200, "a custom role can be deleted");
 ok(!(await call("rep", "/api/lounge")).j.roles.some((x) => x.id === closer), "deleted roles leave the list");
+
+ok((await call("boss", "/api/team/member", { body: { id: rita.id, role: "admin" } })).s === 200, "the owner can promote an agent in Team");
+const ritaAdmin = (await call("boss", "/api/lounge")).j.members.find((m) => m.name === "Rita");
+ok(ritaAdmin.roleIds.includes("admin") && ritaAdmin.role === "Admin", "a Team admin shows as Admin in the crew lobby without that person visiting");
+const ritaMe = (await call("rep", "/api/lounge")).j.me;
+ok(ritaMe.roleIds.includes("admin") && ritaMe.perms.manage_roles, "the promoted person gets Admin perms in the lounge");
+ok((await call("boss", "/api/team/member", { body: { id: rita.id, role: "agent" } })).s === 200, "the owner can demote them in Team");
+const ritaAgent = (await call("boss", "/api/lounge")).j.members.find((m) => m.name === "Rita");
+ok(!ritaAgent.roleIds.includes("admin") && ritaAgent.role === "Agent", "demoting in Team drops the lounge Admin badge");

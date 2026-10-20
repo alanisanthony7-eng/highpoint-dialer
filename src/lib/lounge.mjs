@@ -33,15 +33,40 @@ const parsePerms = (s) => Object.fromEntries(PERMS.map((k) => [k, String(s || ""
 const packPerms = (o) => PERMS.filter((k) => o?.[k]).join(",") || "send";
 const uid = () => "r_" + crypto.randomUUID().replace(/-/g, "").slice(0, 12);
 
+function systemWrites(userId, { owner, admin }) {
+  const q = [];
+  q.push(D1().prepare("INSERT OR IGNORE INTO lounge_who (user_id, role_id) VALUES (?1, 'agent')").bind(userId));
+  q.push(admin
+    ? D1().prepare("INSERT OR IGNORE INTO lounge_who (user_id, role_id) VALUES (?1, 'admin')").bind(userId)
+    : D1().prepare("DELETE FROM lounge_who WHERE user_id=?1 AND role_id='admin'").bind(userId));
+  q.push(owner
+    ? D1().prepare("INSERT OR IGNORE INTO lounge_who (user_id, role_id) VALUES (?1, 'owner')").bind(userId)
+    : D1().prepare("DELETE FROM lounge_who WHERE user_id=?1 AND role_id='owner'").bind(userId));
+  return q;
+}
+
 async function syncSystem(user) {
   const owner = !!user.owner || admins().includes(String(user.email || "").toLowerCase());
   const m = await member(user.id);
-  const admin = owner || m?.role === "admin" || user.admin;
-  await D1().prepare("INSERT OR IGNORE INTO lounge_who (user_id, role_id) VALUES (?1, 'agent')").bind(user.id).run();
-  if (admin) await D1().prepare("INSERT OR IGNORE INTO lounge_who (user_id, role_id) VALUES (?1, 'admin')").bind(user.id).run();
-  else await D1().prepare("DELETE FROM lounge_who WHERE user_id=?1 AND role_id='admin'").bind(user.id).run();
-  if (owner) await D1().prepare("INSERT OR IGNORE INTO lounge_who (user_id, role_id) VALUES (?1, 'owner')").bind(user.id).run();
-  else await D1().prepare("DELETE FROM lounge_who WHERE user_id=?1 AND role_id='owner'").bind(user.id).run();
+  const admin = owner || m?.role === "admin" || !!user.admin;
+  await D1().batch(systemWrites(user.id, { owner, admin }));
+}
+
+async function syncEveryone() {
+  const owners = new Set(admins());
+  const people = (await D1().prepare("SELECT id, email FROM users").all()).results || [];
+  const mems = Object.fromEntries(((await D1().prepare("SELECT user_id, role FROM members").all()).results || []).map((m) => [m.user_id, m.role]));
+  const q = [];
+  for (const u of people) {
+    const owner = owners.has(String(u.email || "").toLowerCase());
+    q.push(...systemWrites(u.id, { owner, admin: owner || mems[u.id] === "admin" }));
+  }
+  if (q.length) await D1().batch(q);
+}
+
+export async function syncLoungeRoles() {
+  await ensureLounge();
+  await syncEveryone();
 }
 
 async function rolesOf(userId) {
@@ -85,7 +110,7 @@ async function messages(after = 0) {
 }
 
 async function state(user, after) {
-  await syncSystem(user);
+  await syncEveryone();
   const mine = await rolesOf(user.id);
   return {
     me: { id: user.id, perms: permsFrom(mine), roleIds: mine.map((r) => r.id), color: display(mine).color, position: topPos(mine) },
