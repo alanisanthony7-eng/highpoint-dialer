@@ -88,11 +88,11 @@
   /* ---- plan screen: clean, quiet, follows the chosen theme ---- */
   .hpt-ov.pw{background:var(--theme-bg,#080b12);backdrop-filter:none;align-items:start}
   .pw .hpt-card{width:min(1040px,100%);background:transparent;border:0;box-shadow:none;padding:40px 8px 28px;margin:0 auto;overflow:visible;max-height:none}
-  .pw-head{display:flex;align-items:center;gap:12px;margin-bottom:26px}
-  .pw-mark{color:var(--ink,#fff);flex:none}
+  .pw-head{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;margin-bottom:14px}
+  .pw-mark{color:var(--ink,#fff);flex:none;width:96px;height:70px}
   .pw-eyebrow{display:block;font:700 11.5px var(--f-ui,system-ui);letter-spacing:.2em;color:var(--muted,#8c97ab);margin-bottom:2px}
-  .pw .hpt-card h2{font:700 34px/1.15 var(--f-ui,system-ui);letter-spacing:-.02em;margin:0}
-  .pw .pw-sub{font-size:16px;margin:0 0 26px;color:var(--muted,#8c97ab);max-width:56ch}
+  .pw .hpt-card h2{text-align:center;font:700 34px/1.15 var(--f-ui,system-ui);letter-spacing:-.02em;margin:0}
+  .pw .pw-sub{font-size:16px;margin:0 auto 28px;color:var(--muted,#8c97ab);max-width:56ch;text-align:center}
   .pw .hpt-card h3{margin:30px 0 12px;font-size:12px;letter-spacing:.08em;color:var(--muted,#8c97ab)}
   .pw .hpt-early{border:1px solid var(--line-2,#28354c);border-radius:14px;background:var(--surface,#0c121e);padding:18px 20px;margin:0;grid-template-columns:1fr auto;gap:4px 20px}
   .pw .hpt-early .tag{color:var(--accent,#7aa7ff)}
