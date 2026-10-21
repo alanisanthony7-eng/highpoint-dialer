@@ -116,6 +116,7 @@ export default wrap(async (req) => {
     if (rec?.to) await updateJ("txlive", rec.to, (r) => { Object.assign(r, { declined: true, lines: [], partial: {} }); return r; }, {});
     const live = rec?.to ? await getJ("txlive", rec.to) : null;
     if (live?.ccid) await tx(`/v2/calls/${live.ccid}/actions/transcription_stop`, { method: "POST", body: {} }).catch(() => null);
+    if (live?.agentCcid) await tx(`/v2/calls/${live.agentCcid}/actions/transcription_stop`, { method: "POST", body: {} }).catch(() => null);
     if (SID() && TOKEN() && /^CA/.test(sid)) { // Twilio calls
       await tw(`/Accounts/{SID}/Calls/${sid}/Recordings/Twilio.CURRENT.json`, { method: "POST", form: { Status: "stopped" } }).catch(() => null);
       await tw(`/Accounts/{SID}/Calls/${sid}/Transcriptions/hp-${sid}.json`, { method: "POST", form: { Status: "stopped" } }).catch(() => null);

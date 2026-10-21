@@ -110,6 +110,14 @@ ok(!did(A.leg, "record_start").length, "nothing is recorded before detection dec
 await sendEvent("call.machine.premium.detection.ended", { ...A.lp, result: "human_residence" });
 ok(did(A.web, "answer").length === 1 && did(A.web, "bridge").at(-1)?.body?.call_control_id === A.leg, "a person: the agent's leg is answered and bridged to the lead");
 ok(did(A.leg, "record_start").length === 1, "recording starts on the lead's leg once a person is detected");
+const trStarts = [...did(A.leg, "transcription_start"), ...did(A.web, "transcription_start")];
+ok(did(A.leg, "transcription_start").length === 1 && did(A.web, "transcription_start").length === 1, "each leg is transcribed on its own: the lead's phone and the agent's browser");
+ok(trStarts.every((x) => x.body.transcription_tracks === "inbound"), "each leg transcribes only its own incoming audio");
+const trLine = (leg, text) => sendEvent("call.transcription", { ...A.lp, call_control_id: leg, transcription_data: { transcript: text, is_final: true, confidence: 0.9 } });
+await trLine(A.leg, "Hello who is this"); await trLine(A.web, "Hi this is Alex with Highpoint");
+const tl = (await getJ("txlive", "2125550001"))?.lines || [];
+ok(tl.find((l) => l.text === "Hello who is this")?.speaker === "Lead", "words from the lead's leg are the Lead");
+ok(tl.find((l) => l.text === "Hi this is Alex with Highpoint")?.speaker === "Agent", "words from the agent's browser leg are the Agent (you)");
 ok(!telnyx.some((x) => /\/actions\/speak$/.test(x.path) && [A.web, A.leg].some((l) => x.path.includes(l))), "no recording announcement is played");
 let row = await A.row();
 ok(row.amd === "human_residence" && row.answered && row.status === "in-progress" && typeof row.amdMs === "number", "the call row shows a person answered and how long detection took");

@@ -222,13 +222,12 @@ const act = (ccid, action, body = {}) => tx(`/v2/calls/${ccid}/actions/${action}
 export const TX_TERMS = ["Highpoint Financial", "final expense", "burial insurance", "mortgage protection", "IUL", "indexed universal life", "whole life", "term life", "beneficiary", "premium", "underwriting", "graded benefit", "guaranteed issue", "simplified issue", "Medicare", "Mutual of Omaha", "Transamerica", "Aetna", "Americo", "Foresters", "Royal Neighbors", "Corebridge", "AIG", "Ethos", "F&G", "Columbian", "SBLI", "bank draft", "routing number", "face amount"];
 const gBody = (model) => ({ transcription_engine: "Google", transcription_tracks: "both", transcription_engine_config: { transcription_engine: "Google", language: "en", ...(model ? { model, use_enhanced: true } : {}), ...(model ? { hints: TX_TERMS } : {}), interim_results: true } });
 // Which engines to try, in order. "auto" = Deepgram Nova-3 (phone-call accuracy plus our word list), then Google's phone model, then plain Google.
-export function engineOrder(pref) {
+export function engineOrder(pref, tracks = "both") {
   const dg = { name: "Deepgram Nova-3", body: { transcription_engine: "Deepgram", transcription_tracks: "both", transcription_engine_config: { transcription_engine: "Deepgram", transcription_model: "deepgram/nova-3", language: "en", interim_results: true, smart_format: true, keyterms: TX_TERMS } } };
   const gp = { name: "Google phone model", body: gBody("phone_call") };
   const g0 = { name: "Google", body: { transcription_engine: "Google", transcription_tracks: "both", language: "en-US", interim_results: true } };
-  if (pref === "google") return [gp, g0];
-  if (pref === "basic") return [g0];
-  return [dg, gp, g0];
+  const list = pref === "google" ? [gp, g0] : pref === "basic" ? [g0] : [dg, gp, g0];
+  return tracks === "both" ? list : list.map((o) => ({ ...o, body: { ...o.body, transcription_tracks: tracks } }));
 }
 // Start live transcription once per call. `target` is the leg whose "inbound" track is the lead's voice.
 async function startTx(lead, sess, target) {
@@ -238,12 +237,26 @@ async function startTx(lead, sess, target) {
   if (rec.started) return "transcription already running";
   if ((await loadConfig()).settings?.transcribe === false) return "not transcribing: turned off in settings";
   let err = null, used = "";
+  const pref = (await loadConfig()).settings?.transcribeEngine;
+  // A browser call with voicemail detection is two legs: the lead's phone and the agent's browser. Each leg is transcribed on its own
+  // (its incoming audio only), so who spoke comes from which leg the words arrived on, not from a track name.
+  const web = (await getJ("txcc", target))?.amd || "";
+  const tracks = web ? "inbound" : "both";
+  const roleOf = async (id, role) => { const cur = (await getJ("txcc", id)) || {}; await setJ("txcc", id, { ...cur, lead, sess, role }); };
+  if (web) { await roleOf(target, "Lead"); await roleOf(web, "Agent"); }
   // best engine first; if Telnyx refuses it (not on this account, bad setting) the next one starts instead, so a call is never left with no transcript
-  for (const o of engineOrder((await loadConfig()).settings?.transcribeEngine)) {
+  for (const o of engineOrder(pref, tracks)) {
     try { await act(target, "transcription_start", o.body); err = null; used = o.name; break; }
     catch (e) { err = `${o.name}: ${e.message}`; await logEvent({ type: "transcription_start", note: "failed: " + err }).catch(() => {}); }
   }
-  await updateJ("txlive", lead, (r) => { if (r.sess === sess) Object.assign(r, { started: !err, startErr: err, ccid: target, engine: used || r.engine }); return r; }, {});
+  let agentLeg = "";
+  if (web && !err) {
+    for (const o of engineOrder(pref, "inbound")) {
+      try { await act(web, "transcription_start", o.body); agentLeg = web; break; }
+      catch (e) { await logEvent({ type: "transcription_start", note: "agent's side failed: " + o.name + ": " + e.message }).catch(() => {}); }
+    }
+  }
+  await updateJ("txlive", lead, (r) => { if (r.sess === sess) Object.assign(r, { started: !err, startErr: err, ccid: target, engine: used || r.engine, ...(agentLeg ? { agentCcid: agentLeg } : {}) }); return r; }, {});
   await logEvent({ type: "transcription_start", note: err ? "failed: " + err : "started with " + used });
   return err ? "transcription failed to start" : "transcription started";
 }
@@ -256,7 +269,7 @@ async function bindLeg(p) {
   const lead = leadOf(p) || (await getJ("txsess", sess))?.lead || "";
   if (!lead || !ccid) return null;
   const out = /out/i.test(p.direction || "");
-  await setJ("txcc", ccid, { lead, sess });
+  await setJ("txcc", ccid, { ...((await getJ("txcc", ccid)) || {}), lead, sess }); // keeps the leg's role and link
   await setJ("txsess", sess, { lead });
   await updateJ("txlive", lead, (r) => {
     if (r.sess !== sess) Object.assign(r, { sess, ccid, out, lines: [], partial: {}, started: false, startErr: null, declined: false, endedAt: null, at: Date.now(), tlog: 0 });
@@ -481,9 +494,10 @@ async function handleTelnyx(type, p) {
     const td = p.transcription_data || p.transcription || p;
     const text = String(td.transcript ?? p.transcript ?? "").trim();
     const final = [td.is_final, p.is_final].some((v) => v === true || v === "true");
-    const trk = String(td.track || p.track || "").toLowerCase();
-    const track = trk.includes("out") ? "outbound_track" : trk.includes("in") ? "inbound_track" : "";
-    const speaker = track === "inbound_track" ? "Lead" : track === "outbound_track" ? "Agent" : "";
+    // a leg we transcribe on its own says who spoke; otherwise the track name does
+    const trk = String(td.transcription_track || td.track || p.transcription_track || p.track || "").toLowerCase();
+    const track = m.role ? (m.role === "Lead" ? "inbound_track" : "outbound_track") : trk.includes("out") ? "outbound_track" : trk.includes("in") ? "inbound_track" : "";
+    const speaker = m.role || (track === "inbound_track" ? "Lead" : track === "outbound_track" ? "Agent" : "");
     const line = { t: Date.now(), track, speaker, text, conf: td.confidence ?? null };
     let kept = false, logIt = false;
     await updateJ("txlive", m.lead, (r) => {
@@ -572,6 +586,7 @@ export const telnyxRoute = wrap(async (req, action) => {
     await updateJ("txlive", n, (r) => { if (declined) Object.assign(r, { declined: true, lines: [], partial: {} }); else r.consent = { at: Date.now(), by: user.identity }; return r; }, {});
     if (declined && rec.ccid) await tx(`/v2/calls/${rec.ccid}/actions/record_stop`, { method: "POST", body: {} }).catch(() => {});
     if (declined && rec.started && rec.ccid) {
+      if (rec.agentCcid) await tx(`/v2/calls/${rec.agentCcid}/actions/transcription_stop`, { method: "POST", body: {} }).catch(() => {});
       try { await tx(`/v2/calls/${rec.ccid}/actions/transcription_stop`, { method: "POST", body: {} }); await logEvent({ type: "transcription_stop", note: "stopped at the client's request" }); }
       catch (e) { await logEvent({ type: "transcription_stop", note: "failed: " + e.message }); }
     }

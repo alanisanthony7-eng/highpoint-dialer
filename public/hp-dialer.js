@@ -401,9 +401,20 @@
     setTimeout(() => { if (S.ps === P && !P.paused) phoneNext(); }, 300);
   }
   const nextRowHTML = (P) => `<div class="hpd-next"><p class="hpd-sm" role="status"><b>${P.holdMsg ? esc(P.holdMsg) : P.holdLabel ? "Logged: " + esc(P.holdLabel) : "Call ended"}</b>${P.holdMsg ? "" : ` · ${P.paused ? "Dialing is paused." : "The next lead won't dial until you choose."}`}</p><div class="hpd-next-row" role="group" aria-label="What next"><button type="button" class="btn primary" data-next="go">Resume dialing</button><button type="button" class="btn" data-next="pause" ${P.paused ? "disabled" : ""}>${P.paused ? "Paused" : "Pause dialing"}</button><button type="button" class="btn hpd-hang" data-next="stop">Stop dialing</button></div></div>`;
+  // Resume pressed after logging a call: the browser leg can still be winding down (the hang-up from logging hasn't come back yet, or never does).
+  // Wait a moment, then let go of it, so Resume always dials.
+  async function releaseCall(P) {
+    if (!S.call) return true;
+    try { S.call.disconnect(); } catch {}
+    for (let i = 0; i < 25 && S.call && S.ps === P; i++) await new Promise((r) => setTimeout(r, 120));
+    if (S.ps !== P) return false;
+    if (S.call) { S.call = null; S.callTalked = false; S.muted = false; S.callPhase = null; clearTimeout(S.watchTimer); clearTimeout(S.liveTimer); window.hpDesk.callStop(); renderPhone(); }
+    return true;
+  }
   function phoneNext() {
     const P = S.ps; if (!P) return;
     if (P.paused && !P.hold && !S.call) { dock(); return; }
+    if (P.hold && S.call) { P.hold = null; releaseCall(P).then((ok) => { if (ok && S.ps === P) phoneNext(); }); return; } // logged, then Resume: finish ending the old call, then dial
     P.hold = null;
     if (multiOn()) { if (S.call) { try { S.call.disconnect(); } catch {} return; } multiCancel(false); multiBatch(); return; } // on a call: hang up, the wrap-up moves on
     window.hpDesk.callStop();
@@ -516,7 +527,7 @@
   }
   function multiGone(P, B, leg) {
     if (leg.done) return; leg.done = true; clearTimeout(leg.wt);
-    if (B.winner === leg) { endCall(); return; }
+    if (B.winner === leg) { if (S.call === leg.call || !S.call) endCall(); return; } // a late hang-up from a leg we already let go of must not end the next call
     if (leg.released || S.ps !== P || P.batch !== B) return;
     multiDraw(B);
     if (!B.winner && B.legs.every((l) => l.done)) {

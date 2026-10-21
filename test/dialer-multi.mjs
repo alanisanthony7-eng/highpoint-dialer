@@ -160,7 +160,7 @@ ORIGIN = `http://127.0.0.1:${server.address().port}`; env.HP_PUBLIC_URL = ORIGIN
 await api("/api/auth/signup", "POST", { name: "Anthony Sim", email: "boss@hp.com", password: "password2", agree: true });
 const me = (await api("/api/auth/me")).user;
 await setJ("numbers", "all", { "+12125550100": { e164: "+12125550100", provider: "telnyx", sid: "pn1", owner: me.identity, areaCode: "212", state: "NY", days: {}, boughtAt: Date.now() - 60 * 864e5 } }); // past the new-number ramp (15 dials on day one)
-await api("/api/dialer/setup", "PUT", { settings: { quietHours: { start: 0, end: 24 }, stateRules: { NY: { start: 0, end: 24 } } } });
+await api("/api/dialer/setup", "PUT", { settings: { quietHours: { start: 0, end: 24 }, maxAttempts24h: 50, stateRules: { NY: { start: 0, end: 24, max24h: 50 } } } });
 await api("/api/telnyx/setup", "POST");
 
 if (SERVE) {
@@ -270,6 +270,23 @@ if (SERVE) {
     const h1 = await logged(ids[8], "hang-up-while-ringing to log itself");
     check(h1.outcome === "No answer" && h1.note === "Agent hung up while ringing", "hang up while ringing: No answer · Agent hung up while ringing");
 
+    // logging a call while it is still up, then pressing Resume right away, must dial the next leads (the old leg can still be winding down)
+    await realFetch(ORIGIN + "/__sim/plan-clear", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    await plan(["human", "noanswer", "noanswer", "noanswer", "noanswer", "noanswer", "noanswer", "noanswer"]);
+    await page.locator("#hphPsGo").click();
+    await page.locator("#hpdAskYes").waitFor();
+    await page.locator("#hpdAskYes").click();
+    await until(talking, "a person to answer for the Resume check");
+    const live2 = await page.evaluate(() => window.hpDialer.liveLead);
+    await page.evaluate((id) => window.hpDesk.autoLog(id, "Not interested", {}), live2);
+    await page.locator('#hpdDock [data-next="go"]').waitFor();
+    const b4r = await nDials();
+    await page.locator('#hpdDock [data-next="go"]').click();
+    await until(async () => (await nDials()) > b4r, "Resume right after logging to dial the next leads");
+    check(true, "log the call, press Resume right away: dialing picks up with the next leads");
+    await page.locator('#hpdDock [data-next="stop"], #hpdkStop').first().click().catch(() => {});
+    await until(async () => !(await page.evaluate(() => window.hpDialer.session)), "the session to end after the Resume check");
+
     // a list whose leads the server refuses (calling hours here) must not burn through the list and end: it pauses and says why
     await realFetch(ORIGIN + "/__sim/plan-clear", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     const nyHour = +new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" }).format(new Date()) % 24, st0 = (nyHour + 6) % 24;
@@ -285,9 +302,10 @@ if (SERVE) {
     check(/couldn.t be called/.test(dockTxt), "the pause says why (couldn't be called)");
     await page.locator('#hpdDock [data-next="stop"]').click();
     await until(async () => !(await page.evaluate(() => window.hpDialer.session)), "Stop to end the paused session");
-    await api("/api/dialer/setup", "PUT", { settings: { quietHours: { start: 0, end: 24 }, stateRules: { NY: { start: 0, end: 24 } } } });
+    await api("/api/dialer/setup", "PUT", { settings: { quietHours: { start: 0, end: 24 }, maxAttempts24h: 50, stateRules: { NY: { start: 0, end: 24, max24h: 50 } } } });
 
     // lines that drop before ringing: nothing is logged as No answer, the leads are kept, and the session pauses with Resume
+    await realFetch(ORIGIN + "/__sim/plan-clear", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     await plan(Array(9).fill("failed"));
     const noAns = () => page.evaluate(() => [...window.hpDesk.calls.values()].filter((c) => c.outcome === "No answer").length);
     const noAns0 = await noAns();
@@ -295,7 +313,8 @@ if (SERVE) {
     await page.locator("#hpdAskYes").waitFor();
     await page.locator("#hpdAskYes").click();
     await until(async () => { const s = await page.evaluate(() => window.hpDialer.session); return s && s.paused && s.hold; }, "dropped lines to pause the session", 40000);
-    check(/dropping before they ring/.test(await page.locator("#hpdDock").innerText()), "calls that drop before ringing pause with an explanation");
+    const dropTxt = await page.locator("#hpdDock").innerText(); if (!/dropping before they ring/.test(dropTxt)) console.log("DOCK:", dropTxt.replace(/\s+/g, " ").slice(0, 400), "| SESSION", JSON.stringify(await page.evaluate(() => window.hpDialer.session)));
+    check(/dropping before they ring/.test(dropTxt), "calls that drop before ringing pause with an explanation");
     check((await noAns()) === noAns0, "nothing was logged No answer for lines that never rang");
     await page.locator('#hpdDock [data-next="stop"]').click();
     await until(async () => !(await page.evaluate(() => window.hpDialer.session)), "Stop to end the paused session");
