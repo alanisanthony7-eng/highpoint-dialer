@@ -283,6 +283,9 @@
       on() {}, updateToken() {}, audio: null,
     };
     client.connect();
+    // a tab that slept or lost network comes back reconnected
+    const wake = () => { if (!document.hidden && !S.deviceReady) { try { client.connect(); } catch {} } };
+    document.addEventListener("visibilitychange", wake); addEventListener("online", wake);
   }
   async function startDevice() {
     if (S.provider === "telnyx" && !S.demo) { try { await startTelnyx(); } catch (e) { setChip("err", "Offline"); note(esc(e.message), "warn"); } return; }
