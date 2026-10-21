@@ -107,7 +107,35 @@ export async function txBuy(phoneNumber) {
     id = l.data?.[0]?.id || "";
   }
   if (id && home) await tx(`/v2/phone_numbers/${id}`, { method: "PATCH", body: { connection_id: home } }).catch(() => {});
-  return { sid: id, orderId: o.data?.id, status: o.data?.status };
+  if (id && cfg.tx?.msgProfileId) await tx(`/v2/phone_numbers/${id}/messaging`, { method: "PATCH", body: { messaging_profile_id: cfg.tx.msgProfileId } }).catch(() => {});
+  let status = o.data?.status;
+  if (!id && o.data?.id) status = (await tx(`/v2/number_orders/${o.data.id}`).catch(() => null))?.data?.status || status; // "failure" when Telnyx couldn't get it
+  return { sid: id, orderId: o.data?.id, status };
+}
+
+export async function txRelease(sid) {
+  if (!sid) return;
+  await tx(`/v2/phone_numbers/${sid}`, { method: "DELETE" });
+}
+
+export async function txImport() {
+  const cfg = await loadConfig();
+  const home = cfg.tx?.appId || cfg.tx?.connId;
+  const r = await tx("/v2/phone_numbers", { query: { "page[size]": 250 } });
+  let added = 0;
+  for (const n of r.data || []) {
+    const e164 = n.phone_number;
+    if (!e164) continue;
+    if (home) await tx(`/v2/phone_numbers/${n.id}`, { method: "PATCH", body: { connection_id: home } }).catch(() => {});
+    await updateJ("numbers", "all", (a) => {
+      if (!a[e164] || a[e164].released) {
+        a[e164] = { e164, sid: n.id, provider: "telnyx", areaCode: to10(e164).slice(0, 3), state: AREA[to10(e164).slice(0, 3)] || "", owner: "", shared: true, boughtAt: Date.parse(n.created_at) || Date.now(), label: "", days: {} };
+        added++;
+      }
+      return a;
+    }, {});
+  }
+  return { added };
 }
 
 /* ---------- live transcription from Telnyx call events ----------

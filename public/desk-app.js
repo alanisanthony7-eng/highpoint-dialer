@@ -454,13 +454,14 @@ const FOCUS={protection:[0.55,"Maximize death benefit coverage with limited cash
 const FE_CARRIERS=[
  {n:"Transamerica",f:.97,plans:["level","graded"]},{n:"Mutual of Omaha",f:1.02,plans:["level","graded"],ages:[45,80],face:[2000,40000],gradedMax:20000},{n:"Aetna",f:.99,plans:["level","graded"]},{n:"Aetna Accendo",f:1,plans:["level","graded"]},
  {n:"American Amicable",f:1.04,plans:["level","graded"],ages:[50,85],face:[2500,50000],faceOld:[76,25000],gradedMax:25000,noDE:true},{n:"Royal Neighbors",f:1.01,plans:["level","graded"]},{n:"Foresters",f:1.06,plans:["level","graded"]},
- {n:"American Home Life",f:1.03,plans:["level","graded"]},{n:"Corebridge",f:1.05,plans:["level","graded","gi"],ages:[50,80],giAges:[50,85],face:[5000,35000],giMax:25000,smoker:[70,30000],noNY:true},{n:"Ethos",f:1.08,plans:["level","gi"],face:[1000,30000],noNY:true},{n:"Fidelity Life",f:1.06,plans:["level","gi"]}];
+ {n:"American Home Life",f:1.03,plans:["level","graded"]},{n:"Corebridge",f:1.05,plans:["level","graded","gi"],ages:[50,80],giAges:[50,85],face:[5000,35000],giMax:25000,smoker:[70,30000],noNY:true},{n:"Ethos",f:1.08,plans:["level","gi"],face:[1000,30000],noNY:true},{n:"Fidelity Life",f:1.06,plans:["level","gi"]},
+ {n:"TruStage",f:1.02,plans:["level","gi"],ages:[40,85],giAges:[45,80],face:[5000,30000],giMax:25000}];
 const TERM_CARRIERS=[{n:"Corebridge (AIG)",f:.96},{n:"Transamerica",f:.98},{n:"Mutual of Omaha",f:1.03},{n:"Ethos",f:1.05},{n:"Foresters",f:1.07},{n:"American Amicable",f:1.1}];
 const IUL_CARRIERS=[{k:"ta",n:"Transamerica",f:1,coi:1,load:.06,fee:90},{k:"fg",n:"F&G",f:.97,coi:.97,load:.065,fee:96},{k:"moo",n:"Mutual of Omaha",f:1.03,coi:1.02,load:.055,fee:84},
  {k:"eth",n:"Ethos",f:.9,coi:1.06,load:.08,fee:110,prot:true},{k:"aig",n:"AIG",f:.93,coi:1.04,load:.075,fee:102,prot:true}];
 const STATES="AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 $$(".stateSel").forEach(s=>s.innerHTML=STATES.map(x=>`<option ${x==="CA"?"selected":""}>${x}</option>`).join(""));
-const ABBR={"Transamerica":"TA","Mutual of Omaha":"MO","Aetna":"AE","American Amicable":"AA","Royal Neighbors":"RN","Foresters":"FF","American Home Life":"AHL","AIG":"AIG","Corebridge":"CB","Fidelity Life":"FL","Aetna Accendo":"AC","Ethos":"ETH","Corebridge (AIG)":"CB","F&G":"F&G"};
+const ABBR={"Transamerica":"TA","Mutual of Omaha":"MO","Aetna":"AE","American Amicable":"AA","Royal Neighbors":"RN","Foresters":"FF","American Home Life":"AHL","AIG":"AIG","Corebridge":"CB","Fidelity Life":"FL","TruStage":"TS","Aetna Accendo":"AC","Ethos":"ETH","Corebridge (AIG)":"CB","F&G":"F&G"};
 const initials=n=>ABBR[n]||n.split(/\s+/).map(w=>w[0]).join("").slice(0,3).toUpperCase();
 let LOGOS=ls.get("hp.logos",{});
 const cbadge=n=>LOGOS[n]?`<span class="cb logo"><img src="/_blob/${encodeURIComponent(LOGOS[n])}" alt="${esc(n)} logo" loading="lazy" onerror="this.parentNode.classList.add('broken')"></span>`:`<span class="cb" aria-hidden="true">${esc(initials(n))}</span>`;
@@ -507,7 +508,7 @@ function leadOptions(sel){const cur=sel.value;const l=[...leads.values()].sort((
   sel.innerHTML=`<option value="">${l.length?"No client selected":"No clients yet"}</option>`+l.slice(0,1000).map(x=>`<option value="${esc(x.id)}" ${x.id===cur?"selected":""}>${esc(fullName(x))}${x.age?" · "+esc(x.age):""}</option>`).join("")}
 async function attachQuote(leadId,q){const l=leads.get(leadId);if(!l){toast("Pick a client first, then add the quote");return false}
   const rec={...q,t:Date.now()};
-  try{await patchLead(leadId,{quotes:[...(l.quotes||[]),rec],product:l.product||q.product,notes:addNoteObj(l,`Quoted ${q.carrier?q.carrier+" · ":""}${q.summary}: ${money(q.monthly,2)}/mo (${q.exact?"carrier rate":"estimate"})`)});toast(`Quote added to ${fullName(l)}`);awardXP(5,"quote saved");offerShare(leadId,rec.t);return true}catch(e){toast("Couldn't save: "+e.message);return false}}
+  try{await patchLead(leadId,{quotes:[...(l.quotes||[]),rec],product:l.product||q.product,notes:addNoteObj(l,`Quoted ${q.carrier?q.carrier+" · ":""}${q.summary}: ${money(q.monthly,2)}/mo (${q.exact?"carrier rate":q.toolkits?"Toolkits quote":"estimate"})`)});toast(`Quote added to ${fullName(l)}`);awardXP(5,"quote saved");offerShare(leadId,rec.t);return true}catch(e){toast("Couldn't save: "+e.message);return false}}
 async function copyText(t){try{await navigator.clipboard.writeText(t);toast("Copied")}catch{toast("Copy isn't available here")}}
 async function deskApi(path,body){
   const r=await fetch(path,{method:body?"POST":"GET",credentials:"same-origin",headers:body?{"content-type":"application/json"}:{},body:body?JSON.stringify(body):undefined});
@@ -712,7 +713,9 @@ function carrierT(c,uw){const o=CUW[c.n];if(!o)return uw.t;let t=0;
   for(const x of Q.FE.conds){const C=COND[x.k];if(!C)continue;const r=o[x.k]||C.r;const y=x.at?yrsSince(x.at):0;t=Math.max(t,(r.find(q=>y<q[0])||r[r.length-1])[1])}
   for(const r of uw.reasons)if(/^Build/.test(r.txt))t=Math.max(t,r.tier);return t}
 function carrierPlan(c,t,filter,age){const opts=[];
-  const lvlOk=age>=45&&age<=85,giOk=age>=50&&age<=80;
+  // real Toolkits quotes reach past 45-85 for some plans (Accendo and American Home Life 40-89)
+  const gr=window.HP_GRID&&GRID_PLAN[c.n]?.[0]&&window.HP_GRID.products[GRID_PLAN[c.n][0]]?.ages,gOk=!!gr&&age>=gr[0]&&age<=gr[1];
+  const gg=window.HP_GRID&&GRID_PLAN[c.n]?.[3]&&window.HP_GRID.products[GRID_PLAN[c.n][3]]?.ages,lvlOk=(age>=45&&age<=85)||gOk,giOk=(age>=50&&age<=80)||(!!gg&&age>=gg[0]&&age<=gg[1]);
   if(c.plans.includes("level")&&t<=1&&lvlOk)opts.push(t===0&&c.pref?0:1);
   if(c.plans.includes("graded")&&t<=2&&lvlOk)opts.push(2);
   if(c.plans.includes("gi")&&t<=3&&giOk)opts.push(3);
@@ -732,6 +735,12 @@ function estM10(c,sex,cls,age){const E=window.HP_EST,f=E.fee[c],cv=(s,k)=>E.curv
   if(p.length<2){if(cls==="std"){const q=estM10(c,sex,"pref",age);return q==null?null:f+(q-f)*1.3}return null}
   const a=age+sh,n=p.length;const i=a<=p[0][0]?1:a>=p[n-1][0]?n-1:p.findIndex(x=>a<=x[0]);const [x0,y0]=p[i-1],[x1,y1]=p[i],t=(a-x0)/(x1-x0);
   return f+Math.exp(Math.log(y0-f)+t*(Math.log(y1-f)-Math.log(y0-f)))}
+/* real quotes (public/hp-grid.js, from the Insurance Toolkits grid): the exact price at every age, sex and nicotine answer, for the plans below.
+   A carrier/tier not listed here still uses the market-checked curve above. Corebridge's SimpliNow Legacy Max and Fidelity's Level are single-class plans. */
+const GRID_PLAN={"Aetna":{0:"aetna.pref"},"Aetna Accendo":{0:"accendo.pref",1:"accendo.std"},"American Home Life":{0:"ahl.pref",1:"ahl.std",2:"ahl.gs"},"Foresters":{0:"for.pref",1:"for.std"},"Corebridge":{0:"aig.siwl",1:"aig.siwl",3:"aig.gi"},"Fidelity Life":{0:"fid.level",1:"fid.level"},"TruStage":{0:"tru.level",1:"tru.level",3:"tru.gi"}};
+function gridQuote(c,{age,sex,tob,tier}){const G=window.HP_GRID,id=GRID_PLAN[c]?.[tier];if(!G||!id||!G.products[id])return null;
+  const o={age,sex,tob};if(!G.maxFace(id,o))return null;
+  return{id,at:face=>G.price(id,{...o,face}),max:G.maxFace(id,o)}}
 function estQuote(c,{age,sex,tob,tier}){const E=window.HP_EST;if(!E?.curves?.[c])return null;const f=E.fee[c];
   const single=!["M","F"].some(s=>E.curves[c][s]?.std);const m=estM10(c,sex,tier===0||single||tier>1?"pref":"std",age);if(m==null)return null;
   let unit=(m-f)/10;
@@ -764,10 +773,11 @@ function feCfg(){const B=Q.FE.mode==="budget";const uw=feUW();
        if(dz.tier>tier){tierX=dz.tier>=2?2:1}}
      tier=tierX;
      const tobX=!!NIC[Q.FE.nic]?.[1], ag=tier===3&&c.giAges?c.giAges:c.ages;
-     const lim=tier==null?"":c.noDE&&Q.FE.pay==="ssc"?"Doesn't take Direct Express cards":c.noNY&&Q.state==="NY"?"Not sold in New York":ag&&(Q.age<ag[0]||Q.age>ag[1])?`Issue ages ${ag[0]}–${ag[1]}`:c.smoker&&tobX&&tier<3&&Q.age>c.smoker[0]?`Tobacco users only to age ${c.smoker[0]}`:"";
+     const gq=tier!=null&&gridQuote(c.n,{age:Q.age,sex:Q.sex,tob:tobX,tier});
+     const lim=tier==null?"":!gq&&tier<=2&&(Q.age<45||Q.age>85)?"Outside typical issue ages":c.noDE&&Q.FE.pay==="ssc"?"Doesn't take Direct Express cards":c.noNY&&Q.state==="NY"?"Not sold in New York":ag&&(Q.age<ag[0]||Q.age>ag[1])?`Issue ages ${ag[0]}–${ag[1]}`:c.smoker&&tobX&&tier<3&&Q.age>c.smoker[0]?`Tobacco users only to age ${c.smoker[0]}`:"";
      if(lim)return{n:c.n,c,tier,sub:"",why:lim,reasons:uw.reasons,price:()=>null};
-     const eq=tier!=null&&estQuote(c.n,{age:Q.age,sex:Q.sex,tob:!!NIC[Q.FE.nic]?.[1],tier});
-     const one=eq&&!["M","F"].some(s=>window.HP_EST.curves[c.n][s]?.std);
+     const eq=!gq&&tier!=null&&estQuote(c.n,{age:Q.age,sex:Q.sex,tob:!!NIC[Q.FE.nic]?.[1],tier});
+     const one=(eq||gq)&&!["M","F"].some(s=>window.HP_EST?.curves?.[c.n]?.[s]?.std)&&(!gq||tier<=1&&!GRID_PLAN[c.n]?.[1]||GRID_PLAN[c.n]?.[0]===GRID_PLAN[c.n]?.[1]);
      const rs=dz?.hits?.length?[...uw.reasons,...dz.hits.map(h=>({txt:`Accendo drug list: ${h.m} not accepted for ${h.plans.join(", ")}${h.any?"":" if prescribed for "+h.cond}`,tier:h.any?Math.min(3,h.t>=2?2:1):1}))]:uw.reasons;
      const fmax=tier===3&&c.giMax?c.giMax:tier===2&&c.gradedMax?c.gradedMax:c.smoker&&tobX&&tier<3?Math.min(c.smoker[1],c.face?.[1]??1e9):c.faceOld&&Q.age>=c.faceOld[0]?c.faceOld[1]:c.face?.[1];
      const fok=a=>a>=(c.face?.[0]??0)&&(fmax==null||a<=fmax);
@@ -775,6 +785,10 @@ function feCfg(){const B=Q.FE.mode==="budget";const uw=feUW();
      if(RC){const o={age:Q.age,sex:Q.sex,tob:tobX,tier},ex=tier<=1||RC.gradedExact;
        return{n:c.n,c,tier,exact:ex,checked:!ex,rates:RC,sub:tier<=1?"Level":"Graded",plan:RC.plan,why,reasons:rs,
          price:a=>{if(B){let best=null;for(let f=c.face?.[0]??2000;f<=(fmax??RC.faceMax??50000);f+=500){const m=chartQuote(c.n,{...o,face:f});if(m!=null&&m<=a)best=f}return best}return fok(a)?chartQuote(c.n,{...o,face:a}):null}}}
+     if(gq){const top=Math.min(gq.max,fmax??gq.max);
+       return{n:c.n,c,tier,checked:true,toolkits:true,sub:tier<=1?(one?"Level":`Level · ${TIERS[tier]}`):tier===2&&c.n==="American Home Life"?"GuideStar":TIERS[tier],why,reasons:rs,
+         price:a=>{if(B){let best=null;for(let f=Math.max(c.face?.[0]??5000,500);f<=top;f+=500){const m=gq.at(f);if(m!=null&&m<=a)best=f}return best}
+           if(!fok(a))return null;if(a>gq.max)return null;return gq.at(a)}}}
      if(eq)return{n:c.n,c,tier,checked:true,sub:tier<=1?(one?"Level":`Level · ${TIERS[tier]}`):tier===2&&c.n==="Aetna Accendo"?"Modified":TIERS[tier],why,reasons:rs,
        price:a=>{if(B){const f=Math.max(0,Math.floor((a-eq.fee)/eq.unit*1000/500)*500);return f&&(!c.face||f>=c.face[0])?Math.min(f,fmax??f):null}if(!fok(a))return null;return Math.round((a/1000*eq.unit+eq.fee)*100)/100}};
      return{n:c.n,c,tier,sub:tier==null?"":`${tier<=1?"Level · ":""}${TIERS[tier]}`,why,reasons:uw.reasons,
@@ -901,25 +915,25 @@ function renderQuoter(){
   const elig=rows.filter(r=>r.p[amt]!=null);const best=elig.length?elig.reduce((m,r)=>B?(r.p[amt]>m.p[amt]?r:m):(r.p[amt]<m.p[amt]?r:m)):null;
   const cell=v=>v==null?"—":B?money(v):money(v,2);
   const summ=r=>B?`${money(r.p[amt])} of coverage for ${money(amt)}/mo`:`${money(r.p[amt],2)}/mo`;
-  const q=best?{product:T==="TERM"?"MP":T,carrier:best.n,exact:!!best.exact,monthly:B?amt:best.p[amt],summary:(B?`${money(best.p[amt])} ${best.sub||""} final expense`:cfg.summary()+(best.sub?` · ${best.sub}`:""))+`, age ${Q.age} ${Q.sex}${Q.tob==="1"?" tobacco":""}, ${Q.state}`}:null;
+  const q=best?{product:T==="TERM"?"MP":T,carrier:best.n,exact:!!best.exact,toolkits:!!best.toolkits,monthly:B?amt:best.p[amt],summary:(B?`${money(best.p[amt])} ${best.sub||""} final expense`:cfg.summary()+(best.sub?` · ${best.sub}`:""))+`, age ${Q.age} ${Q.sex}${Q.tob==="1"?" tobacco":""}, ${Q.state}`}:null;
   $("#qLeadWith").innerHTML=best?`<div class="leadwith panel"><span class="lw">Lead with</span>${cbadge(best.n)}<div class="lwname"><b>${esc(best.n)}</b><span class="muted">${fmtA(amt)} · ${esc(best.sub)}</span></div><div class="lwprice"><b class="num" data-count="${best.p[amt]}" data-key="lw" data-fmt="${B?"money0":"money2"}">${cell(best.p[amt])}</b><span class="muted">${B?"coverage · most for the money":"/mo · cheapest"}</span></div><div class="row"><button class="btn sm" id="qCopy">Copy</button>${CARR[best.n]?.url?`<a class="btn sm" href="${esc(CARR[best.n].url)}" target="_blank" rel="noopener">E-App ↗</a>`:""}<button class="btn sm primary" id="qCrm">+ CRM</button>${T==="IUL"?`<button class="btn sm" id="qIllu">Illustrate</button>`:""}</div></div>`
     :`<div class="notice">${T==="FE"&&feUW().t>=4?"Based on the health answers, this client likely doesn't qualify for final expense right now.":`No carrier in this model offers this plan at age ${Q.age}.`} Try another plan type${T==="TERM"?" or a shorter term":""}.</div>`;
-  if(best){$("#qCopy").onclick=()=>copyText(`${best.n}: ${fmtA(amt)} ${best.sub} — ${summ(best)}${best.exact?"":" (estimate)"}`);
+  if(best){$("#qCopy").onclick=()=>copyText(`${best.n}: ${fmtA(amt)} ${best.sub} — ${summ(best)}${best.exact||best.toolkits?"":" (estimate)"}`);
     $("#qCrm").onclick=()=>attachQuote($("#qLead").value,q);
     if($("#qIllu"))$("#qIllu").onclick=()=>{IL.carrier=best.carrier.k;IL.mode="coverage";IL.cov=amt;IL.focus=Q.IUL.focus;IL.age=Q.age;IL.sex=Q.sex;saveIL();go("iul")}}
   const FEX=T==="FE";
   $("#qCmpBar").innerHTML=FEX?`<button class="btn sm" id="qCmpGo" ${feCmp.size<2?"disabled":""}>Compare selected (${feCmp.size})</button>${feCmp.size?`<button class="btn sm" id="qCmpClr">Clear</button>`:""}<span class="muted" style="font-size:12.5px">Tick up to 3 carriers. Tap ★ to pin favorites to the top.</span>`:"";
   if($("#qCmpGo"))$("#qCmpGo").onclick=()=>openCompare(rows,amts,cfg); if($("#qCmpClr"))$("#qCmpClr").onclick=()=>{feCmp.clear();renderQuoter()};
   $("#qTable").innerHTML=`<table><thead><tr>${FEX?"<th></th>":""}<th>Carrier</th>${amts.map(a=>`<th class="amtcol ${a===amt?"you":""}"><button type="button" data-sort="${a}" aria-pressed="${a===sortBy}">${a===amt?(B?"Your budget<br>":"Your amount<br>"):""}${B?money(a)+"/mo":kfmt(a)}${a===sortBy?" ↓":""}</button></th>`).join("")}<th></th></tr></thead><tbody>
-    ${rows.map((r,i)=>{const open=FEX&&feOpen.has(r.n);return `<tr class="${r.why?"off":""}">${FEX?`<td class="lead"><button class="star ${FAV.has(r.n)?"on":""}" data-fav="${esc(r.n)}" aria-label="Favorite ${esc(r.n)}">★</button>${r.why?"":`<input type="checkbox" data-cmp="${esc(r.n)}" ${feCmp.has(r.n)?"checked":""} aria-label="Compare ${esc(r.n)}">`}</td>`:""}<td><div class="crow">${r.why?"":`<span class="rank">#${i+1}</span>`}${cbadge(r.n)}<div><b>${esc(r.n)}</b>${r.exact&&!r.why?`<span class="xrate" title="${esc((r.rates||window.HP_RATES.taFex).source+((r.rates||{}).checked?". "+r.rates.checked:""))}">Carrier rates · ${esc((r.rates||window.HP_RATES.taFex).asOf)}</span>`:r.checked&&!r.why?`<span class="xrate chk" title="${T==="TERM"?"From Ethos's own online estimator (Texas)":r.rates?.gradedNote?esc(r.rates.gradedNote):"Estimate built from real published and Insurance Toolkits quotes (bank draft)"}">${T==="TERM"?"Ethos online rates":"Market-checked estimate"}</span>`:(FEX||T==="TERM")&&!r.why?`<span class="xrate rough" title="Highpoint model only. Not checked against real quotes yet.">Rough estimate</span>`:""}${FEX&&!r.why?`<span class="tierpill sm ${TIER_CLS[r.tier]}">${esc(r.sub)}</span>`:`<span class="muted">${esc(r.why||r.sub)}</span>`}</div></div></td>${amts.map(a=>`<td class="num ${a===amt?"you":""}">${cell(r.p[a])}</td>`).join("")}<td><div class="row" style="flex-wrap:nowrap;gap:6px;justify-content:flex-end">${r.why?"":`${FEX&&CARR[r.n]?.url?`<a class="btn sm primary" href="${esc(CARR[r.n].url)}" target="_blank" rel="noopener">E-App</a>`:""}<button class="btn sm" data-crm="${i}">+ CRM</button>`}${FEX?`<button class="wbtn chev ${open?"open":""}" data-open="${esc(r.n)}" aria-label="Details">⌄</button>`:""}</div></td></tr>
+    ${rows.map((r,i)=>{const open=FEX&&feOpen.has(r.n);return `<tr class="${r.why?"off":""}">${FEX?`<td class="lead"><button class="star ${FAV.has(r.n)?"on":""}" data-fav="${esc(r.n)}" aria-label="Favorite ${esc(r.n)}">★</button>${r.why?"":`<input type="checkbox" data-cmp="${esc(r.n)}" ${feCmp.has(r.n)?"checked":""} aria-label="Compare ${esc(r.n)}">`}</td>`:""}<td><div class="crow">${r.why?"":`<span class="rank">#${i+1}</span>`}${cbadge(r.n)}<div><b>${esc(r.n)}</b>${r.exact&&!r.why?`<span class="xrate" title="${esc((r.rates||window.HP_RATES.taFex).source+((r.rates||{}).checked?". "+r.rates.checked:""))}">Carrier rates · ${esc((r.rates||window.HP_RATES.taFex).asOf)}</span>`:r.toolkits&&!r.why?`<span class="xrate chk" title="Real Insurance Toolkits quote for this age, sex and nicotine answer (October 2026, Texas, bank draft, clean health), to the cent at the amounts Toolkits sells">Toolkits quote · Oct 2026</span>`:r.checked&&!r.why?`<span class="xrate chk" title="${T==="TERM"?"From Ethos's own online estimator (Texas)":r.rates?.gradedNote?esc(r.rates.gradedNote):"Estimate built from real published and Insurance Toolkits quotes (bank draft)"}">${T==="TERM"?"Ethos online rates":"Market-checked estimate"}</span>`:(FEX||T==="TERM")&&!r.why?`<span class="xrate rough" title="Highpoint model only. Not checked against real quotes yet.">Rough estimate</span>`:""}${FEX&&!r.why?`<span class="tierpill sm ${TIER_CLS[r.tier]}">${esc(r.sub)}</span>`:`<span class="muted">${esc(r.why||r.sub)}</span>`}</div></div></td>${amts.map(a=>`<td class="num ${a===amt?"you":""}">${cell(r.p[a])}</td>`).join("")}<td><div class="row" style="flex-wrap:nowrap;gap:6px;justify-content:flex-end">${r.why?"":`${FEX&&CARR[r.n]?.url?`<a class="btn sm primary" href="${esc(CARR[r.n].url)}" target="_blank" rel="noopener">E-App</a>`:""}<button class="btn sm" data-crm="${i}">+ CRM</button>`}${FEX?`<button class="wbtn chev ${open?"open":""}" data-open="${esc(r.n)}" aria-label="Details">⌄</button>`:""}</div></td></tr>
       ${open?`<tr class="detail"><td colspan="${amts.length+3}"><div class="det">${r.why?`<b>${esc(r.why)}</b>`:`<b>${esc(r.sub)}</b> · ${esc(FE_PLANS[r.tier<=1?"level":r.tier===2?"graded":"gi"][2])}`}${r.reasons.length?`<ul>${r.reasons.map(x=>`<li>${esc(x.txt)} <span class="tierpill sm ${TIER_CLS[x.tier]}">${TIERS[x.tier]}</span></li>`).join("")}</ul>`:`<p class="muted" style="margin:6px 0 0">No health items entered.</p>`}<p class="muted" style="margin:6px 0 0;font-size:12px">Payment: ${esc(PAY[Q.FE.pay])}. Confirm this carrier accepts it. Nicotine: ${esc(NIC[Q.FE.nic][0])}.</p></div></td></tr>`:""}`}).join("")}</tbody></table>`;
   $$("#qTable [data-sort]").forEach(b=>b.onclick=()=>{Q.sort=+b.dataset.sort;saveQ();renderQuoter()});
-  $$("#qTable [data-crm]").forEach(b=>b.onclick=()=>{const r=rows[+b.dataset.crm];attachQuote($("#qLead").value,{...q,carrier:r.n,exact:!!r.exact,monthly:B?amt:r.p[amt],summary:(B?`${money(r.p[amt])} ${r.sub} final expense`:cfg.summary()+(r.sub?` · ${r.sub}`:""))+`, age ${Q.age}`})});
+  $$("#qTable [data-crm]").forEach(b=>b.onclick=()=>{const r=rows[+b.dataset.crm];attachQuote($("#qLead").value,{...q,carrier:r.n,exact:!!r.exact,toolkits:!!r.toolkits,monthly:B?amt:r.p[amt],summary:(B?`${money(r.p[amt])} ${r.sub} final expense`:cfg.summary()+(r.sub?` · ${r.sub}`:""))+`, age ${Q.age}`})});
   $$("#qTable [data-fav]").forEach(b=>b.onclick=()=>{const n=b.dataset.fav;FAV.has(n)?FAV.delete(n):FAV.add(n);ls.set("hp.favs",[...FAV]);renderQuoter()});
   $$("#qTable [data-cmp]").forEach(b=>b.onchange=()=>{const n=b.dataset.cmp;if(b.checked){if(feCmp.size>=3){b.checked=false;toast("Compare up to 3 carriers");return}feCmp.add(n)}else feCmp.delete(n);renderQuoter()});
   $$("#qTable [data-open]").forEach(b=>b.onclick=()=>{const n=b.dataset.open;feOpen.has(n)?feOpen.delete(n):feOpen.add(n);renderQuoter()});
   $("#qNote").innerHTML=Q.state==="NY"?`<div class="notice">Many carriers file different products in New York, or don't offer these plans there. Confirm availability before quoting.</div>`:T==="FE"&&Q.age<45?`<div class="notice">Final expense plans usually start at age 45 or 50. For a ${Q.age}-year-old, quote term or IUL instead.</div>`:T==="FE"&&Q.FE.pay==="ssc"?`<div class="notice">Not every carrier drafts from a Direct Express / Social Security card. Confirm before you submit.</div>`:"";
-  countUp($("#qLeadWith"));$("#qDisc").textContent=T==="FE"?`Transamerica level quotes use Transamerica's FE Express rate chart (${window.HP_RATES?.taFex?.asOf||""}): exact monthly bank-draft premiums, $42 policy fee included. The risk class still comes from Transamerica's own health questions. American Amicable Senior Choice uses its rate chart, which matches 2026 published prices to the cent. Mutual of Omaha Living Promise uses its rate chart (form UC8167, Texas): it matches 2026 published prices for women and for men 55–75, may run up to about 6% low for men 45, 50 and 80, and its graded prices are estimated from 2026 samples. Aetna, Foresters, Corebridge, Ethos, American Home Life, Fidelity Life and Royal Neighbors are "market-checked" estimates built from real quotes: usually within a few dollars for clean nonsmokers, rougher for smokers, graded and guaranteed-issue plans. Confirm before presenting.`:T==="TERM"?`Ethos prices come from Ethos's own online estimator (Texas, October 2026): its lowest price is used for Preferred plus and its highest for Standard, with Preferred and Standard plus in between. Other term carriers are rough estimates scaled from the Ethos curve. Tobacco prices are rougher. Run the carrier's own quote before presenting.`:`Estimates from Highpoint's rate model using typical market curves and relative pricing for each carrier. They are not carrier rates. Run the carrier's own quote before presenting. Monthly bank-draft premiums; policy fees included.`;
+  countUp($("#qLeadWith"));$("#qDisc").textContent=T==="FE"?`Transamerica level quotes use Transamerica's FE Express rate chart (${window.HP_RATES?.taFex?.asOf||""}): exact monthly bank-draft premiums, $42 policy fee included. The risk class still comes from Transamerica's own health questions. American Amicable Senior Choice uses its rate chart, which matches 2026 published prices to the cent. Mutual of Omaha Living Promise uses its rate chart (form UC8167, Texas): it matches 2026 published prices for women and for men 55–75, may run up to about 6% low for men 45, 50 and 80, and its graded prices are estimated from 2026 samples. Aetna, Aetna Accendo, Foresters, Corebridge (SimpliNow Legacy Max and guaranteed issue), American Home Life (Patriot and GuideStar) and Fidelity Life use real Insurance Toolkits quotes for every age, sex and nicotine answer (October 2026, Texas, bank draft, clean health), to the cent at the face amounts Toolkits sells them. Plans we have no quotes for (Aetna and Corebridge Standard or graded, Ethos, Royal Neighbors) are "market-checked" estimates. Confirm before presenting.`:T==="TERM"?`Ethos prices come from Ethos's own online estimator (Texas, October 2026): its lowest price is used for Preferred plus and its highest for Standard, with Preferred and Standard plus in between. Other term carriers are rough estimates scaled from the Ethos curve. Tobacco prices are rougher. Run the carrier's own quote before presenting.`:`Estimates from Highpoint's rate model using typical market curves and relative pricing for each carrier. They are not carrier rates. Run the carrier's own quote before presenting. Monthly bank-draft premiums; policy fees included.`;
 }
 $$("#qTabs button").forEach(b=>b.onclick=()=>{Q.tab=b.dataset.q;Q.sort=null;saveQ();renderQuoter()});
 [["#qAge","age",v=>Math.min(90,Math.max(18,+v||18))],["#qSex","sex"],["#qTob","tob"],["#qState","state"],["#qClass","cls"]].forEach(([s,k,f])=>$(s).addEventListener("change",()=>{Q[k]=f?f($(s).value):$(s).value;saveQ();renderQuoter()}));
@@ -931,7 +945,7 @@ window.hpQuoter={
   changed(){saveQ();if(view==="quoter"){cancelAnimationFrame(this._raf);this._raf=requestAnimationFrame(()=>renderQuoter())}}, // the big page redraws a frame later so the pop-out stays snappy
   cfg(){return Q.tab==="FE"?feCfg():QCFG[Q.tab]},
   result(){const T=Q.tab,cfg=this.cfg(),K=cfg.amtKey||"amt",B=!!cfg.budget,amt=Q[T][K];
-    const rows=cfg.rows().map(r=>({n:r.n,sub:r.sub||"",why:r.why||"",exact:!!r.exact,checked:!!r.checked,tier:r.tier,price:r.why?null:r.price(amt),at:a=>r.why?null:r.price(a)}));
+    const rows=cfg.rows().map(r=>({n:r.n,sub:r.sub||"",why:r.why||"",exact:!!r.exact,checked:!!r.checked,toolkits:!!r.toolkits,tier:r.tier,price:r.why?null:r.price(amt),at:a=>r.why?null:r.price(a)}));
     const v=r=>r.price==null?(B?-1:1e12):r.price;rows.sort((a,b)=>B?v(b)-v(a):v(a)-v(b));
     return{T,B,K,amt,min:cfg.min,max:cfg.max,step:cfg.step,quick:cfg.quick,plans:cfg.plans,plan:cfg.cur(),summary:cfg.summary(),rows}},
   setPlan(v){this.cfg().setPlan(v);this.changed()},
@@ -1130,7 +1144,7 @@ function bestBook(books,target){
   let best=null,score=-1;
   for(const b of books){
     let fit=null;for(const x of b.sched)if(x.monthly<=target)fit=x;
-    const face=fit?.face||0,bonus=b.exact?2:b.checked?1:0,s=face*10+bonus;
+    const face=fit?.face||0,bonus=b.exact||b.toolkits?2:b.checked?1:0,s=face*10+bonus;
     if(face&&(s>score||(s===score&&fit.monthly<(best?.fit?.monthly||1e9)))){best={...b,fit};score=s}
   }
   if(best)return best;
@@ -1161,14 +1175,14 @@ function liveQuote(input={}){
     if(Q.tab==="FE"){
       Q.FE.mode="face";
       const cfg=feCfg(),uw=cfg.uw;
-      const books=cfg.rows().map(r=>{const src=r.exact?"carrier rate":r.checked?"market-checked":"model";
-        return{n:r.n,exact:!!r.exact,checked:!!r.checked,src,plan:r.tier==null?"":(TIERS[r.tier]||r.sub||""),why:r.why||"",tier:r.tier,sched:feSchedule(r)}}).filter(b=>b.sched.length);
+      const books=cfg.rows().map(r=>{const src=r.exact?"carrier rate":r.toolkits?"Toolkits quote":r.checked?"market-checked":"model";
+        return{n:r.n,exact:!!r.exact,checked:!!r.checked,toolkits:!!r.toolkits,src,plan:r.tier==null?"":(TIERS[r.tier]||r.sub||""),why:r.why||"",tier:r.tier,sched:feSchedule(r)}}).filter(b=>b.sched.length);
       const pick=used?bestBook(books,used):null;
       const options=pick?pickThree(pick.sched,used).map(o=>({...o,n:pick.n,src:pick.src,plan:pick.plan})):[]
       const rec=options.find(o=>o.rec)||options[1]||options[0];
       const faceAmt=applied.cov||15000;
       const rows=books.map(b=>{const hit=b.sched.find(x=>x.face===faceAmt)||b.sched.find(x=>x.face>=faceAmt)||b.sched[b.sched.length-1];
-        return{n:b.n,monthly:hit?.monthly||null,face:hit?.face||faceAmt,exact:b.exact,checked:b.checked,src:b.src,plan:b.plan,why:b.why,tier:b.tier}}).filter(r=>r.monthly>0).sort((a,b)=>a.monthly-b.monthly);
+        return{n:b.n,monthly:hit?.monthly||null,face:hit?.face||faceAmt,exact:b.exact,checked:b.checked,toolkits:b.toolkits,src:b.src,plan:b.plan,why:b.why,tier:b.tier}}).filter(r=>r.monthly>0).sort((a,b)=>a.monthly-b.monthly);
       const follow=[];if(applied.conds.some(c=>c.k==="dm"||c.k==="dmi"||c.k==="dmc"))follow.push("A1C and whether they are on insulin.");if(applied.conds.some(c=>/mi|stroke|cad|chf/.test(c.k)))follow.push("When was the last cardiac event?");if(tob)follow.push("What they smoke and last use.");
       const math=used?{income:applied.inc,expenses:applied.exp,leftover:applied.leftover,calc:applied.calc,stated:applied.stated,used,method:applied.calc?"10% of leftover (bring in − expenses)":"Monthly amount they named"}:null;
       const note=options.length?(applied.calc?`Budget is 10% of ${money(applied.leftover)} leftover. Three options on ${pick.n}.`:`Three options on ${pick.n} around ${money(used)}/mo.`):rows.length?(applied.assumedFace?"Priced at $15,000 until they name a face or budget.":"From Quote & compare. Confirm in the carrier guide."):"No carrier in the book will issue this profile.";
@@ -1219,7 +1233,33 @@ const SCRIPT_LIB={
 };
 let scTab="FE";
 window.HP_SCRIPTS=SCRIPT_LIB;
+/* a script made of stages (the built-in FEX one, or one an agent imported) */
+function stagesView(F,headHtml){
+  const hl=t=>esc(t).replace(/\{([\w ]+)\}/g,'<b style="color:var(--accent-2)">[$1]</b>');
+  $("#scBody").innerHTML=headHtml+F.stages.map((st,i)=>`<details class="panel wide fex-stage"${i===0?" open":""}><summary><span>${esc(st.title)}</span><button class="btn copy" type="button" data-stage="${i}">Copy stage</button></summary>${st.items.map(it=>it.k==="h"?`<h4 class="fex-h">${esc(it.x)}</h4>`:it.k==="note"?`<p class="fex-note">${esc(it.x)}</p>`:`<p class="fex-say${it.k==="obj"?" obj":""}">${it.k==="obj"?esc(it.x):hl(it.x)}</p>`).join("")}</details>`).join("");
+  $$("#scBody [data-stage]").forEach(b=>b.onclick=async e=>{e.preventDefault();e.stopPropagation();const st=F.stages[+b.dataset.stage];const t=st.items.filter(i=>i.k!=="note").map(i=>i.x).join("\n\n");try{await navigator.clipboard.writeText(t);toast("Stage copied")}catch{toast("Select the text to copy it")}});
+}
+let scMine=null;
+function renderMine(){
+  $$("#scTabs .tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.sc===scTab));
+  const M=window.hpMyScripts, list=M?M.list():[]; if(scMine&&!list.some(x=>x.id===scMine))scMine=null; if(!scMine&&list[0])scMine=list[0].id;
+  const PN={FE:"final expense",MP:"mortgage protection",IUL:"IUL"};
+  const bar=`<div class="panel wide fex-head"><div class="row" style="gap:8px;flex-wrap:wrap;align-items:center"><h3 style="margin:0">My scripts</h3><span style="flex:1"></span><button class="btn primary" type="button" id="msNew">Import a script</button></div><p class="muted" style="margin:6px 0 0">Bring your own script: paste it or upload a Word, text or Markdown file. It shows up here, pops out over the dialer, and fills in the client's name, address and quote. Mark one as the default for a product and it opens automatically for those leads.</p></div>`;
+  if(!M){ $("#scBody").innerHTML=bar; return }
+  if(!list.length){ $("#scBody").innerHTML=bar+`<div class="panel wide"><p class="muted" style="margin:0">No scripts yet. Use <b>Import a script</b> to add your first one.</p></div>`; }
+  else{
+    const cur=M.get(scMine);
+    const pick=`<div class="panel wide"><div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">${list.map(x=>`<button type="button" class="btn sm${x.id===scMine?" primary":""}" data-ms="${esc(x.id)}">${esc(x.name)}${x.product?` · default ${x.product}`:""}</button>`).join("")}<span style="flex:1"></span><button type="button" class="btn sm" id="msEdit">Edit</button><button type="button" class="btn sm" id="msDel">Delete</button></div>${cur.product?`<p class="muted" style="margin:8px 0 0">This is your default for ${PN[cur.product]} leads.</p>`:""}</div>`;
+    stagesView({stages:cur.stages},bar+pick);
+    $$("#scBody [data-ms]").forEach(b=>b.onclick=()=>{scMine=b.dataset.ms;renderMine()});
+    $("#msEdit").onclick=()=>M.openImport(cur);
+    $("#msDel").onclick=()=>{ if(confirm(`Delete “${cur.name}”?`)) M.remove(cur.id) };
+  }
+  $("#msNew").onclick=()=>M.openImport();
+}
+if(window.hpMyScripts)window.hpMyScripts.onChange(()=>{ if(view==="scripts"&&scTab==="MINE")renderMine() });
 function renderScripts(){
+  if(scTab==="MINE"){ renderMine(); return }
   if(scTab==="FE"&&window.HP_FEX){
     $$("#scTabs .tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.sc===scTab));
     const F=HP_FEX, hl=t=>esc(t).replace(/\{([\w ]+)\}/g,'<b style="color:var(--accent-2)">[$1]</b>');
@@ -1520,7 +1560,7 @@ function openBJ(){const b=openWin("bj",{title:"Blackjack",w:400,h:680,chips:`<sp
 
 $("#calAdd").onclick=()=>apptForm();
 $("#navGames").onclick=openGames;
-function floatScript(tab){if(window.hpPop)return window.hpPop.open("script",{tab});const s=SCRIPT_LIB[tab];const b=openWin("script",{title:"Script",sub:{FE:"Final Expense",MP:"Mortgage Protection",IUL:"IUL"}[tab],w:380,h:540});
+function floatScript(tab){if(tab==="MINE"){const m=window.hpMyScripts?.get(scMine)||window.hpMyScripts?.list()[0];if(m&&window.hpPop)return window.hpPop.open("script",{tab:"U:"+m.id});tab="FE"}if(window.hpPop)return window.hpPop.open("script",{tab});const s=SCRIPT_LIB[tab];const b=openWin("script",{title:"Script",sub:{FE:"Final Expense",MP:"Mortgage Protection",IUL:"IUL"}[tab],w:380,h:540});
   const hl=t=>esc(t).replace(/\{(\w+)\}/g,'<b style="color:var(--sky)">[$1]</b>');
   b.innerHTML=`<div><span class="label">Opener</span><p style="margin:4px 0 0;line-height:1.6">${hl(s.open)}</p></div><div><span class="label">Fact finder</span><ul style="margin:4px 0 0;padding-left:18px;line-height:1.6">${s.facts.map(f=>`<li>${esc(f)}</li>`).join("")}</ul></div><div><span class="label">Objections</span>${s.obj.map(([q,a])=>`<p style="margin:6px 0 0"><b>"${esc(q)}"</b><br><span class="muted">${esc(a)}</span></p>`).join("")}</div><div><span class="label">Close</span><p style="margin:4px 0 0;line-height:1.6">${hl(s.close)}</p></div>`}
 $("#scFloat").onclick=()=>floatScript(scTab);

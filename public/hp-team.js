@@ -28,8 +28,9 @@
   const viewLocked = (v) => { const f = viewFeature(v); return !!f && !can(f); };
 
   const css = `
-  .hpt-ov{position:fixed;inset:0;z-index:2500;display:grid;place-items:center;padding:18px;background:rgba(3,6,12,.7);backdrop-filter:blur(6px);font-family:var(--f-ui,system-ui,sans-serif);color:var(--ink,#eef2f8);overflow-y:auto}
-  .hpt-card{position:relative;width:min(560px,100%);max-height:calc(100dvh - 36px);overflow:auto;padding:24px 22px 20px;border-radius:18px;background:var(--surface,#0c121e);border:1px solid var(--line-2,#28354c);box-shadow:0 40px 90px rgba(0,0,0,.55)}
+  .hpt-ov{position:fixed;inset:0;z-index:2500;display:grid;justify-items:center;align-items:start;align-content:start;padding:18px;background:rgba(3,6,12,.7);backdrop-filter:blur(6px);font-family:var(--f-ui,system-ui,sans-serif);color:var(--ink,#eef2f8);overflow-y:auto;overscroll-behavior:contain}
+  @supports (align-items:safe center){.hpt-ov{align-items:safe center;align-content:safe center}}
+  .hpt-card{position:relative;width:min(560px,100%);max-height:calc(100dvh - 36px);overflow:auto;overscroll-behavior:contain;padding:24px 22px 20px;border-radius:18px;background:var(--surface,#0c121e);border:1px solid var(--line-2,#28354c);box-shadow:0 40px 90px rgba(0,0,0,.55)}
   .hpt-card.wide{width:min(1000px,100%)}
   .hpt-card h2{margin:0 0 6px;font:700 21px var(--f-ui,system-ui);letter-spacing:-.01em}
   .hpt-card h3{margin:20px 0 8px;font:700 11.5px var(--f-ui,system-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--muted,#8c97ab)}
@@ -134,7 +135,11 @@
     document.body.append(ov);
     const done = () => ov.remove();
     if (close) { $(".hpt-x", ov).onclick = done; ov.addEventListener("click", (e) => { if (e.target === ov) done(); }); ov.addEventListener("keydown", (e) => { if (e.key === "Escape") done(); }); }
-    setTimeout(() => (ov.querySelector("input,button.hpt-btn,select") || ov.querySelector("button"))?.focus(), 30);
+    setTimeout(() => {
+      (ov.querySelector("input,button.hpt-btn,select") || ov.querySelector("button"))?.focus({ preventScroll: true });
+      ov.scrollTop = 0;
+      ov.querySelector(".hpt-card")?.scrollTo(0, 0);
+    }, 30);
     return { el: ov, close: done };
   }
   const signOut = async () => { try { await call("/api/auth/logout", {}); } finally { location.href = "/"; } };
@@ -224,9 +229,13 @@
       ${free ? `<p>${esc(free)}</p>` : ""}
       ${b.minutes && b.minutes.included != null ? `<div class="hpt-note" style="margin:0 0 12px"><b>Dialer minutes:</b> ${b.minutes.used.toLocaleString()} of ${b.minutes.included.toLocaleString()} used this month · resets ${day(b.minutes.resets)}${b.minutes.overage != null ? ` · extra minutes $${b.minutes.overage.toFixed(3).replace(/0$/, "")} each` : ""}</div>` : b.minutes ? `<p class="hpt-muted">Dialer minutes used this month: ${b.minutes.used.toLocaleString()}</p>` : ""}
       ${b.hasCustomer ? `<div class="hpt-row" style="margin:6px 0 4px"><button class="hpt-btn" type="button" id="hptPortal">Manage card and invoices</button></div>` : ""}
+      ${b.connected && !admin ? `<div class="hpt-sec"><h3>Card for your phone numbers</h3><div class="hpt-row" style="justify-content:space-between"><span>${b.card ? `<b>${esc(b.card.brand)} •••• ${esc(b.card.last4)}</b>${b.card.exp ? ` <span class="hpt-muted">exp ${esc(b.card.exp)}</span>` : ""}` : `<span class="hpt-muted">No card saved yet.</span>`}</span><button class="hpt-btn sm" type="button" id="hptCard">${b.card ? "Replace card" : "Add a card"}</button></div>
+        <p class="hpt-muted" style="margin:8px 0 0">${b.numbers?.charge ? `Numbers you buy in the dialer are $${(+b.numbers.price).toFixed(2)} a month each, charged to this card until you release them.` : "Your team pays for phone numbers right now."} Cards are entered on Stripe's secure page.</p></div>` : ""}
       ${admin ? "" : !b.connected && !b.subscribed ? `<p class="hpt-muted">Online payments aren't connected yet.</p>${plansHtml(b, { action: () => "Ask your admin" })}` : plansHtml(b)}`, { wide: !admin });
     if (b.connected || b.subscribed) wire(m.el, b); else m.el.querySelectorAll("[data-plan]").forEach((x) => (x.disabled = true));
     const pt = $("#hptPortal", m.el); if (pt) pt.onclick = () => portal(pt);
+    const cd = $("#hptCard", m.el);
+    if (cd) cd.onclick = async () => { cd.disabled = true; cd.textContent = "Opening…"; try { location.href = (await call("/api/billing/card", { next: "billing" })).url; } catch (e) { cd.disabled = false; cd.textContent = b.card ? "Replace card" : "Add a card"; alertIn(cd, e.message); } };
   }
 
   /* ---------- upgrade prompt for a feature your plan doesn't include ---------- */
@@ -393,8 +402,11 @@
           ${["early", "base", "plus", "full"].map((k) => `<label>${PLAN_NAME[k]}<input class="hpt-in" data-min="${k}" type="number" min="0" step="100" placeholder="No limit" value="${s.minutes[k] == null ? "" : esc(s.minutes[k])}"></label>`).join("")}</div>
           <p class="hpt-muted" style="margin:8px 0 0">Each connected call counts, rounded up to the minute. Leave blank for no limit. Limits only apply once payment is required; admins and free-access agents are never limited.</p>
           <label class="hpt-chk"><input type="checkbox" id="ovOn" ${s.overage.on ? "checked" : ""} ${s.connected ? "" : "disabled"}><span><b>Bill extra minutes instead of stopping.</b> Agents keep dialing past their plan's minutes and Stripe adds each extra minute to their next bill at <input class="hpt-in" id="ovRate" type="number" min="0.001" step="0.005" value="${esc(s.overage.rate)}" style="width:86px;display:inline-block;margin:0 4px"> dollars a minute.${s.connected ? "" : " (Connect Stripe first.)"}</span></label></div>
+        <div class="hpt-sec"><h3>Phone numbers agents buy</h3>
+          <label class="hpt-chk" style="margin-top:0"><input type="checkbox" id="nOn" ${s.numbers?.charge ? "checked" : ""} ${s.connected ? "" : "disabled"}><span><b>Agents pay for numbers they buy.</b> Each number an agent buys in the dialer is charged to their card at <input class="hpt-in" id="nPrice" type="number" min="0.5" max="100" step="0.25" value="${esc(s.numbers?.price ?? 2)}" style="width:86px;display:inline-block;margin:0 4px"> dollars a month until they release it. Admins never pay.${s.connected ? "" : " (Connect Stripe first; until then the team's Telnyx account pays.)"}</span></label>
+          <p class="hpt-muted" style="margin:0">How many numbers an agent may buy is set in the dialer under Inbox &amp; settings. Telnyx bills the team about $1 a month per number.</p></div>
         <div class="hpt-sec"><h3>What each plan includes</h3><div class="hpt-wrap"><table class="hpt-tbl mx"><thead><tr><th>Feature</th><th>Base</th><th>Pro</th><th>Full / Early</th></tr></thead><tbody>
-          ${feats.map((f) => `<tr><td>${esc(FEAT[f] || names[f])}</td>${["base", "plus"].map((p) => `<td><input type="checkbox" data-mx="${p}" value="${f}" ${f === "crm" || s.features[p].includes(f) ? "checked" : ""} ${f === "crm" ? "disabled" : ""} aria-label="${esc(PLAN_NAME[p] + ": " + (FEAT[f] || f))}"></td>`).join("")}<td><input type="checkbox" checked disabled aria-label="Full Access includes it"></td></tr>`).join("")}
+          ${feats.map((f) => `<tr><td>${esc(FEAT[f] || names[f])}</td>${["base", "plus"].map((p) => `<td><input type="checkbox" data-mx="${p}" value="${f}" ${f === "crm" || f === "music" || s.features[p].includes(f) ? "checked" : ""} ${f === "crm" || f === "music" ? "disabled" : ""} aria-label="${esc(PLAN_NAME[p] + ": " + (FEAT[f] || f))}"></td>`).join("")}<td><input type="checkbox" checked disabled aria-label="Full Access includes it"></td></tr>`).join("")}
           </tbody></table></div></div>
         <div class="hpt-row"><button class="hpt-btn go" type="button" id="bGo">Save</button></div><div id="bMsg"></div>
         <p class="hpt-muted" style="margin-top:10px">Price changes apply to new subscriptions and plan switches. Existing subscribers keep their price until they change plans.</p>`;
@@ -403,7 +415,7 @@
         const features = { base: [], plus: [] }; el.querySelectorAll("[data-mx]:checked").forEach((c) => features[c.dataset.mx].push(c.value));
         const minutes = {}; el.querySelectorAll("[data-min]").forEach((i) => (minutes[i.dataset.min] = i.value === "" ? null : +i.value));
         try {
-          await call("/api/team/settings", { prices, features, minutes, ...(s.connected ? { overage: { on: $("#ovOn", el).checked, rate: +$("#ovRate", el).value } } : {}), trialDays: +$("#bT", el).value, defaultPlan: $("#bD", el).value, required: $("#bR", el).checked, early: { on: $("#eOn", el).checked, ends: $("#eEnds", el).value || null } });
+          await call("/api/team/settings", { prices, features, minutes, ...(s.connected ? { overage: { on: $("#ovOn", el).checked, rate: +$("#ovRate", el).value }, numbers: { charge: $("#nOn", el).checked, price: +$("#nPrice", el).value } } : {}), trialDays: +$("#bT", el).value, defaultPlan: $("#bD", el).value, required: $("#bR", el).checked, early: { on: $("#eOn", el).checked, ends: $("#eEnds", el).value || null } });
           toast("Saved"); show("billing");
         } catch (e) { $("#bMsg", el).innerHTML = `<div class="hpt-err">${esc(e.message)}</div>`; }
       };
@@ -426,6 +438,10 @@
       history.replaceState(null, "", location.pathname);
       try { u = (await call("/api/auth/me")).user || u; } catch {}
       setTimeout(() => toast(q.get("billing") === "success" ? "You're subscribed. Welcome to the desk!" : "Checkout canceled."), 2500);
+    }
+    if (q.get("card") && q.get("next") !== "numbers") { // back from Stripe's card page (the dialer handles next=numbers)
+      history.replaceState(null, "", location.pathname);
+      setTimeout(() => { toast(q.get("card") === "saved" ? "Card saved" : "No card was added"); openBilling(); }, 1200);
     }
     if (u.needsAgree) { await agree(); try { u = (await call("/api/auth/me")).user || u; } catch {} }
     if (u.access && !u.access.ok) { let b = {}; try { b = await call("/api/billing/status"); } catch {} await paywall(u, b); }

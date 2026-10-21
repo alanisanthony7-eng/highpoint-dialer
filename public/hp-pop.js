@@ -326,6 +326,9 @@
   const SENSITIVE = /^(routing number|account number|bank)$/i;
   const fmtDob = (s) => { if (!s) return ""; const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[2]}/${m[3]}/${m[1]}` : String(s); };
   const TABS = [["FE", "Final expense", "FE"], ["MP", "Mortgage", "MP"], ["IUL", "IUL", "IUL"]];
+  const MS = () => window.hpMyScripts || null;
+  const mineOf = (tab) => (String(tab || "").startsWith("U:") ? MS()?.get(String(tab).slice(2)) || null : null);
+  const tabsHtml = () => TABS.concat((MS()?.list() || []).map((x) => ["U:" + x.id, x.name, x.name.length > 12 ? x.name.slice(0, 11) + "…" : x.name])).map(([k, t, sh]) => `<button type="button" data-tab="${esc(k)}" title="${esc(t)}">${lbl(esc(t), esc(sh))}</button>`).join("");
   const lbl = (t, sh) => (sh && sh !== t ? `<span class="l">${t}</span><span class="s">${sh}</span>` : t); // short label when the tool is narrow
   const QTAB = { FE: "FE", MP: "TERM", IUL: "IUL" };
   // objections the copilot recognizes -> the matching answer in a script
@@ -385,15 +388,16 @@
     build(w) {
       follow();
       const st = w.st; st.fs = lsGet("hp.pop.fs", 0); st.follow = lsGet("hp.pop.follow", true); st.openSt = st.openSt || new Set([0]); st.userAt = 0;
-      w.body.innerHTML = `<div class="hpp-bar"><div class="hpp-seg sm" role="group" aria-label="Product">${TABS.map(([k, t, sh]) => `<button type="button" data-tab="${k}" title="${t}">${lbl(t, sh)}</button>`).join("")}</div><span class="hpp-sp"></span>
+      w.body.innerHTML = `<div class="hpp-bar"><div class="hpp-seg sm" role="group" aria-label="Script" data-r="tabs">${tabsHtml()}</div><button type="button" class="hpp-tb" data-addscript title="Import your own script" aria-label="Import your own script">＋</button><span class="hpp-sp"></span>
         <span data-r="follow"></span><span class="hpp-sizes" role="group" aria-label="Text size"><button type="button" class="hpp-tb" data-fs="-1" aria-label="Smaller text" title="Smaller text">A−</button><button type="button" class="hpp-tb" data-fs="1" aria-label="Bigger text" title="Bigger text">A+</button></span></div>
         <div class="hpp-note" data-r="for"></div><div class="hpp-alerts" data-r="alerts"></div><div class="hpp-prog" data-r="prog"></div>
         <div class="hpp-scroll hpp-script" data-r="scroll"></div>`;
       const sc = $('[data-r="scroll"]', w.body);
       sc.addEventListener("scroll", () => { if (!st.auto) st.userAt = Date.now(); }, { passive: true });
       w.body.addEventListener("click", (e) => {
-        const t = e.target.closest("[data-tab],[data-fs],[data-st-h],[data-seg],[data-follow],[data-find]"); if (!t) return;
-        if (t.dataset.tab) { st.tab = t.dataset.tab; st.sig = ""; }
+        const t = e.target.closest("[data-tab],[data-fs],[data-st-h],[data-seg],[data-follow],[data-find],[data-addscript]"); if (!t) return;
+        if (t.hasAttribute("data-addscript")) { MS()?.openImport(); return; }
+        if (t.dataset.tab) { st.tab = t.dataset.tab; st.sig = ""; st.openSt = new Set([0]); st.lastAt = null; }
         else if (t.dataset.fs) { st.fs = Math.max(-1, Math.min(3, st.fs + +t.dataset.fs)); lsSet("hp.pop.fs", st.fs); }
         else if (t.dataset.stH != null) { const i = +t.dataset.stH; st.openSt.has(i) ? st.openSt.delete(i) : st.openSt.add(i); t.closest(".hpp-st").classList.toggle("open"); t.setAttribute("aria-expanded", st.openSt.has(i)); return; }
         else if (t.dataset.seg != null) { const i = +t.dataset.seg; st.openSt.add(i); const s = $(`.hpp-st[data-st="${i}"]`, sc); if (s) { s.classList.add("open"); st.userAt = Date.now(); s.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
@@ -405,11 +409,17 @@
     update(w) {
       const st = w.st, l = lead(ctxId());
       if ((l?.id || null) !== st.leadSeen) { st.leadSeen = l?.id || null; if (!st.keepTab) st.tab = null; st.keepTab = false; st.sig = ""; st.lastAt = null; }
-      const tab = st.tab || prodOf(l), live = !!l && CALL.live && liveId() === l.id;
+      // a script the agent imported is the default for its product; a deleted one falls back to the built-in
+      if (st.tab && String(st.tab).startsWith("U:") && !mineOf(st.tab)) { st.tab = null; st.sig = ""; }
+      const mineDef = !st.tab && MS()?.forProduct(prodOf(l));
+      const tab = st.tab || (mineDef ? "U:" + mineDef.id : prodOf(l)), live = !!l && CALL.live && liveId() === l.id;
+      const mine = mineOf(tab), STG = mine ? mine.stages : tab === "FE" && window.HP_FEX ? window.HP_FEX.stages : null;
+      const tsig = (MS()?.list() || []).map((x) => x.id + x.name).join("|");
+      if (st.tsig !== tsig) { st.tsig = tsig; const tb = $('[data-r="tabs"]', w.body); if (tb) tb.innerHTML = tabsHtml(); }
       w.el.style.setProperty("--fs", String(st.fs));
       $$("[data-tab]", w.body).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tab === tab)));
       $(".hpp-sub", w.el).textContent = l ? fullName(l) : "";
-      const useFex = tab === "FE" && window.HP_FEX && window.HP_FEX_TRACK;
+      const useFex = !!STG && !!window.HP_FEX_TRACK;
       $('[data-r="for"]', w.body).innerHTML = l ? "" : `No client open. Blanks stay as <span class="hpp-gap">placeholders</span>.`;
       $('[data-r="follow"]', w.body).innerHTML = useFex && l ? `<button type="button" class="hpp-chk" data-follow aria-pressed="${st.follow}" title="Highlights the line you just read and the next one, from the live transcript">Follow</button>` : "";
       // objection and wording alerts from the copilot
@@ -421,18 +431,18 @@
       if (fl && n - fl.line <= 6) al += `<div class="hpp-alert bad"><b>Check this wording · ${esc(fl.label)}</b>${esc(fl.tip)}</div>`;
       $('[data-r="alerts"]', w.body).innerHTML = al;
       // the script itself; rebuilt only when the tab, the client or a filled-in value changes
-      const f = fills(l, tab), sc = $('[data-r="scroll"]', w.body);
-      const heardSig = tab === "FE" ? "" : JSON.stringify(heardF(l?.id));
-      const sig = tab + "|" + (l?.id || "") + "|" + JSON.stringify(f) + "|" + heardSig;
+      const f = fills(l, mine ? mine.product || prodOf(l) : tab), sc = $('[data-r="scroll"]', w.body);
+      const heardSig = STG ? "" : JSON.stringify(heardF(l?.id));
+      const sig = tab + "|" + (mine?.updatedAt || "") + "|" + (l?.id || "") + "|" + JSON.stringify(f) + "|" + heardSig;
       if (sig !== st.sig) {
         st.sig = sig; const keep = sc.scrollTop;
-        sc.innerHTML = useFex ? fexHTML(f, st) : libHTML(tab, f, l);
+        sc.innerHTML = useFex ? fexHTML(f, st, STG) : libHTML(tab, f, l);
         sc.scrollTop = keep; st.lastAt = null;
       }
       // where the call is in the script
       const prog = $('[data-r="prog"]', w.body);
       if (useFex) {
-        const S = window.HP_FEX.stages;
+        const S = STG;
         const track = st.follow && live && CALL.txLead === l.id && ses?.consent !== "declined" && CALL.lines.length ? window.HP_FEX_TRACK.track(CALL.lines, S) : null;
         const now = track ? (track.next ? track.next.stage : track.stage) : -1;
         prog.innerHTML = `<div class="hpp-segs" style="grid-template-columns:repeat(${S.length},1fr)">${S.map((s, i) => `<button type="button" data-seg="${i}" class="${track && i < now ? "done" : i === now ? "now" : ""}" title="${esc(s.title)}" aria-label="Go to ${esc(s.title)}"></button>`).join("")}</div>
@@ -451,9 +461,9 @@
     },
   };
   function objKey(text) { return Object.keys(OBJ_RE).find((k) => OBJ_RE[k].test(text)) || ""; }
-  function fexHTML(f, st) {
+  function fexHTML(f, st, stages) {
     let gi = 0;
-    return window.HP_FEX.stages.map((s, si) => {
+    return stages.map((s, si) => {
       const open = st.openSt.has(si), says = s.items.filter((x) => x.k === "say").length;
       const body = s.items.map((it) => it.k === "h" ? `<h4 class="hpp-h4">${esc(it.x)}</h4>` : it.k === "note" ? `<p class="hpp-note">${esc(it.x)}</p>` : it.k === "obj" ? `<p class="hpp-obj" data-obj-k="${objKey(it.x)}">${esc(it.x)}</p>` : `<p class="hpp-say" data-say="${gi++}">${fillText(it.x, f)}</p>`).join("");
       return `<section class="hpp-st${open ? " open" : ""}" data-st="${si}"><button type="button" class="hpp-st-h" data-st-h="${si}" aria-expanded="${open}"><span class="n">${si + 1}</span><span class="t">${esc(s.title)}</span><em>${says} lines</em></button><div class="hpp-st-b">${body}</div></section>`;
@@ -829,7 +839,7 @@
       }
       // results
       const ok = r.rows.filter((x) => x.price != null), off = r.rows.filter((x) => x.price == null);
-      const fmt = (p) => (r.B ? usd(p) : usd(p, 2)), badge = (x) => (x.exact ? ["x", "Carrier rates"] : x.checked ? ["c", "Market-checked"] : ["r", "Rough estimate"]);
+      const fmt = (p) => (r.B ? usd(p) : usd(p, 2)), badge = (x) => (x.exact ? ["x", "Carrier rates"] : x.toolkits ? ["c", "Toolkits quote"] : x.checked ? ["c", "Market-checked"] : ["r", "Rough estimate"]);
       const best = ok[0];
       if (best) {
         const amtTxt = r.B ? `${usd(r.amt)}/mo` : usd(r.amt);
@@ -846,7 +856,7 @@
         ? `<div class="hpp-hh"><span class="hpp-lbl">Other carriers</span></div><ol class="hpp-rows">${ok.slice(1, 8).map((x, i) => `<li><span class="rk">${i + 2}</span><div><b>${esc(x.n)}</b><span>${esc(x.sub)}</span>${badge(x)[0] !== "c" ? `<em class="hpp-badge ${badge(x)[0]}">${badge(x)[1]}</em>` : ""}</div><b class="num">${fmt(x.price)}</b></li>`).join("")}</ol>
           ${ok.length > 8 ? `<p class="hpp-fine">${ok.length - 8} more in the full quoter.</p>` : ""}` : "";
       $('[data-r="res"]', w.body).innerHTML += off.length ? `<button type="button" class="hpp-mini" data-q="more" aria-expanded="${st.more}">${st.more ? "Hide" : "Show"} ${off.length} that can't offer this</button>${st.more ? `<ul class="hpp-off">${off.map((x) => `<li><b>${esc(x.n)}</b><span>${esc(x.why || "No price at this amount")}</span></li>`).join("")}</ul>` : ""}` : "";
-      $('[data-r="fine"]', w.body).textContent = r.T === "FE" ? "Market-checked estimates unless marked" : "Estimates. Confirm with the carrier.";
+      $('[data-r="fine"]', w.body).textContent = r.T === "FE" ? "Toolkits quotes and carrier rates where marked; the rest are estimates" : "Estimates. Confirm with the carrier.";
     },
   };
   function formHTML(q, r) {

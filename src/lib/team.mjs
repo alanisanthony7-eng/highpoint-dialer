@@ -36,7 +36,7 @@ const DEFAULT_FEATURES = { base: ["crm", "clients", "quoter", "screen", "scripts
 // Dialer minutes included each month (null = no limit). They only count once payment is required; admins and
 // free-access agents are never limited. With overage on, extra minutes are billed through Stripe instead of stopping.
 const DEFAULT_MINUTES = { early: 1000, base: null, plus: null, full: 2000 };
-const DEFAULTS = { required: false, trialDays: 7, prices: { early: 40, base: 50, plus: 75, full: 150 }, defaultPlan: "full", features: DEFAULT_FEATURES, early: { on: true, ends: null }, minutes: DEFAULT_MINUTES, overage: { on: false, rate: 0.04 } };
+const DEFAULTS = { required: false, trialDays: 7, prices: { early: 40, base: 50, plus: 75, full: 150 }, defaultPlan: "full", features: DEFAULT_FEATURES, early: { on: true, ends: null }, minutes: DEFAULT_MINUTES, overage: { on: false, rate: 0.04 }, numbers: { charge: true, price: 2 } };
 export function featuresFor(plan, settings) {
   const p = normPlan(plan) || "full";
   if (p === "full" || p === "early") return ALL.slice();
@@ -67,7 +67,7 @@ export async function billingSettings() {
   for (const k of Object.keys(PLANS)) if (+s.prices?.[k] > 0) prices[k] = +s.prices[k];
   const features = {}; for (const k of ["base", "plus"]) features[k] = Array.isArray(s.features?.[k]) ? s.features[k].filter((f) => FEATURES[f]) : DEFAULT_FEATURES[k];
   const minutes = { ...DEFAULT_MINUTES }; for (const k of Object.keys(PLANS)) if (s.minutes && k in s.minutes) minutes[k] = s.minutes[k] == null || s.minutes[k] === "" ? null : Math.max(0, Math.round(+s.minutes[k] || 0));
-  return { ...DEFAULTS, ...s, prices, features, minutes, overage: { ...DEFAULTS.overage, ...(s.overage || {}) }, defaultPlan: normPlan(s.defaultPlan) || DEFAULTS.defaultPlan, early: { ...DEFAULTS.early, ...(s.early || {}) } };
+  return { ...DEFAULTS, ...s, prices, features, minutes, overage: { ...DEFAULTS.overage, ...(s.overage || {}) }, numbers: { ...DEFAULTS.numbers, ...(s.numbers || {}) }, defaultPlan: normPlan(s.defaultPlan) || DEFAULTS.defaultPlan, early: { ...DEFAULTS.early, ...(s.early || {}) } };
 }
 async function saveSettings(patch) { const cur = (await kv().get("billing", { type: "json" })) || {}; const next = { ...cur, ...patch }; await kv().setJSON("billing", next); return next; }
 async function secretStore() { return (await kv().get("stripe", { type: "json" })) || {}; }
@@ -154,14 +154,15 @@ function form(obj, pre = "", out = new URLSearchParams()) {
   }
   return out;
 }
-async function stripe(path, { method = "GET", body, query } = {}) {
+// e.http is Stripe's own status (402 = the card was declined) and e.stripeCode its error code
+export async function stripe(path, { method = "GET", body, query } = {}) {
   const key = env("STRIPE_SECRET_KEY");
   if (!key) { const e = new Error("Billing isn't connected yet. Your admin adds STRIPE_SECRET_KEY in Cloudflare."); e.status = 503; throw e; }
   let url = "https://api.stripe.com/v1/" + path;
   if (query) url += "?" + form(query).toString();
   const r = await fetch(url, { method, headers: { authorization: "Bearer " + key, ...(body ? { "content-type": "application/x-www-form-urlencoded" } : {}) }, body: body ? form(body).toString() : undefined });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) { const e = new Error(j.error?.message || "Stripe error"); e.status = 502; throw e; }
+  if (!r.ok) { const e = new Error(j.error?.message || "Stripe error"); e.status = 502; e.http = r.status; e.stripeCode = j.error?.decline_code || j.error?.code || ""; throw e; }
   return j;
 }
 // One monthly price per plan, found by lookup key; a new price is made when the amount changes.
@@ -197,8 +198,8 @@ async function minutesPriceFor(plan, settings) {
   else body.unit_amount_decimal = rate;
   return (await stripe("prices", { method: "POST", body })).id;
 }
-const site = () => (env("HP_PUBLIC_URL") || globalThis.__ORIGIN || "").replace(/\/$/, "");
-async function ensureWebhook() {
+export const site = () => (env("HP_PUBLIC_URL") || globalThis.__ORIGIN || "").replace(/\/$/, "");
+export async function ensureWebhook() {
   const s = await secretStore();
   if (s.webhookSecret && s.webhookId) return s;
   const url = site() + "/api/billing/webhook";
@@ -220,6 +221,7 @@ const planItem = (sub) => (sub?.items?.data || []).find((i) => i.price?.recurrin
 const minutesItem = (sub) => (sub?.items?.data || []).find((i) => i.price?.recurring?.usage_type === "metered" || i.price?.metadata?.hp_kind === "minutes");
 const planOf = (sub) => normPlan(planItem(sub)?.price?.metadata?.hp_plan || (planItem(sub)?.price?.lookup_key || "").replace(/^hp_|_monthly$/g, "") || sub?.metadata?.hp_plan);
 async function applySub(sub, userId) {
+  if (sub?.metadata?.hp_kind === "number") return (await import("./numberpay.mjs")).numberSubChanged(sub); // a phone number's own subscription, not the plan
   const uid = userId || sub.metadata?.hp_user || (await D1().prepare("SELECT user_id FROM members WHERE stripe_customer=?1").bind(sub.customer).first())?.user_id;
   if (!uid) return;
   const plan = planOf(sub);
@@ -297,7 +299,8 @@ export async function billingRoute(req, action, user) {
       const uid = o.client_reference_id || o.metadata?.hp_user;
       if (uid) await D1().prepare("UPDATE members SET stripe_customer=?2 WHERE user_id=?1").bind(uid, o.customer).run();
       await applySub(await stripe("subscriptions/" + o.subscription), uid);
-    } else if (ev.type.startsWith("customer.subscription.")) await applySub(o);
+    } else if (ev.type === "checkout.session.completed" && o.mode === "setup") await (await import("./numberpay.mjs")).finishCardSetup(o);
+    else if (ev.type.startsWith("customer.subscription.")) await applySub(o);
     else if (ev.type === "invoice.payment_failed" && o.subscription) await applySub(await stripe("subscriptions/" + o.subscription));
     return json({ received: true });
   }
@@ -307,8 +310,10 @@ export async function billingRoute(req, action, user) {
   if (!m) { await addMember(user.id, { plan: settings.defaultPlan }); m = await member(user.id); }
   if (action === "status") {
     return json({ plan: normPlan(m.plan), status: m.status, comp: !!m.comp, periodEnd: m.period_end, required: settings.required, trialDays: settings.trialDays, prices: settings.prices,
-      connected: !!env("STRIPE_SECRET_KEY"), hasCustomer: !!m.stripe_customer, subscribed: !!m.stripe_sub && ACTIVE.has(m.status), access: accessFor(m, settings, user.owner), ...catalog(settings), minutes: await minutesInfo(user, m, settings) });
+      connected: !!env("STRIPE_SECRET_KEY"), hasCustomer: !!m.stripe_customer, subscribed: !!m.stripe_sub && ACTIVE.has(m.status), access: accessFor(m, settings, user.owner), ...catalog(settings), minutes: await minutesInfo(user, m, settings),
+      card: await (await import("./numberpay.mjs")).cardOf(user.id), numbers: settings.numbers });
   }
+  if (action === "card") return (await import("./numberpay.mjs")).cardRoute(req, user, m);
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   const b = await req.json().catch(() => ({}));
   if (action === "checkout" || action === "change") {
@@ -341,7 +346,7 @@ export async function billingRoute(req, action, user) {
     return json({ url: s.url });
   }
   if (action === "sync") { // after checkout, don't wait on the webhook
-    if (m.stripe_customer) { const subs = (await stripe("subscriptions", { query: { customer: m.stripe_customer, status: "all", limit: 1 } })).data || []; if (subs[0]) await applySub(subs[0], user.id); }
+    if (m.stripe_customer) { const subs = ((await stripe("subscriptions", { query: { customer: m.stripe_customer, status: "all", limit: 20 } })).data || []).filter((x) => x.metadata?.hp_kind !== "number"); if (subs[0]) await applySub(subs[0], user.id); }
     const m2 = await member(user.id);
     return json({ status: m2.status, plan: m2.plan, access: accessFor(m2, settings, user.owner) });
   }
@@ -410,6 +415,7 @@ export async function teamRoute(req, action, user) {
         if (b.overage.on && !env("STRIPE_SECRET_KEY")) return json({ error: "Connect Stripe first to bill extra minutes." }, 400);
         patch.overage = { on: !!b.overage.on, rate: Math.min(5, Math.max(0.001, +b.overage.rate || DEFAULTS.overage.rate)) };
       }
+      if (b.numbers) { const cur = (await billingSettings()).numbers; patch.numbers = { charge: b.numbers.charge === undefined ? cur.charge : !!b.numbers.charge, price: b.numbers.price === undefined ? cur.price : Math.round(Math.min(100, Math.max(0.5, +b.numbers.price || DEFAULTS.numbers.price)) * 100) / 100 }; }
       if (b.early) { const cur = (await billingSettings()).early; patch.early = { on: b.early.on === undefined ? cur.on : !!b.early.on, ends: b.early.ends === undefined ? cur.ends : b.early.ends ? Math.max(0, +new Date(b.early.ends)) || null : null }; }
       const before = await billingSettings();
       await saveSettings(patch);

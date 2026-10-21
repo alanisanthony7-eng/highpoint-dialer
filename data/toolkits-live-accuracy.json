@@ -1,0 +1,370 @@
+{
+  "pulled": 2862,
+  "namedQuotes": 12310,
+  "garbled": 34561,
+  "gi": 1340,
+  "unmapped": 1022,
+  "hpNull": 0,
+  "unmappedNames": {
+    "TruStage (Whole Life - Final Expense - Level) | Whole Life / Final Expense - Level": 963,
+    "American Home Life (Patriot Series) | Patriot Series Standard": 22,
+    "CVS (Aetna Accendo) | Accendo Standard": 22,
+    "CVS (Aetna Accendo) | Accendo Preferred": 5,
+    "American Home Life (Patriot Series) | Patriot Series Preferred": 5,
+    "Aetna (Protection Series) | Protection Series Preferred": 4,
+    "Transamerica (Express) | Express Select": 1
+  },
+  "faces": {
+    "5000": 200,
+    "10000": 200,
+    "15000": 200,
+    "20000": 200,
+    "25000": 200,
+    "30000": 200,
+    "35000": 200,
+    "40000": 200,
+    "45000": 200,
+    "50000": 200,
+    "55000": 200,
+    "60000": 200,
+    "65000": 200,
+    "70000": 200,
+    "75000": 62
+  },
+  "compared": 9948,
+  "overall": {
+    "n": 9948,
+    "exact": 1735,
+    "exactPct": 0.17440691596300764,
+    "mean": 12.834063128267001,
+    "median": 2.450000000000003
+  },
+  "noGs": {
+    "n": 9045,
+    "exact": 1735,
+    "exactPct": 0.19181868435599778,
+    "mean": 12.45076506357104,
+    "median": 1.7600000000000051
+  },
+  "carrierRows": [
+    {
+      "k": "Transamerica",
+      "n": 1352,
+      "exact": 1352,
+      "exactPct": 1,
+      "mean": 0.0005251479289940099,
+      "median": 0,
+      "how": "Carrier rate chart",
+      "tenNs": {
+        "n": 184,
+        "exact": 184,
+        "exactPct": 1,
+        "mean": 0.00043478260869583596,
+        "median": 0
+      }
+    },
+    {
+      "k": "Corebridge",
+      "n": 520,
+      "exact": 49,
+      "exactPct": 0.09423076923076923,
+      "mean": 1.5844038461538452,
+      "median": 0.8299999999999983,
+      "how": "Market-checked curve",
+      "tenNs": {
+        "n": 62,
+        "exact": 10,
+        "exactPct": 0.16129032258064516,
+        "mean": 0.4967741935483873,
+        "median": 0.3999999999999986
+      }
+    },
+    {
+      "k": "Fidelity Life",
+      "n": 723,
+      "exact": 64,
+      "exactPct": 0.08852005532503458,
+      "mean": 3.9283817427385883,
+      "median": 1.480000000000004,
+      "how": "Market-checked curve",
+      "tenNs": {
+        "n": 72,
+        "exact": 13,
+        "exactPct": 0.18055555555555555,
+        "mean": 1.790416666666668,
+        "median": 0.22999999999999687
+      }
+    },
+    {
+      "k": "American Amicable",
+      "n": 200,
+      "exact": 0,
+      "exactPct": 0,
+      "mean": 9.694450000000002,
+      "median": 9.060000000000002,
+      "how": "Generic FE curve (no Senior Choice chart loaded)",
+      "tenNs": {
+        "n": 20,
+        "exact": 0,
+        "exactPct": 0,
+        "mean": 4.254500000000001,
+        "median": 4.399999999999999
+      }
+    },
+    {
+      "k": "Aetna",
+      "n": 919,
+      "exact": 90,
+      "exactPct": 0.09793253536452666,
+      "mean": 10.153166485310113,
+      "median": 1.759999999999998,
+      "how": "Market-checked curve",
+      "tenNs": {
+        "n": 90,
+        "exact": 18,
+        "exactPct": 0.2,
+        "mean": 1.0784444444444454,
+        "median": 0.269999999999996
+      }
+    },
+    {
+      "k": "Foresters",
+      "n": 1219,
+      "exact": 18,
+      "exactPct": 0.014766201804757998,
+      "mean": 10.301927809680079,
+      "median": 4.5800000000000125,
+      "how": "Market-checked curve",
+      "tenNs": {
+        "n": 144,
+        "exact": 16,
+        "exactPct": 0.1111111111111111,
+        "mean": 6.185416666666667,
+        "median": 2.8699999999999903
+      }
+    },
+    {
+      "k": "AHL GuideStar",
+      "n": 903,
+      "exact": 0,
+      "exactPct": 0,
+      "mean": 16.673410852713168,
+      "median": 10.740000000000002,
+      "how": "Priced as Patriot (wrong product)",
+      "tenNs": {
+        "n": 92,
+        "exact": 0,
+        "exactPct": 0,
+        "mean": 12.987717391304352,
+        "median": 9.530000000000005
+      }
+    },
+    {
+      "k": "Aetna Accendo",
+      "n": 2059,
+      "exact": 134,
+      "exactPct": 0.06508013598834386,
+      "mean": 19.084312773190874,
+      "median": 2.6400000000000006,
+      "how": "Market-checked curve",
+      "tenNs": {
+        "n": 200,
+        "exact": 28,
+        "exactPct": 0.14,
+        "mean": 7.629850000000001,
+        "median": 0.5500000000000007
+      }
+    },
+    {
+      "k": "AHL Patriot",
+      "n": 2053,
+      "exact": 28,
+      "exactPct": 0.013638577691183634,
+      "mean": 22.323453482708242,
+      "median": 5.239999999999952,
+      "how": "Market-checked curve",
+      "tenNs": {
+        "n": 200,
+        "exact": 19,
+        "exactPct": 0.095,
+        "mean": 8.393749999999999,
+        "median": 1.0700000000000074
+      }
+    }
+  ],
+  "faceRows": [
+    {
+      "f": 5000,
+      "n": 1699,
+      "exact": 262,
+      "exactPct": 0.15420835785756326,
+      "mean": 5.540070629782223,
+      "median": 0.8200000000000003
+    },
+    {
+      "f": 10000,
+      "n": 1831,
+      "exact": 382,
+      "exactPct": 0.20862916439104315,
+      "mean": 10.383358820316763,
+      "median": 1.5
+    },
+    {
+      "f": 15000,
+      "n": 1807,
+      "exact": 343,
+      "exactPct": 0.1898173768677366,
+      "mean": 14.257072495849465,
+      "median": 2.1700000000000017
+    },
+    {
+      "f": 20000,
+      "n": 1774,
+      "exact": 342,
+      "exactPct": 0.1927846674182638,
+      "mean": 16.291240135287474,
+      "median": 2.719999999999999
+    },
+    {
+      "f": 25000,
+      "n": 1629,
+      "exact": 334,
+      "exactPct": 0.20503376304481277,
+      "mean": 16.808268876611418,
+      "median": 2.930000000000007
+    },
+    {
+      "f": 30000,
+      "n": 305,
+      "exact": 72,
+      "exactPct": 0.2360655737704918,
+      "mean": 7.045245901639342,
+      "median": 2.6400000000000006
+    }
+  ],
+  "slice": {
+    "tenNs": {
+      "n": 972,
+      "exact": 288,
+      "exactPct": 0.2962962962962963,
+      "mean": 4.565185185185184,
+      "median": 0.3300000000000054
+    },
+    "tenSm": {
+      "n": 859,
+      "exact": 94,
+      "exactPct": 0.10942956926658906,
+      "mean": 16.966903376018625,
+      "median": 4.090000000000003
+    },
+    "otherNs": {
+      "n": 3824,
+      "exact": 961,
+      "exactPct": 0.2513075313807531,
+      "mean": 6.35363755230125,
+      "median": 0.4299999999999997
+    },
+    "otherSm": {
+      "n": 3390,
+      "exact": 392,
+      "exactPct": 0.11563421828908554,
+      "mean": 20.445112094395277,
+      "median": 6
+    },
+    "age4064": {
+      "n": 4700,
+      "exact": 938,
+      "exactPct": 0.19957446808510637,
+      "mean": 3.768076595744679,
+      "median": 0.9799999999999969
+    },
+    "age6579": {
+      "n": 2970,
+      "exact": 563,
+      "exactPct": 0.18956228956228957,
+      "mean": 10.101340067340075,
+      "median": 1.9799999999999969
+    },
+    "age80": {
+      "n": 1375,
+      "exact": 234,
+      "exactPct": 0.17018181818181818,
+      "mean": 47.20453090909092,
+      "median": 20.120000000000005
+    }
+  },
+  "worst": [
+    {
+      "case": "89M tob $15k",
+      "carrier": "AHL Patriot",
+      "plan": "Patriot Series Preferred",
+      "tk": 856.28,
+      "hp": 489.42,
+      "d": -366.85999999999996,
+      "pct": -42.84346241883495
+    },
+    {
+      "case": "89F tob $25k",
+      "carrier": "Aetna Accendo",
+      "plan": "Accendo Preferred",
+      "tk": 953.97,
+      "hp": 595.37,
+      "d": -358.6,
+      "pct": -37.590280616790885
+    },
+    {
+      "case": "87M tob $20k",
+      "carrier": "AHL Patriot",
+      "plan": "Patriot Series Preferred",
+      "tk": 911.98,
+      "hp": 577.08,
+      "d": -334.9,
+      "pct": -36.72229654159082
+    },
+    {
+      "case": "87M tob $15k",
+      "carrier": "AHL Patriot",
+      "plan": "Patriot Series Standard",
+      "tk": 976.24,
+      "hp": 642.98,
+      "d": -333.26,
+      "pct": -34.13709743505695
+    },
+    {
+      "case": "89M tob $15k",
+      "carrier": "Aetna Accendo",
+      "plan": "Accendo Preferred",
+      "tk": 856.63,
+      "hp": 530.22,
+      "d": -326.40999999999997,
+      "pct": -38.10396553938106
+    },
+    {
+      "case": "86M tob $25k",
+      "carrier": "AHL Patriot",
+      "plan": "Patriot Series Preferred",
+      "tk": 996.28,
+      "hp": 678.14,
+      "d": -318.14,
+      "pct": -31.932789978720844
+    },
+    {
+      "case": "89M tob $10k",
+      "carrier": "AHL Patriot",
+      "plan": "Patriot Series Standard",
+      "tk": 805.53,
+      "hp": 490.35,
+      "d": -315.17999999999995,
+      "pct": -39.127034374883614
+    },
+    {
+      "case": "88M tob $15k",
+      "carrier": "AHL Patriot",
+      "plan": "Patriot Series Preferred",
+      "tk": 770.53,
+      "hp": 460.64,
+      "d": -309.89,
+      "pct": -40.21777218278328
+    }
+  ]
+}

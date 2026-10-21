@@ -86,6 +86,8 @@
     buildHome(); renderPhone();
     if (S.ready) startDevice();
     refreshNumbers(); loadGreetings(); inboxBadge();
+    const cq = new URLSearchParams(location.search);
+    if (cq.get("card") && cq.get("next") === "numbers") cardBack(cq.get("card"));
     setInterval(() => { if (!document.hidden) inboxBadge(); }, 60000);
     dock();
   }
@@ -832,43 +834,60 @@
   async function savePrefs(p) { Object.assign(S.prefs, p); lsSet("hpd.prefs", S.prefs); try { await api("/setup", { method: "PATCH", body: p }); } catch {} }
 
   /* ================= numbers tab ================= */
-  async function refreshNumbers() { try { const r = await api("/numbers"); S.numbers = r.numbers; S.agents = r.agents || {}; if (!S.call && !S.power) renderPhone(); } catch {} }
+  async function refreshNumbers() { try { const r = await api("/numbers"); S.numbers = r.numbers; S.agents = r.agents || {}; S.buy = r.buy || {}; if (!S.call && !S.power) renderPhone(); } catch {} }
+  const usd = (n) => "$" + (+n || 0).toFixed(2);
+  const numberCost = () => (S.buy?.charged ? `${usd(S.buy.price)} a month, billed to your card` : "Telnyx charges about $1 a month");
+  const cardText = (c) => (c ? `${esc(c.brand)} •••• ${esc(c.last4)}${c.exp ? ` (exp ${esc(c.exp)})` : ""}` : "");
+  // Stripe's card page (Checkout in setup mode); the agent comes back to the Numbers tab, and to the number they picked
+  async function addCard(btn, pick) {
+    if (btn) { btn.disabled = true; btn.textContent = "Opening secure card page…"; }
+    try {
+      if (pick) sessionStorage.setItem("hpd.buyAfterCard", JSON.stringify(pick)); else sessionStorage.removeItem("hpd.buyAfterCard");
+      const r = await fetch("/api/billing/card", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ next: "numbers" }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.url) throw new Error(j.error || "Couldn't open the card page. Try again.");
+      location.href = j.url;
+    } catch (e) { toast(e.message); if (btn) { btn.disabled = false; btn.textContent = pick ? "Add a card" : S.buy?.card ? "Replace card" : "Add a card"; } }
+  }
+  // back from Stripe's card page: open Numbers and pick up the number they were buying
+  function cardBack(state) {
+    history.replaceState(null, "", location.pathname + location.hash);
+    let pick = null; try { pick = JSON.parse(sessionStorage.getItem("hpd.buyAfterCard") || "null"); } catch {}
+    sessionStorage.removeItem("hpd.buyAfterCard");
+    S.resumeBuy = state === "saved" ? pick : null;
+    window.hpDesk?.go?.("dialer"); openTab("numbers");
+    toast(state === "saved" ? `Card saved.${pick ? ` Confirm to buy ${fmt(pick.e164)}.` : ""}` : "No card was added.");
+  }
   async function renderNumbers() {
     const el = $("#hpdNumbers");
     el.innerHTML = `<div class="panel">Loading numbers…</div>`;
     await refreshNumbers();
     const mine = S.numbers.filter((n) => n.mine).length;
-    const T = S.trust || {};
+    const B = S.buy || {}, canBuy = S.me?.admin || B.allowed !== false;
     const agentOpts = (sel) => `<option value="">Team pool</option>` + Object.entries(S.agents || {}).map(([id, n]) => `<option value="${esc(id)}" ${sel === id ? "selected" : ""}>${esc(n)}</option>`).join("");
+    const priceLine = B.charged ? `Each number is <b>${usd(B.price)} a month</b>, billed to your card. You pay the first month when you buy it; it renews monthly until you release it.` : S.me?.admin ? "About $1.00/month each through Telnyx, on the team's account." : "About $1.00/month each through Telnyx, paid by your team.";
     el.innerHTML = `
       <div class="hpd-grid2">
         <div class="panel stack" style="gap:12px">
           <h2>Get a local number</h2>
-          <p class="muted" style="margin:0;font-size:13px">Pick numbers in the area codes you call most. Leads pick up local numbers far more often. About $${S.provider === "telnyx" ? "1.00" : "1.15"}/month each through ${S.provider === "telnyx" ? "Telnyx" : "Twilio"}.</p>
+          <p class="muted" style="margin:0;font-size:13px">Pick numbers in the area codes you call most. Leads pick up local numbers far more often. ${priceLine}</p>
+          ${!canBuy ? `<div class="hpd-banner warn">Your admin buys numbers for the team. Ask them for one in the area codes you call.</div>` : `
+          ${B.charged ? `<div class="hpd-flex" id="hpdCardRow" style="justify-content:space-between"><span class="hpd-sm">${B.card ? `Card on file: <b>${cardText(B.card)}</b>` : "No card on file yet. You'll add one before your first number."}</span><button class="btn" id="hpdCard" type="button">${B.card ? "Replace card" : "Add a card"}</button></div>` : ""}
           <div class="hpd-flex"><input id="hpdAc" inputmode="numeric" maxlength="3" placeholder="Area code, e.g. 305" style="width:190px"><input id="hpdSt" maxlength="2" placeholder="State" style="width:100px"><input id="hpdHas" inputmode="numeric" maxlength="7" placeholder="Contains (optional)" style="width:160px"><button class="btn primary" id="hpdFind" type="button">Search</button></div>
           ${S.me?.admin ? `<label class="field" style="max-width:280px"><span>Assign new numbers to</span><select id="hpdOwner"><option value="__me">Me</option>${agentOpts("")}</select></label>` : `<span class="hpd-sm">You have ${mine} of ${S.settings.agentMaxNumbers ?? 5} numbers.</span>`}
-          <div class="hpd-results" id="hpdRes"></div>
+          <div id="hpdBuyBox" hidden></div>
+          <div class="hpd-results" id="hpdRes"></div>`}
         </div>
-        ${S.provider === "telnyx" ? telnyxTrustCard() : `<div class="panel stack" style="gap:10px">
-          <h2>Keep numbers off “Spam Likely”</h2>
-          <ul class="hpd-check">
-            <li class="${T.profile ? "done" : ""}"><span><b>Verify your business</b> in Twilio Trust Hub (Customer Profile). Unlocks <b>A-level STIR/SHAKEN</b>, the strongest “this caller is real” signal carriers get.  <a href="https://console.twilio.com/us1/account/trust-hub/customer-profiles" target="_blank" rel="noopener">Open Trust Hub</a></span></li>
-            <li class="${T.shaken ? "done" : ""}"><span><b>Add every number to your SHAKEN/STIR Trust Product</b> so they're all signed A.</span></li>
-            <li class="${T.cnam ? "done" : ""}"><span><b>Register caller name (CNAM)</b> so phones show “HIGHPOINT FIN” instead of “Unknown”.</span></li>
-            <li class="${T.voiceIntegrity ? "done" : ""}"><span><b>Turn on Voice Integrity</b> in Trust Hub. Twilio registers your numbers with T-Mobile, AT&amp;T and Verizon's spam engines.</span></li>
-            <li class="${T.fcr ? "done" : ""}"><span><b>Register numbers free at <a href="https://www.freecallerregistry.com" target="_blank" rel="noopener">freecallerregistry.com</a></b> (Hiya, First Orion, TNS).</span></li>
-            <li class="done"><span><b>Built in:</b> daily caps per number, 14-day warm-up for new numbers, local presence rotation, calling-hour and per-lead attempt limits, opt-out on press 9.</span></li>
-          </ul>
-          ${S.me?.admin ? `<div class="hpd-flex hpd-sm">Mark done: ${["profile", "shaken", "cnam", "voiceIntegrity", "fcr"].map((k) => `<label style="display:inline-flex;gap:4px;align-items:center"><input type="checkbox" data-trust="${k}" ${T[k] ? "checked" : ""}>${{ profile: "Profile", shaken: "SHAKEN", cnam: "CNAM", voiceIntegrity: "Voice Integrity", fcr: "Registry" }[k]}</label>`).join("")}</div>` : ""}
-        </div>`}
+        ${telnyxTrustCard()}
       </div>
       <div class="panel stack" style="gap:10px">
-        <div class="row" style="justify-content:space-between"><h2>${S.me?.admin ? "All numbers" : "Your numbers"}</h2>${S.me?.admin ? `<button class="btn" id="hpdImport" type="button">Add numbers already in ${S.provider === "telnyx" ? "Telnyx" : "Twilio"}</button>` : ""}</div>
-        <div class="tablewrap" style="overflow-x:auto"><table class="hpd-tbl"><thead><tr><th>Number</th><th>Health</th><th>Today</th><th class="hide-sm">7-day answer rate</th><th>Owner</th><th></th></tr></thead><tbody>
+        <div class="row hpd-ptitle" style="justify-content:space-between"><h2>${S.me?.admin ? "All numbers" : "Your numbers"}</h2>${S.me?.admin ? `<button class="btn" id="hpdImport" type="button">Add numbers already in Telnyx</button>` : ""}</div>
+        <div class="tablewrap hpd-xscroll"><table class="hpd-tbl"><thead><tr><th>Number</th><th>Health</th><th>Today</th><th class="hide-sm">7-day answer rate</th><th>Owner</th><th></th></tr></thead><tbody>
         ${S.numbers.map((n) => {
           const h = n.health || {}; const status = n.paused ? "paused" : h.status;
-          return `<tr><td><b class="num">${esc(fmt(n.e164))}</b><br><span class="hpd-sm">${esc(n.state || "")}${n.label ? " · " + esc(n.label) : ""}</span></td>
-          <td><span class="hpd-h ${status}" title="${esc((h.why || []).join("; "))}">${{ healthy: "Healthy", watch: "Watch", flagged: "Flagged", paused: "Paused" }[status] || "—"}</span>${h.why?.length ? `<br><span class="hpd-sm">${esc(h.why[0])}</span>` : ""}${h.reputation?.risk === "low" ? `<br><span class="hpd-sm">carriers rate it low risk</span>` : ""}</td>
+          const unpaid = n.payPaused || /past_due|unpaid/.test(n.billing?.status || "");
+          return `<tr><td><b class="num">${esc(fmt(n.e164))}</b><br><span class="hpd-sm">${esc(n.state || "")}${n.label ? " · " + esc(n.label) : ""}${n.billing ? ` · ${usd(n.billing.price)}/mo` : ""}</span></td>
+          <td><span class="hpd-h ${status}" title="${esc((h.why || []).join("; "))}">${{ healthy: "Healthy", watch: "Watch", flagged: "Flagged", paused: "Paused" }[status] || "—"}</span>${unpaid ? `<br><span class="hpd-sm" style="color:var(--hp-bad)">Monthly payment failed. Replace your card to turn it back on.</span>` : h.why?.length ? `<br><span class="hpd-sm">${esc(h.why[0])}</span>` : ""}${h.reputation?.risk === "low" ? `<br><span class="hpd-sm">carriers rate it low risk</span>` : ""}</td>
           <td><span class="num">${h.todayDials || 0}</span><span class="hpd-sm"> / ${h.cap || "—"}</span><div class="hpd-meter"><i style="width:${Math.min(100, ((h.todayDials || 0) / (h.cap || 1)) * 100)}%;${(h.todayDials || 0) >= (h.cap || 1) ? "background:var(--hp-warn)" : ""}"></i></div></td>
           <td class="hide-sm num">${h.week?.dials ? pct(h.week.answered, h.week.dials) + "%" : "—"}<br><span class="hpd-sm">${h.week?.dials || 0} dials</span></td>
           <td>${S.me?.admin ? `<select data-own="${esc(n.e164)}" style="width:auto">${agentOpts(n.owner)}</select>` : esc(n.mine ? "You" : n.ownerName)}</td>
@@ -881,15 +900,48 @@
         }).join("") || `<tr><td colspan="6" class="muted">No numbers yet. Search an area code above to buy your first one.</td></tr>`}
         </tbody></table></div>
       </div>`;
+    // agents who pay: show exactly what they'll be charged, then charge and order
+    const buyBox = (pick, msg = "", gone = false) => {
+      const box = $("#hpdBuyBox"); if (!box) return;
+      const B2 = S.buy || {}, where = [pick.city, pick.state].filter(Boolean).join(", ");
+      box.hidden = false;
+      box.innerHTML = `<div class="hpd-banner stack" style="gap:8px" role="group" aria-label="Confirm number purchase">
+        <div><b style="font-size:15px">${esc(fmt(pick.e164))}</b>${where ? ` <span class="hpd-sm">${esc(where)}</span>` : ""}</div>
+        <div>You pay <b>${usd(B2.price)} today</b>, then <b>${usd(B2.price)} every month</b> until you release it. Releasing it stops the charge.</div>
+        <div class="hpd-sm">It's your number: calls back to it ring you, and it's your caller ID when you call leads in ${esc(d10(pick.e164).slice(0, 3))}${pick.state ? ` and around ${esc(pick.state)}` : ""}.</div>
+        ${B2.card ? `<div>Charged to <b>${cardText(B2.card)}</b> · <button class="btn" type="button" id="hpdBuyCard" style="padding:2px 10px">Use another card</button></div>` : `<div><b>Add a card to buy this number.</b> You'll enter it on Stripe's secure page and come right back here.</div>`}
+        ${msg ? `<div id="hpdBuyMsg" role="alert" style="color:var(--hp-bad)">${esc(msg)}</div>` : ""}
+        <div class="hpd-flex">${gone ? "" : B2.card ? `<button class="btn primary" type="button" id="hpdBuyGo">Buy for ${usd(B2.price)}/month</button>` : `<button class="btn primary" type="button" id="hpdBuyAdd">Add a card</button>`}<button class="btn" type="button" id="hpdBuyX">${gone ? "Close" : "Cancel"}</button></div></div>`;
+      $("#hpdBuyX", box).onclick = () => { box.hidden = true; box.innerHTML = ""; };
+      $("#hpdBuyAdd", box)?.addEventListener("click", (e) => addCard(e.currentTarget, pick));
+      $("#hpdBuyCard", box)?.addEventListener("click", (e) => addCard(e.currentTarget, pick));
+      const go = $("#hpdBuyGo", box);
+      if (go) go.onclick = async () => {
+        go.disabled = true; go.textContent = "Charging your card and getting the number…"; $("#hpdBuyX", box).disabled = true;
+        try {
+          const r = await api("/numbers/buy", { method: "POST", body: { phoneNumber: pick.e164, price: B2.price } });
+          toast(`${fmt(pick.e164)} is yours. ${usd(r.charged)} charged to ${B2.card.brand} •••• ${B2.card.last4}.`); renderNumbers();
+        } catch (e) {
+          if (e.code === "card_needed" || e.code === "price_changed") { await refreshNumbers(); return buyBox(pick, e.code === "price_changed" ? e.message : ""); }
+          if (e.code === "order_failed") $(`[data-buy="${CSS.escape(pick.e164)}"]`, el)?.remove();
+          buyBox(pick, e.message, e.code === "order_failed");
+        }
+      };
+      box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    };
+    const found = new Map();
     const search = async () => {
       const ac = $("#hpdAc").value.trim(), st = $("#hpdSt").value.trim(), has = $("#hpdHas").value.trim();
       if (!ac && !st) { toast("Enter an area code or a state"); return; }
       $("#hpdRes").innerHTML = `<span class="hpd-sm">Searching…</span>`;
       try {
         const r = await api(`/numbers/search?areaCode=${encodeURIComponent(ac)}&state=${encodeURIComponent(st)}&contains=${encodeURIComponent(has)}`);
+        const cost = S.buy?.charged ? ` · ${usd(S.buy.price)}/mo` : "";
+        r.results.forEach((n) => found.set(n.e164, n));
         $("#hpdRes").innerHTML = (r.fallback ? `<span class="hpd-sm" style="grid-column:1/-1">${esc(ac)} is sold out right now. Here are numbers elsewhere in the same state.</span>` : "") +
-          (r.results.map((n) => `<button type="button" data-buy="${esc(n.e164)}"><b>${esc(fmt(n.e164))}</b><span>${esc([n.city, n.state].filter(Boolean).join(", "))}</span><span style="color:var(--hp-b)">Buy</span></button>`).join("") || `<span class="hpd-sm">No numbers found. Try a nearby area code.</span>`);
+          (r.results.map((n) => `<button type="button" data-buy="${esc(n.e164)}"><b>${esc(fmt(n.e164))}</b><span>${esc([n.city, n.state].filter(Boolean).join(", "))}</span><span style="color:var(--hp-b)">Buy${cost}</span></button>`).join("") || `<span class="hpd-sm" style="grid-column:1/-1">No numbers available ${ac ? `in ${esc(ac)}` : `in ${esc(st.toUpperCase())}`}${has ? ` containing ${esc(has)}` : ""} right now. Try a nearby area code or search by state.</span>`);
         $$("[data-buy]", el).forEach((b) => (b.onclick = async () => {
+          if (S.buy?.charged) { const n = found.get(b.dataset.buy) || { e164: b.dataset.buy }; buyBox({ e164: n.e164, city: n.city, state: n.state }); return; }
           if (b.dataset.armed !== "1") { b.dataset.armed = "1"; $("span:last-child", b).textContent = "Tap again to buy"; return; }
           b.disabled = true; $("span:last-child", b).textContent = "Buying…";
           try {
@@ -900,15 +952,18 @@
         }));
       } catch (e) { $("#hpdRes").innerHTML = `<span class="hpd-sm">${esc(e.message)}</span>`; }
     };
-    $("#hpdFind").onclick = search; [$("#hpdAc"), $("#hpdSt"), $("#hpdHas")].forEach((i) => i.addEventListener("keydown", (e) => e.key === "Enter" && search()));
+    if ($("#hpdFind")) { $("#hpdFind").onclick = search; [$("#hpdAc"), $("#hpdSt"), $("#hpdHas")].forEach((i) => i.addEventListener("keydown", (e) => e.key === "Enter" && search())); }
+    $("#hpdCard", el)?.addEventListener("click", (e) => addCard(e.currentTarget, null));
+    if (S.resumeBuy && canBuy) { const p = S.resumeBuy; S.resumeBuy = null; if (S.buy?.charged) buyBox(p, S.buy.card ? "" : "Your card didn't save. Add it again to buy this number."); }
     const upd = async (body, msg) => { try { await api("/numbers/update", { method: "POST", body }); if (msg) toast(msg); renderNumbers(); } catch (e) { toast(e.message); } };
     $$("[data-pause]", el).forEach((b) => (b.onclick = () => upd({ e164: b.dataset.pause, paused: b.textContent === "Pause" })));
     $$("[data-spam]", el).forEach((b) => (b.onclick = () => upd({ e164: b.dataset.spam, spamReport: true }, "Thanks. That number is paused and rotated out until an admin reviews it.")));
     $$("[data-clear]", el).forEach((b) => (b.onclick = () => upd({ e164: b.dataset.clear, clearReports: true })));
     $$("[data-own]", el).forEach((s) => (s.onchange = () => upd({ e164: s.dataset.own, owner: s.value, shared: !s.value }, "Number reassigned")));
     $$("[data-rel]", el).forEach((b) => (b.onclick = async () => {
-      if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = "Release for good?"; return; }
-      try { await api("/numbers/release", { method: "POST", body: { e164: b.dataset.rel } }); toast("Number released"); renderNumbers(); } catch (e) { toast(e.message); }
+      const paid = !!S.numbers.find((x) => x.e164 === b.dataset.rel)?.billing;
+      if (b.dataset.armed !== "1") { b.dataset.armed = "1"; b.textContent = paid ? "Release and stop billing?" : "Release for good?"; return; }
+      try { const r = await api("/numbers/release", { method: "POST", body: { e164: b.dataset.rel } }); toast(r.billingStopped === false ? "Number released, but its monthly charge didn't stop. Ask your admin to cancel it in Stripe." : paid ? "Number released. Its monthly charge has stopped." : "Number released"); renderNumbers(); } catch (e) { toast(e.message); }
     }));
     $("#hpdImport")?.addEventListener("click", async () => { try { const r = await api("/numbers/import", { method: "POST", body: {} }); toast(`${r.added} number${r.added === 1 ? "" : "s"} added`); renderNumbers(); } catch (e) { toast(e.message); } });
     $("#hpdOpenTrust", el)?.addEventListener("click", () => openTab("trust"));
@@ -1297,7 +1352,7 @@
         ${f("hsAb", "Abandoned-call limit %", s.abandonCap, 'type="number" min="1" max="10" step="0.5"')}
         ${f("hsCap", "Daily dials per number", s.dailyCapPerNumber, 'type="number" min="10" max="300"')}
         ${f("hsAtt", "Max calls per lead per 24h", s.maxAttempts24h, 'type="number" min="1" max="10"')}
-        ${f("hsBuy", "Numbers an agent can buy", s.agentMaxNumbers, 'type="number" min="0" max="50"')}
+        ${f("hsBuy", "Numbers each agent can buy", s.agentMaxNumbers || 5, 'type="number" min="1" max="50"')}
         ${f("hsRamp", "Warm-up days for new numbers", s.rampDays, 'type="number" min="0" max="30"')}
       </div>
       ${c("hsRec", "Record calls (both sides)", s.record)}
@@ -2089,7 +2144,7 @@
     return { dialed, convo, talk };
   }
 
-  S.sound = { ding: 0.75, open: false, spk: "", mic: "", ringOn: true, ring: 0.6, ringSec: 25, autoNext: true, ...lsGet("hpd.sound", {}) };
+  S.sound = { ding: 0.75, dingKind: "classic", open: false, spk: "", mic: "", ringOn: true, ring: 0.6, ringSec: 25, autoNext: true, ...lsGet("hpd.sound", {}) };
   const saveSound = () => lsSet("hpd.sound", S.sound);
   // one shared audio context: its output follows the speaker you picked in Settings
   function ac() {
@@ -2100,10 +2155,36 @@
       return S.ac;
     } catch { return null; }
   }
-  function ding(force) {
+  // pick-up sounds. Each note: [frequency Hz, start s, length s, wave, loudness 0-1]; every note fades out smoothly.
+  const DINGS = {
+    classic: ["Classic", [[880, 0, .14, "sine", 1], [1320, .12, .14, "sine", 1]]],
+    chime: ["Chime", [[1568, 0, .9, "sine", 1], [2349, 0, .6, "sine", .35], [3136, 0, .35, "sine", .15]]],
+    bell: ["Bell", [[659, 0, 1.1, "sine", 1], [1318, 0, .8, "sine", .5], [1977, 0, .5, "triangle", .25], [2637, 0, .3, "sine", .12]]],
+    marimba: ["Marimba", [[523, 0, .28, "triangle", 1], [1046, 0, .12, "sine", .4], [659, .14, .28, "triangle", .9], [1318, .14, .12, "sine", .3]]],
+    coin: ["Coin", [[988, 0, .07, "square", .55], [1319, .07, .5, "square", .55]]],
+    doorbell: ["Doorbell", [[659, 0, .5, "sine", 1], [523, .38, .8, "sine", 1]]],
+    rise: ["Rising", [[523, 0, .12, "sine", .9], [659, .1, .12, "sine", .9], [784, .2, .12, "sine", .9], [1047, .3, .4, "sine", 1]]],
+    success: ["Success", [[523, 0, .5, "triangle", .8], [659, .09, .5, "triangle", .8], [784, .18, .6, "triangle", .9]]],
+    pop: ["Soft pop", [[420, 0, .09, "sine", 1], [640, .02, .08, "sine", .5]]],
+    bubble: ["Bubble", [[500, 0, .12, "sine", 1], [900, .06, .14, "sine", .9], [1300, .13, .12, "sine", .6]]],
+    sonar: ["Sonar", [[880, 0, 1.2, "sine", 1], [880, .35, 1, "sine", .35]]],
+    ping: ["Ping", [[1760, 0, .45, "sine", 1], [3520, 0, .2, "sine", .18]]],
+  };
+  const DING_NAMES = Object.entries(DINGS).map(([k, v]) => [k, v[0]]);
+  const dingKind = () => (DINGS[S.sound.dingKind] ? S.sound.dingKind : "classic");
+  function ding(force, kind) {
     if (!force && !S.sound.ding) return;
     const a = ac(); if (!a) return;
-    try { const g = a.createGain(); g.gain.value = 0.12 * S.sound.ding; g.connect(a.destination); [880, 1320].forEach((f, i) => { const o = a.createOscillator(); o.frequency.value = f; o.connect(g); o.start(a.currentTime + i * 0.12); o.stop(a.currentTime + i * 0.12 + 0.14); }); } catch {}
+    try {
+      const out = a.createGain(); out.gain.value = 0.16 * (S.sound.ding || 0.75); out.connect(a.destination);
+      const t0 = a.currentTime + 0.01;
+      for (const [f, at, len, type, vol] of DINGS[kind && DINGS[kind] ? kind : dingKind()][1]) {
+        const o = a.createOscillator(), g = a.createGain();
+        o.type = type; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t0 + at); g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t0 + at + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + len);
+        o.connect(g); g.connect(out); o.start(t0 + at); o.stop(t0 + at + len + 0.02);
+      }
+    } catch {}
   }
   /* the ringer: a phone ringback while your leads ring, a ring while someone calls you. Always visible too (tab title). */
   const RING = { kind: "", t: 0, base: null };
@@ -2246,6 +2327,7 @@
         <label><span>Microphone</span><select id="hphMic"><option value="">System default</option></select></label>
         <label><span>Ringer</span><input type="checkbox" id="hphRingOn" ${S.sound.ringOn ? "checked" : ""}> <input type="range" id="hphRing" min="0" max="1" step="0.05" value="${S.sound.ring}" aria-label="Ringer volume"><b class="num">${Math.round(S.sound.ring * 100)}%</b></label>
         <label><span>Pick-up ding</span><input type="range" id="hphDing" min="0" max="1" step="0.05" value="${S.sound.ding}"><b class="num">${Math.round(S.sound.ding * 100)}%</b></label>
+        <label><span>Ding sound</span><select id="hphDingK">${DING_NAMES.map(([k, n]) => `<option value="${k}" ${dingKind() === k ? "selected" : ""}>${n}</option>`).join("")}</select></label>
         <button type="button" class="btn" id="hphTest">Test ding</button>
       </div>
       ${(() => { const pm = usage?.plan; if (!pm || pm.included == null) return ""; const pct = pm.included ? Math.min(100, Math.round((pm.used / pm.included) * 100)) : 100, over = pm.used >= pm.included;
@@ -2300,6 +2382,7 @@
     $("#hphTest").onclick = () => ding(true);
     $("#hphRingOn").onchange = (e) => { S.sound.ringOn = e.target.checked; saveSound(); ringerChanged(); dock(); };
     $("#hphRing").oninput = (e) => { S.sound.ring = +e.target.value; e.target.nextElementSibling.textContent = Math.round(S.sound.ring * 100) + "%"; saveSound(); };
+    $("#hphDingK").onchange = (e) => { S.sound.dingKind = e.target.value; saveSound(); ding(true); };
     $("#hphDing").oninput = (e) => { S.sound.ding = +e.target.value; lsSet("hpd.sound", S.sound); e.target.nextElementSibling.textContent = Math.round(S.sound.ding * 100) + "%"; };
     fillDevices();
     $("#hphSrc").onchange = (e) => { setSrc(e.target.value); renderHome(); renderPhone(); };
@@ -2364,7 +2447,8 @@
       <h3>Sound</h3>
       ${row("Ringer", "Plays a ring while your leads ring and when someone calls you.", sw("dsRingOn", snd.ringOn) + `<button type="button" class="btn" id="dsRingTest">Test ring</button>`)}
       ${row("Ringer volume", "", rng("dsRingVol", snd.ring))}
-      ${row("Pick-up ding", "Plays when a lead answers.", rng("dsDing", snd.ding) + `<button type="button" class="btn" id="dsDingTest">Test</button>`)}
+      ${row("Pick-up sound", "The sound that plays when a lead answers. Pick one to hear it.", `<select id="dsDingK">${DING_NAMES.map(([k, n]) => `<option value="${k}" ${dingKind() === k ? "selected" : ""}>${n}</option>`).join("")}</select>`)}
+      ${row("Pick-up volume", "Set to 0 to turn the pick-up sound off.", rng("dsDing", snd.ding) + `<button type="button" class="btn" id="dsDingTest">Test</button>`)}
       ${row("Speaker (output)", "Where you hear leads, the ring and the ding.", `<select id="dsSpk"><option value="">System default</option></select><button type="button" class="btn" id="dsSpkTest">Test</button>`)}
       ${row("Microphone (input)", "Used for new calls and the call in progress.", `<select id="dsMic"><option value="">System default</option></select><button type="button" class="btn" id="dsMicTest">Test mic</button>`)}
       <div class="hds-meter" id="dsMeter" hidden><i></i></div>
@@ -2385,6 +2469,7 @@
     $("#dsRingTest", el).onclick = () => { const was = snd.ringOn; snd.ringOn = true; ringBurst("out"); snd.ringOn = was; };
     $("#dsDing", el).oninput = (e) => { snd.ding = +e.target.value; $("#dsDingO").textContent = Math.round(snd.ding * 100) + "%"; save(); };
     $("#dsDingTest", el).onclick = () => ding(true);
+    $("#dsDingK", el).onchange = (e) => { snd.dingKind = e.target.value; save(); ding(true); };
     $("#dsSpkTest", el).onclick = () => { applyDevices(); ding(true); };
     $("#dsResetWin", el).onclick = () => { lsSet("hpd.consoleGeo", null); S.consoleWide = false; lsSet("hpd.consoleWide", false); const f = document.getElementById("hpdDock"); if (f) { f.dataset.v = ""; dock(); } toast("Calling window reset"); };
     // devices

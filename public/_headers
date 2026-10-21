@@ -18,6 +18,8 @@
   Cache-Control: no-cache
 /hp-est.js
   Cache-Control: no-cache
+/hp-grid.js
+  Cache-Control: no-cache
 /hp-rates.js
   Cache-Control: no-cache
 /hp-avatar.js
@@ -39,6 +41,8 @@
 /hp-ui.css
   Cache-Control: no-cache
 /hp-fex-script.js
+  Cache-Control: no-cache
+/hp-myscripts.js
   Cache-Control: no-cache
 /hp-theme.js
   Cache-Control: no-cache

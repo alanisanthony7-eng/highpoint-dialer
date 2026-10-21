@@ -1,12 +1,17 @@
 // Caller-ID numbers: search, buy, assign, pause, release, health
 //  GET  /api/dialer/numbers                 list (mine + team; admins see all)
 //  GET  /api/dialer/numbers/search?areaCode=&state=&contains=&near=
-//  POST /api/dialer/numbers/buy      {phoneNumber, owner?, shared?}
+//  POST /api/dialer/numbers/buy      {phoneNumber, owner?, shared?, price?}  (agents pay for their own numbers: price is the monthly price they were shown)
 //  POST /api/dialer/numbers/update   {e164, owner?, shared?, label?, paused?, spamReport?}
 //  POST /api/dialer/numbers/release  {e164}
 //  POST /api/dialer/numbers/import   (admin) adopt numbers already in the Twilio account
-import { isTelnyx, txSearch, txBuy } from "../telnyx/tx.mjs";
+import { isTelnyx, tx, txSearch, txBuy, txRelease, txImport } from "../telnyx/tx.mjs";
+import { txMessagingProfile } from "../lib/sms.mjs";
+import { numberTerms, chargeNumber, refundNumber, stopNumber, publicCard } from "../lib/numberpay.mjs";
 import { wrap, json, bad, requireUser, config as loadConfig, getJ, updateJ, tw, siteUrl, numberHooks, numberCap, today, AREA, to10, listKeys } from "../lib/hp.mjs";
+
+// Agents can always buy their own numbers. The cap is the admin's setting; 0 or unset means the default of 5.
+const maxNumbers = (S) => (S.agentMaxNumbers > 0 ? S.agentMaxNumbers : 5);
 
 function health(n, settings, rep) {
   // last 7 days of usage for this number
@@ -45,9 +50,11 @@ export default wrap(async (req) => {
     if (user.admin) for (const k of await listKeys("agents", "")) { const a = await getJ("agents", k); if (a) agents[k] = a.name || a.email; }
     const rep = (await getJ("trust", "rep")) || {}; // spam-risk scores from the Trust Hub, when monitoring is on
     const list = Object.values(all).filter((n) => !n.released && (user.admin || n.owner === user.identity || n.shared || !n.owner))
-      .map((n) => ({ ...n, days: undefined, mine: n.owner === user.identity, ownerName: agents[n.owner] || (n.owner === user.identity ? user.name : n.owner ? "Agent" : "Team"), health: health(n, S, rep[n.e164]) }))
+      .map((n) => ({ ...n, days: undefined, billing: n.billing && (user.admin || n.owner === user.identity) ? { price: n.billing.price, status: n.billing.status } : undefined, mine: n.owner === user.identity, ownerName: agents[n.owner] || (n.owner === user.identity ? user.name : n.owner ? "Agent" : "Team"), health: health(n, S, rep[n.e164]) }))
       .sort((a, b) => (b.mine - a.mine) || a.e164.localeCompare(b.e164));
-    return json({ numbers: list, agents: user.admin ? agents : undefined, settings: { agentMaxNumbers: S.agentMaxNumbers, dailyCapPerNumber: S.dailyCapPerNumber } });
+    const t = await numberTerms(user);
+    return json({ numbers: list, agents: user.admin ? agents : undefined, settings: { agentMaxNumbers: maxNumbers(S), dailyCapPerNumber: S.dailyCapPerNumber },
+      buy: { charged: t.charged, price: t.price, connected: t.connected, card: publicCard(t.card), allowed: true } });
   }
 
   if (action === "search") {
@@ -69,22 +76,47 @@ export default wrap(async (req) => {
   if (action === "buy") {
     const b = await req.json();
     const mineCount = Object.values(all).filter((n) => n.owner === user.identity && !n.released).length;
-    if (!user.admin) {
-      if (!S.agentMaxNumbers) return bad("Ask an admin to buy numbers for you.", 403);
-      if (mineCount >= S.agentMaxNumbers) return bad(`You can hold up to ${S.agentMaxNumbers} numbers. Release one first or ask an admin.`, 403);
-    }
+    if (!user.admin && mineCount >= maxNumbers(S)) return bad(`You can hold up to ${maxNumbers(S)} numbers. Release one first or ask an admin.`, 403);
     if (!/^\+1\d{10}$/.test(b.phoneNumber || "")) return bad("Pick a number from the search results.");
+    if (all[b.phoneNumber] && !all[b.phoneNumber].released) return bad("That number is already on your team.", 409);
     const owner = user.admin ? (b.owner ?? user.identity) : user.identity;
-    if (isTelnyx()) {
-      const t = await txBuy(b.phoneNumber);
-      const rec = { e164: b.phoneNumber, sid: t.sid, provider: "telnyx", areaCode: to10(b.phoneNumber).slice(0, 3), state: AREA[to10(b.phoneNumber).slice(0, 3)] || "", owner: owner || "", shared: !!b.shared, boughtAt: Date.now(), boughtBy: user.identity };
-      await updateJ("numbers", "all", (a) => { a[rec.e164] = rec; return a; }, {});
-      return json({ ok: true, number: rec });
+    const terms = await numberTerms(user);
+    let sub = null, lock = false;
+    if (terms.charged) {
+      if (!terms.card) return bad("Add a card first. Your number is billed to it each month.", 402, { code: "card_needed", price: terms.price });
+      if (!(Math.abs(+b.price - terms.price) <= 0.004)) return bad(`The price is $${terms.price.toFixed(2)} a month. Check it and confirm again.`, 409, { code: "price_changed", price: terms.price });
+      // one paid purchase at a time per agent, so a double click can't charge twice
+      await updateJ("numbers", "buying", (a) => { if (a[user.identity] && Date.now() - a[user.identity] < 90e3) return undefined; a[user.identity] = Date.now(); lock = true; return a; }, {});
+      if (!lock) return bad("Your last purchase is still going through. Give it a few seconds.", 409);
     }
-    const n = await tw("/Accounts/{SID}/IncomingPhoneNumbers.json", { method: "POST", form: { PhoneNumber: b.phoneNumber, FriendlyName: `Highpoint · ${user.name}`.slice(0, 64), ...numberHooks(siteUrl()) } });
-    const rec = { e164: n.phone_number, sid: n.sid, areaCode: to10(n.phone_number).slice(0, 3), state: AREA[to10(n.phone_number).slice(0, 3)] || "", owner: owner || "", shared: !!b.shared, boughtAt: Date.now(), boughtBy: user.identity, label: "", days: {} };
-    await updateJ("numbers", "all", (a) => { a[rec.e164] = rec; return a; }, {});
-    return json({ ok: true, number: rec });
+    try {
+      if (terms.charged) {
+        try { sub = await chargeNumber(user, b.phoneNumber, terms); }
+        catch (e) { if (e.code) return bad(e.message, e.status, { code: e.code }); throw e; }
+      }
+      let t, twn;
+      try {
+        if (isTelnyx()) {
+          t = await txBuy(b.phoneNumber);
+          if (t.status === "failure") throw new Error("Telnyx couldn't complete the order");
+        } else {
+          twn = await tw("/Accounts/{SID}/IncomingPhoneNumbers.json", { method: "POST", form: { PhoneNumber: b.phoneNumber, FriendlyName: `Highpoint · ${user.name}`.slice(0, 64), ...numberHooks(siteUrl()) } });
+        }
+      } catch (e) {
+        if (!sub) throw e;
+        const r = await refundNumber(sub, e.message);
+        const money = `$${r.amount.toFixed(2)}`;
+        return bad(`We couldn't get ${b.phoneNumber.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3")}: ${e.message.replace(/^Telnyx: /, "")}. ${r.refunded ? `Your ${money} charge was refunded; it can take 5–10 days to show on your card.` : r.charged ? `Your ${money} charge couldn't be refunded automatically. Contact your Highpoint admin to get it back.` : "You weren't charged."} Try another number.`, 502, { code: "order_failed", refunded: r.refunded });
+      }
+      if (t?.sid) { const prof = await txMessagingProfile(); if (prof) await tx(`/v2/phone_numbers/${t.sid}/messaging`, { method: "PATCH", body: { messaging_profile_id: prof } }).catch(() => {}); }
+      const e164n = twn ? twn.phone_number : b.phoneNumber;
+      const rec = { e164: e164n, sid: twn ? twn.sid : t.sid, ...(twn ? {} : { provider: "telnyx" }), areaCode: to10(e164n).slice(0, 3), state: AREA[to10(e164n).slice(0, 3)] || "", owner: owner || "", shared: !!b.shared, boughtAt: Date.now(), boughtBy: user.identity,
+        ...(twn ? { label: "", days: {} } : {}), ...(sub ? { billing: { sub: sub.id, price: terms.price, status: sub.status, user: user.id } } : {}) };
+      await updateJ("numbers", "all", (a) => { a[rec.e164] = rec; return a; }, {});
+      return json({ ok: true, number: { ...rec, billing: rec.billing && { price: rec.billing.price, status: rec.billing.status } }, charged: sub ? terms.price : 0 });
+    } finally {
+      if (lock) await updateJ("numbers", "buying", (a) => { delete a[user.identity]; return a; }, {}).catch(() => {});
+    }
   }
 
   if (action === "update") {
@@ -108,13 +140,20 @@ export default wrap(async (req) => {
     const b = await req.json(); const n = all[b.e164];
     if (!n) return bad("Number not found", 404);
     if (!canEdit(n)) return bad("Only the owner or an admin can release this number.", 403);
-    await tw(`/Accounts/{SID}/IncomingPhoneNumbers/${n.sid}.json`, { method: "DELETE" }).catch((e) => { if (!/20404|not found/i.test(e.message)) throw e; });
+    if (n.provider === "telnyx" || isTelnyx()) await txRelease(n.sid).catch((e) => { if (!/not found|404|10005/i.test(e.message)) throw e; });
+    else await tw(`/Accounts/{SID}/IncomingPhoneNumbers/${n.sid}.json`, { method: "DELETE" }).catch((e) => { if (!/20404|not found/i.test(e.message)) throw e; });
     await updateJ("numbers", "all", (a) => { a[b.e164].released = Date.now(); return a; });
-    return json({ ok: true });
+    let billingStopped = !n.billing?.sub;
+    if (n.billing?.sub) {
+      try { await stopNumber(n); billingStopped = true; await updateJ("numbers", "all", (a) => { a[b.e164].billing.status = "canceled"; return a; }); }
+      catch (e) { console.error("number billing didn't stop", b.e164, n.billing.sub, e.message); }
+    }
+    return json({ ok: true, billingStopped });
   }
 
   if (action === "import") {
     if (!user.admin) return bad("Admins only", 403);
+    if (isTelnyx()) return json({ ok: true, ...(await txImport()) });
     const r = await tw("/Accounts/{SID}/IncomingPhoneNumbers.json", { query: { PageSize: 200 } });
     let added = 0;
     for (const n of r.incoming_phone_numbers || []) {
