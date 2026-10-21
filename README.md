@@ -125,6 +125,12 @@ On **Calendar**, each agent has a booking link (`/book/their-name`) to send clie
 - A booking adds the client to the CRM (or updates them if their number is already there) in the Appointment stage with their consent recorded, puts the call on the desk calendar, emails the client and the agent (with `RESEND_API_KEY`), and schedules the reminder texts if those are on.
 - **Desk appointments in Google Calendar:** *Make my calendar link* gives a private `.ics` link of appointments and callbacks. In Google Calendar choose **Other calendars → + → From URL**. Google refreshes subscribed calendars every few hours.
 
+## Phone alerts and the installable app
+The desk installs as an app (Chrome/Edge: install icon or menu; iPhone: Safari → Share → Add to Home Screen) and can send alerts to a phone or computer even when it's closed. Each agent turns it on under **account menu → Phone alerts** and picks what they hear about: a new lead (from a posting URL), a client booking a call, a client texting back, an appointment 15 minutes away, and a manager's message during a call. There is nothing to set up: the desk makes its own push key the first time it's needed (`HP_PUSH_CONTACT` can set the contact address sent to browsers' push services; it defaults to support@highpointfinancial.co). On iPhone, alerts only work after the desk is added to the Home Screen (an Apple rule). Alerts carry only a name and a short line, never numbers beyond the client's own.
+
+## Live board, whisper and leaderboard
+**Admins → account menu → Live board** shows who is signed in, who is on a call right now (with the client and a running timer), and each agent's day so far. **Listen** shows the live transcript as text; **Whisper** sends a short message (or a one-tap coaching line) that pops up on the agent's screen and phone without the client hearing anything. Audio listening isn't included; it would need calls to run through a conference. **Leaderboard** (everyone) ranks agents by sales, then appointments, for today, the last 7 days or this month (Eastern time). Sales are clients moved to Sold; calls, talk time and appointments come from the dialer. Admins can switch the leaderboard off for agents in the same window.
+
 ## Email
 Password reset links and emailed invites go through Resend (resend.com, free for small volumes).
 1. Create a Resend account and add your domain (for example highpointfinancial.co) under **Domains**, then add the DNS records it shows.

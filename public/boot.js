@@ -371,7 +371,7 @@ ${HERO}
     const row = document.querySelector(".topbar .row"); if (!row || row.querySelector(".hp-acct")) return;
     const a = document.createElement("div"); a.className = "hp-acct";
     a.innerHTML = `<button type="button" class="hp-acct-b" aria-haspopup="menu" aria-expanded="false" aria-label="Account menu"><i aria-hidden="true"><img src="/api/lounge/photo?id=${encodeURIComponent(u.id)}" alt="" onerror="this.remove()">${esc((u.name || u.email)[0].toUpperCase())}</i><span>${esc((u.name || u.email).split(" ")[0])}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-      <div class="hp-acct-m" role="menu" hidden><div class="hp-acct-who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}</span></div>${u.admin ? `<button type="button" role="menuitem" data-team>Team</button>` : ""}<button type="button" role="menuitem" data-pic>Profile picture<small>Shown on your account and in the crew channel</small></button><button type="button" role="menuitem" data-sec>Security<small>${u.twofa ? "Two-step verification is on" : "Password and two-step verification"}</small></button><button type="button" role="menuitem" data-bill>Billing</button><button type="button" role="menuitem" data-look>Appearance<small>${esc(window.hpTheme?.label || "Executive")} theme</small></button><button type="button" role="menuitem" data-out>Sign out</button></div>`;
+      <div class="hp-acct-m" role="menu" hidden><div class="hp-acct-who"><b>${esc(u.name || u.email)}</b><span>${esc(u.email)}</span></div>${u.admin ? `<button type="button" role="menuitem" data-team>Team</button><button type="button" role="menuitem" data-live>Live board<small>Who is on a call, listen and whisper</small></button>` : ""}<button type="button" role="menuitem" data-board>Leaderboard</button><button type="button" role="menuitem" data-alerts>Phone alerts<small>New leads, bookings and texts</small></button><button type="button" role="menuitem" data-pic>Profile picture<small>Shown on your account and in the crew channel</small></button><button type="button" role="menuitem" data-sec>Security<small>${u.twofa ? "Two-step verification is on" : "Password and two-step verification"}</small></button><button type="button" role="menuitem" data-bill>Billing</button><button type="button" role="menuitem" data-look>Appearance<small>${esc(window.hpTheme?.label || "Executive")} theme</small></button><button type="button" role="menuitem" data-out>Sign out</button></div>`;
     const btn = a.querySelector(".hp-acct-b"), menu = a.querySelector(".hp-acct-m");
     const open = (on) => { menu.hidden = !on; btn.setAttribute("aria-expanded", on); if (on) menu.querySelector("[role=menuitem]")?.focus(); };
     btn.onclick = (e) => { e.stopPropagation(); open(menu.hidden); };
@@ -381,6 +381,9 @@ ${HERO}
     a.querySelector("[data-pic]").onclick = () => { open(false); const run = () => window.hpDesk?.openPhoto?.(); if (!run()) setTimeout(run, 400); };
     a.querySelector("[data-sec]").onclick = () => { open(false); window.hpTeam?.openSecurity(); };
     a.querySelector("[data-look]").onclick = (e) => { open(false); window.hpTheme?.openPicker(e.currentTarget); };
+    a.querySelector("[data-board]").onclick = () => { open(false); window.hpMon?.openBoard(); };
+    a.querySelector("[data-alerts]").onclick = () => { open(false); window.hpPwa?.open(); };
+    const lv = a.querySelector("[data-live]"); if (lv) lv.onclick = () => { open(false); window.hpMon?.openLive(); };
     const tb = a.querySelector("[data-team]"); if (tb) tb.onclick = () => { open(false); window.hpTeam?.openTeam(); };
     a.querySelector("[data-out]").onclick = async () => { try { await call("/api/auth/logout", { method: "POST" }); } finally { location.reload(); } };
     row.append(a);
@@ -397,7 +400,7 @@ ${HERO}
     account(u);
     call("/api/room/presence", { method: "POST", body: { status: "Online", at: Date.now() } }).catch(() => {});
     // characters load right after sign-in (not on the sign-in screen), then the desk, in order
-    for (const src of ["/hp-avatar.js", "/hp-rates.js", "/hp-est.js", "/hp-drugs.js", "/hp-fex-script.js", "/desk-app.js", "/hp-pop.js"]) { if (src === "/hp-avatar.js" && window.hpAvatar) continue; const s = document.createElement("script"); s.src = src; s.async = false; document.body.append(s); }
+    for (const src of ["/hp-avatar.js", "/hp-rates.js", "/hp-est.js", "/hp-drugs.js", "/hp-fex-script.js", "/desk-app.js", "/hp-pwa.js", "/hp-monitor.js", "/hp-pop.js"]) { if (src === "/hp-avatar.js" && window.hpAvatar) continue; const s = document.createElement("script"); s.src = src; s.async = false; document.body.append(s); }
   }
 
   async function boot() {

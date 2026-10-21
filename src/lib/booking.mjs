@@ -124,7 +124,7 @@ async function publicInfo(uid, s) {
 }
 async function bump(scope, col) { await D1().prepare("INSERT INTO colver (scope, col, v) VALUES (?1, ?2, 1) ON CONFLICT(scope, col) DO UPDATE SET v = v + 1").bind(scope, col).run(); }
 
-async function bookRoute(req, slug) {
+async function bookRoute(req, slug, ctx) {
   await ensureSchema();
   const uid = await uidForSlug(slug), s = uid ? await settingsOf(uid) : null;
   if (!uid || !s.on || s.slug !== slug) return json({ error: "This booking link isn't active. Contact your agent for a new one." }, 404);
@@ -183,6 +183,7 @@ async function bookRoute(req, slug) {
   await bump(uid, "leads"); await bump(uid, "appts");
   await kv().setJSON("bk:" + token, { uid, apptId, leadId, at, slug, name });
   try { const fu = await import("./followups.mjs"); await fu.onApptSaved(u, apptId, appt); } catch (e) { console.error("booking reminders", e); }
+  try { const { notify } = await import("./push.mjs"); await notify(uid, "booked", { title: "New booking: " + name, body: `${whenText(at, tz)} · ${fmtPhone(phone)}`, url: "/?view=calendar", tag: "book-" + apptId }, ctx); } catch (e) { console.error("booking alert", e); }
   const manage = `${bookUrl(slug)}?m=${token}`;
   if (emailOn()) {
     const jobs = [];
@@ -216,9 +217,9 @@ async function manageRoute(req, token) {
 
 /* ---------- routes ---------- */
 export async function calRoute(req, file) { await ensureSchema(); return feedRoute(req, file); }
-export async function bookingRoute(req, parts) {
+export async function bookingRoute(req, parts, ctx) {
   const [action, arg] = parts;
-  if (action === "p") return bookRoute(req, String(arg || "").toLowerCase());
+  if (action === "p") return bookRoute(req, String(arg || "").toLowerCase(), ctx);
   if (action === "m") return manageRoute(req, arg);
   const user = await requireFeature(req, "crm");
   const b = req.method === "POST" ? await req.json().catch(() => ({})) : {};

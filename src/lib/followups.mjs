@@ -72,7 +72,10 @@ export async function onLeadSaved(user, id, prev, next) {
 }
 // an appointment was saved: reminders the day before and an hour before
 export async function onApptSaved(user, id, appt) {
-  if (!appt || appt.done || !appt.leadId || !(appt.at > Date.now())) return;
+  if (!appt || appt.done || !(appt.at > Date.now())) return;
+  // a phone alert 15 minutes before (separate from the texts to the client; the agent can turn it off in Phone alerts)
+  if (appt.at - 15 * 60_000 > Date.now() + 60_000) await schedule({ kind: "pushAppt", uid: user.id, identity: user.identity, apptId: id, apptAt: appt.at, leadId: appt.leadId || "", due: appt.at - 15 * 60_000 }, `pa:${user.id}:${id}:${appt.at}`);
+  if (!appt.leadId) return;
   const s = await fuSettings(user.id); if (!s.on) return;
   const lead = await leadDoc(user.id, appt.leadId); const phone = to10(lead?.phone); if (!phone) return;
   const base = { uid: user.id, identity: user.identity, leadId: appt.leadId, apptId: id, apptAt: appt.at, to: phone };
@@ -110,7 +113,16 @@ async function stale(job, lead) {
   }
   return null;
 }
+async function runPushAppt(job) {
+  const a = await apptDoc(job.uid, job.apptId);
+  if (!a || a.done || a.at !== job.apptAt) return; // moved, done or deleted
+  const lead = job.leadId ? await leadDoc(job.uid, job.leadId) : null;
+  const who = lead ? [lead.first, lead.last].filter(Boolean).join(" ") : a.leadName || a.title || "your appointment";
+  const { notify } = await import("./push.mjs");
+  await notify(job.uid, "appt", { title: "Appointment in 15 minutes", body: `${who}${a.type ? " · " + a.type : ""}`, url: "/?view=calendar", tag: "appt-" + job.apptId, ttl: 900 });
+}
 async function runOne(job) {
+  if (job.kind === "pushAppt") return runPushAppt(job);
   const lead = await leadDoc(job.uid, job.leadId), why = await stale(job, lead);
   const name = lead ? [lead.first, lead.last].filter(Boolean).join(" ") || "Client" : "Client";
   if (why) return logFor(job.uid, { kind: job.kind, leadId: job.leadId, name, status: "skipped", note: why });
@@ -175,7 +187,7 @@ export async function followupsRoute(req, action) {
   }
   if (action === "queue") {
     const r = await D1().prepare("SELECT key, txt FROM blobs WHERE store='hpd-fu' AND key LIKE 'j:%' ORDER BY key LIMIT 2000").all();
-    const mine = (r.results || []).map((x) => ({ key: x.key, ...JSON.parse(x.txt) })).filter((j) => j.uid === user.id).slice(0, 100);
+    const mine = (r.results || []).map((x) => ({ key: x.key, ...JSON.parse(x.txt) })).filter((j) => j.uid === user.id && j.kind !== "pushAppt").slice(0, 100);
     const names = {};
     for (const j of mine) if (!(j.leadId in names)) { const l = await leadDoc(user.id, j.leadId); names[j.leadId] = l ? [l.first, l.last].filter(Boolean).join(" ") || "Client" : "Client"; }
     return json({ queue: mine.map((j) => ({ key: j.key, kind: j.kind, due: j.due, leadId: j.leadId, name: names[j.leadId], to: j.to })), log: (await kv().get("log:" + user.id, { type: "json" }).catch(() => null)) || [] });

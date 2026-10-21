@@ -1,6 +1,13 @@
 // Sending a text from the agent's local numbers, on Twilio or Telnyx, into the same threads the Inbox shows.
 import { getJ, updateJ, tw, to10, e164, pickCallerId, config as loadConfig, isDnc, siteUrl, httpErr, setJ } from "./hp.mjs";
 import { isTelnyx, tx } from "../telnyx/tx.mjs";
+import { D1 } from "./store.mjs";
+
+const fmt10 = (p) => (p && p.length === 10 ? `(${p.slice(0, 3)}) ${p.slice(3, 6)}-${p.slice(6)}` : p || "");
+async function leadName(uid, id) {
+  const r = await D1().prepare("SELECT data FROM docs WHERE scope=?1 AND col='leads' AND id=?2").bind(uid, String(id)).first().catch(() => null);
+  if (!r) return ""; try { const l = JSON.parse(r.data); return [l.first, l.last].filter(Boolean).join(" "); } catch { return ""; }
+}
 
 export const STOP = /^\s*(stop|stopall|unsubscribe|cancel|end|quit|revoke|optout|opt out)\s*$/i;
 
@@ -51,4 +58,12 @@ export async function receiveText({ from, line, body }) {
   const owner = num.owner || "_team";
   await updateJ("sms", `${owner}/${from}`, (t) => { t.with = from; t.line = line; t.unread = (t.unread || 0) + 1; t.last = Date.now(); t.msgs = [...(t.msgs || []), { dir: "in", body: String(body || "").slice(0, 1600), at: Date.now() }].slice(-200); return t; }, {});
   if (STOP.test(body || "")) await setJ("dnc", from, { at: Date.now(), reason: "Replied STOP by text", by: "lead" });
+  else if (owner !== "_team") { // an alert on the owner's phone (not for STOP replies)
+    try {
+      const ag = await getJ("agents", owner); if (!ag?.id) return;
+      const th = await getJ("sms", `${owner}/${from}`), lead = th?.leadId ? await leadName(ag.id, th.leadId) : "";
+      const { notify } = await import("./push.mjs");
+      await notify(ag.id, "text", { title: "Text from " + (lead || fmt10(from)), body: String(body || "").slice(0, 140), url: "/?view=dialer&text=" + from, tag: "sms-" + from });
+    } catch (e) { console.error("text alert", e); }
+  }
 }

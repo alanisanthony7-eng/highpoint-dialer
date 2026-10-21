@@ -31,6 +31,7 @@ async function initDb(){
 }
 async function putLead(l){
   const id=l.id||uid(); const body={...l}; delete body.id; body.updatedAt=Date.now(); if(!body.createdAt)body.createdAt=body.updatedAt;
+  if(body.stage==="sold"){ if(leads.get(id)?.stage!=="sold"||!body.soldAt)body.soldAt=body.updatedAt } else delete body.soldAt; // when it was sold, for the leaderboard
   if(col){ await col.doc(id).set(body) } else { leads.set(id,{...body,id}); renderAll() }
   return id;
 }

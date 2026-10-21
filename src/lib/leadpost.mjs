@@ -205,7 +205,7 @@ async function receiverFor(rec) {
   return null;
 }
 
-async function ingest(rec, raw, { test = false } = {}) {
+async function ingest(rec, raw, { test = false, ctx } = {}) {
   const parsed = toLead(raw);
   if (parsed.error) { await logArrival(rec.owner, { url: rec.name, urlId: rec.id, status: "rejected", note: parsed.error, keys: Object.keys(raw || {}).slice(0, 24) }); return { success: false, status: "rejected", error: parsed.error }; }
   const lead = parsed.lead;
@@ -242,6 +242,8 @@ async function ingest(rec, raw, { test = false } = {}) {
   await bumpRec(rec.id, (r) => { r.count = (r.count || 0) + 1; r.last = now; return r; });
   const entry = { url: rec.name, urlId: rec.id, status: "added", leadId: id, name, phone: doc.phone || "", to: to.id !== rec.owner ? to.name : undefined, flagged: flagged || undefined, test: test || undefined };
   await logArrival(to.id, entry); if (to.id !== rec.owner) await logArrival(rec.owner, entry);
+  // an alert on the agent's phone
+  if (!test) { try { const { notify } = await import("./push.mjs"); const nm = [lead.first, lead.last].filter(Boolean).join(" ") || "New lead"; await notify(to.id, "newLead", { title: flagged ? "New lead (Do Not Call)" : "New lead: " + nm, body: [rec.name, doc.product, doc.state, doc.phone && "Tap to call"].filter(Boolean).join(" · "), url: "/?lead=" + id, tag: "lead-" + id }, ctx); } catch (e) { console.error("new lead alert", e); } }
   // a "new lead" text, if the agent turned it on
   let texting = false;
   if (!test && !flagged && doc.phone) { try { const fu = await import("./followups.mjs"); texting = await fu.onLeadPosted(to, id, doc); } catch (e) { console.error("new lead text", e); } }
@@ -318,7 +320,7 @@ async function postRoute(req, token, ctx) {
   await bumpRec(rec.id, (r) => { if (r.hour !== hour) { r.hour = hour; r.hourCount = 0; } if (r.hourCount + items.length > PER_HOUR) { over = true; return r; } r.hourCount += items.length; return r; });
   if (over) return out({ success: false, error: `Too many leads this hour (the limit is ${PER_HOUR} per URL). Try again later.` }, 429);
   const results = [];
-  for (const it of items) { try { results.push(await ingest(await getRec(rec.id) || rec, it)); } catch (e) { console.error("lead post", e); results.push({ success: false, status: "error", error: "The lead couldn't be saved. Try again." }); } }
+  for (const it of items) { try { results.push(await ingest(await getRec(rec.id) || rec, it, { ctx })); } catch (e) { console.error("lead post", e); results.push({ success: false, status: "error", error: "The lead couldn't be saved. Try again." }); } }
   // send any "new lead" texts right away instead of waiting for the next job run
   if (results.some((r) => r.texting) && ctx?.waitUntil) {
     const fu = await import("./followups.mjs");

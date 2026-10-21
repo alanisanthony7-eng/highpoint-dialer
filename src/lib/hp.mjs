@@ -291,13 +291,18 @@ export async function preflight(user, leadNum, settings, leadState, { override }
 }
 
 /* ---------- call log + analytics aggregates ---------- */
+const CALL_DONE = ["completed", "busy", "no-answer", "failed", "canceled"];
 export async function saveCall(rec) {
   await setJ("calls", `${rec.agent}/${rec.id}`, rec);
   if (rec.sid) await setJ("callidx", rec.sid, { agent: rec.agent, id: rec.id });
+  // a short list of calls in progress, for the manager's live board
+  if (rec.agent && !rec.final && !CALL_DONE.includes(rec.status)) await setJ("live", `${rec.agent}/${rec.id}`, { at: rec.at || Date.now() }).catch(() => {});
 }
 export async function patchCallBySid(sid, fn) {
   const ix = await getJ("callidx", sid); if (!ix) return null;
-  return updateJ("calls", `${ix.agent}/${ix.id}`, (c) => (c && c.id ? fn(c) : undefined), null);
+  const next = await updateJ("calls", `${ix.agent}/${ix.id}`, (c) => (c && c.id ? fn(c) : undefined), null);
+  if (next && (next.final || CALL_DONE.includes(next.status))) await store("live").delete(`${ix.agent}/${ix.id}`).catch(() => {});
+  return next;
 }
 export async function aggregate(rec, kind) {
   // kind: "dial" when placed, "end" when completed (adds outcome metrics), "dispo" when an agent logs a result
