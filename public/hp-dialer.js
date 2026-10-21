@@ -378,7 +378,7 @@
   // After a call someone answered and you logged, a session doesn't dial on by itself: Resume, Pause or Stop.
   function sessGo(go) {
     const P = S.ps || S.power; if (!P) return;
-    if (go) { P.hold = null; P.paused = false; P.holdLabel = ""; P.holdMsg = ""; P.refused = 0; P.fast = 0; if (S.ps) { dock(); renderHome(); phoneNext(); } else { renderPhone(); renderFloat(S.lastTiles); nextBatch(); } }
+    if (go) { P.hold = null; P.paused = false; P.holdLabel = ""; P.holdMsg = ""; P.refused = 0; P.fast = 0; if (S.ps) { phoneNext(); dock(); renderHome(); } else { renderPhone(); renderFloat(S.lastTiles); nextBatch(); } }
     else { P.paused = true; renderPhone(); dock(); renderHome(); toast("Paused. Press Resume dialing when you're ready."); }
   }
   function holdAfter(leadId, label) {
@@ -414,7 +414,7 @@
   function phoneNext() {
     const P = S.ps; if (!P) return;
     if (P.paused && !P.hold && !S.call) { dock(); return; }
-    if (P.hold && S.call) { P.hold = null; releaseCall(P).then((ok) => { if (ok && S.ps === P) phoneNext(); }); return; } // logged, then Resume: finish ending the old call, then dial
+    if (P.hold && S.call) { P.hold = null; S.phoneLead = null; S.callLead = null; releaseCall(P).then((ok) => { if (ok && S.ps === P) phoneNext(); }); return; } // logged, then Resume: finish ending the old call, then dial
     P.hold = null;
     if (multiOn()) { if (S.call) { try { S.call.disconnect(); } catch {} return; } multiCancel(false); multiBatch(); return; } // on a call: hang up, the wrap-up moves on
     window.hpDesk.callStop();
@@ -458,7 +458,8 @@
       picks.push(D.leads.get(P.ids[P.i]));
     }
     if (!picks.length) { phoneEnd(true); return; }
-    P.busy = true; renderHome();
+    P.busy = true; S.phoneLead = null; S.callLead = null; S.callSid = null; // the lead you just talked to is done: the dock shows the lines now dialing, not that client
+    tiles(picks.map((l) => ({ leadId: l.id, name: D.fullName(l), to: d10(l.phone), s: "ringing", label: "Calling" }))); renderHome();
     const recs = await Promise.all(picks.map((l) => openRecord(l, true)));
     P.busy = false;
     if (S.ps !== P) return;

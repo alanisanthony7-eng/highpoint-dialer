@@ -283,7 +283,7 @@ if (SERVE) {
     await page.waitForFunction(() => window.hpDesk.leads.size >= 52);
     for (const N of [1, 2, 3]) {
       await realFetch(ORIGIN + "/__sim/plan-clear", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-      await plan(Array.from({ length: 4 * N }, (_, i) => (i % N === 0 ? "human" : "ring")));
+      await plan(Array.from({ length: 4 * N }, (_, i) => (i % N === (N > 1 ? 1 : 0) ? "human" : "ring")));
       if (await page.locator('[data-hl="' + N + '"]').count()) await page.locator('[data-hl="' + N + '"]').click();
       const order = (await page.evaluate(() => window.hpDialer.queue().map((l) => String(l.phone).replace(/\D/g, "").slice(-10)))).slice(0, 12);
       const seen0 = (await (await realFetch(ORIGIN + "/__sim/dials")).json()).dials.length;
@@ -305,8 +305,13 @@ if (SERVE) {
         }
         await page.locator('#hpdDock [data-next="go"]').waitFor();
         const b4 = (await (await realFetch(ORIGIN + "/__sim/dials")).json()).dials.length;
+        await page.evaluate(() => { window.__seen = []; new MutationObserver(() => window.__seen.push(document.querySelector('#hpdDock')?.innerText || '')).observe(document.body, { childList: true, subtree: true, characterData: true }); });
         await page.locator('#hpdDock [data-next="go"]').click();
         await until(async () => (await (await realFetch(ORIGIN + "/__sim/dials")).json()).dials.length >= b4 + N, `${N} line(s): Resume (${how}) to dial the next ${N}`);
+        const nm = await page.evaluate((id) => window.hpDesk.fullName(window.hpDesk.leads.get(id)), who);
+        const shown = await page.evaluate(([n]) => !window.__seen.filter((t) => !/Resume dialing/.test(t)).some((t) => /Call ended/.test(t) || (/Ringing|Calling/.test(t) && t.includes(n))), [nm]);
+        if (!shown) console.log("SEEN", JSON.stringify(await page.evaluate(([n]) => window.__seen.filter((t) => !/Resume dialing/.test(t)).filter((t) => /Call ended/.test(t) || (/Ringing|Calling/.test(t) && t.includes(n))).slice(0, 2), [nm])).slice(0, 700));
+        check(shown, `${N} line${N > 1 ? 's' : ''} (${how}): after Resume the dock shows the new lines ringing, not the client you just talked to`);
         check(true, `${N} line${N > 1 ? "s" : ""}, ${how === "agent" ? "you hang up" : how === "lead" ? "the lead hangs up" : "logged while still on the call"}: Resume dials the next ${N}`);
       }
       const all = (await (await realFetch(ORIGIN + "/__sim/dials")).json()).dials.slice(seen0).map((d) => String(d.to).replace(/\D/g, "").slice(-10));
