@@ -81,7 +81,7 @@ export default wrap(async (req, ctx) => {
   const check = await preflight(user, leadNum, S, p.LeadState);
   if (!check.ok) return xml(say("Call blocked. " + check.why) + "<Hangup/>");
   const prefs = (await getJ("prefs", identity)) || {};
-  const cid = await pickCallerId(user, leadNum, { ...S, localPresence: prefs.localPresence ?? S.localPresence }, p.CallerId || prefs.defaultCallerId);
+  const cid = await pickCallerId(user, leadNum, { ...S, localPresence: prefs.localPresence ?? S.localPresence, useNumbers: prefs.useNumbers }, p.CallerId || prefs.defaultCallerId);
   if (!cid) return xml(say("You don't have a caller ID number yet. Buy or claim a number in the dialer's Numbers tab.") + "<Hangup/>");
 
   const rec = {

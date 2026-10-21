@@ -231,8 +231,11 @@ export function numberCap(n, settings) {
 export async function pickCallerId(user, leadNum, settings, prefer) {
   const all = (await getJ("numbers", "all")) || {};
   const day = today();
-  const mine = Object.values(all).filter((n) => n.owner === user.identity && !n.released);
-  const team = settings.sharedPool ? Object.values(all).filter((n) => !n.released && (n.shared || !n.owner)) : [];
+  // the agent can limit which of their numbers are used (settings.useNumbers = list of +1… numbers)
+  const only = Array.isArray(settings.useNumbers) && settings.useNumbers.length ? new Set(settings.useNumbers) : null;
+  const pick = (list) => (only ? list.filter((n) => only.has(n.e164)) : list);
+  const mine = pick(Object.values(all).filter((n) => n.owner === user.identity && !n.released));
+  const team = settings.sharedPool ? pick(Object.values(all).filter((n) => !n.released && (n.shared || !n.owner))) : [];
   const usable = (n) => ((n.days?.[day]?.dials) || 0) < numberCap(n, settings);
   if (prefer) { const p = all[prefer]; if (p && !p.released && (p.owner === user.identity || p.shared || !p.owner || user.admin) && usable(p)) return p; }
   const ac = to10(leadNum).slice(0, 3), st = stateOf(leadNum);
@@ -246,7 +249,9 @@ export async function pickCallerId(user, leadNum, settings, prefer) {
   }
   // last resort: flagged numbers are still better than nothing, but warn
   const any = [...mine, ...team].filter(usable).sort(byLoad)[0];
-  return any || null;
+  if (any || !only) return any || null;
+  const rest = [...Object.values(all).filter((n) => n.owner === user.identity && !n.released)].filter(usable).sort(byLoad)[0];
+  return rest || null;
 }
 export async function bumpNumber(e, field, by = 1) {
   const day = today();

@@ -70,7 +70,7 @@ export default wrap(async (req) => {
     const cfg = await loadConfig(); const S = cfg.settings;
     const check = await preflight(user, leadNum, S, b.leadState || "");
     if (!check.ok) return bad(check.why, 403);
-    const cid = await pickCallerId(user, leadNum, { ...S, localPresence: prefs.localPresence ?? S.localPresence }, prefs.defaultCallerId);
+    const cid = await pickCallerId(user, leadNum, { ...S, localPresence: prefs.localPresence ?? S.localPresence, useNumbers: prefs.useNumbers }, prefs.defaultCallerId);
     if (!cid) return bad("You don't have a caller ID number yet. Buy or claim a number in the Numbers tab.", 400);
     const token = crypto.randomUUID().replace(/-/g, "");
     const bridge = { agent: user.identity, agentName: user.name || "", leadId: String(b.leadId || ""), leadName: String(b.leadName || "").slice(0, 80), to: leadNum, from: cid.e164, state: stateOf(leadNum), at: Date.now() };

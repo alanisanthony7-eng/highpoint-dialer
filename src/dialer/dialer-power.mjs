@@ -119,7 +119,7 @@ export default wrap(async (req, ctx) => {
       const num = to10(l.phone);
       const chk = await preflight(user, num, S, l.state);
       if (!chk.ok) { skipped.push({ leadId: l.id, why: chk.why, hard: !!chk.hard }); return; }
-      const cid = await pickCallerId(user, num, { ...S, localPresence: prefs.localPresence ?? S.localPresence }, prefs.defaultCallerId);
+      const cid = await pickCallerId(user, num, { ...S, localPresence: prefs.localPresence ?? S.localPresence, useNumbers: prefs.useNumbers }, prefs.defaultCallerId);
       if (!cid) { skipped.push({ leadId: l.id, why: "No caller ID number available. Buy a number first." }); return; }
       const sq = `s=${s}&a=${encodeURIComponent(user.identity)}`;
       try {

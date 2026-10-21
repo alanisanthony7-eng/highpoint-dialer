@@ -129,6 +129,8 @@ ok((await getJ("numbers", "all"))["+13055550101"].health === "flagged", "the hig
 const me = (await call("boss", "/api/auth/me")).j.user;
 const pick = await pickCallerId(me, "3055551234", { ...(await loadConfig()).settings, sharedPool: true, localPresence: true });
 ok(pick && pick.e164 !== "+13055550101", "caller-ID rotation skips the high-risk number");
+const only = await pickCallerId(me, "3055551234", { ...(await loadConfig()).settings, sharedPool: true, localPresence: true, useNumbers: ["+13055550102"] });
+ok(only && only.e164 === "+13055550102", "the agent's chosen numbers are the only ones used for caller ID");
 scores["+13055550101"] = { spam_risk: "low" };
 await call("boss", "/api/telnyx/trust-sync", { method: "POST" });
 ok(!(await getJ("numbers", "all"))["+13055550101"].health, "once carriers rate it low again, the flag comes off");

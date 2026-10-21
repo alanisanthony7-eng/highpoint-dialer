@@ -18,7 +18,7 @@
   const dialSubtitle = () => S.via === "phone"
     ? "Call from your own phone. Outcomes, notes and callbacks still log to the lead."
     : S.provider === "telnyx"
-      ? "Call from your browser with local caller ID. Telnyx is one line at a time — drop voicemails and log every call to the lead automatically."
+      ? "Call from your browser with local caller ID. ring up to 3 leads at once, drop voicemails and log every call to the lead automatically."
       : "Call from your browser with local caller ID, power-dial up to 3 lines, drop voicemails, and log every call to the lead automatically.";
   const I = {
     phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>',
@@ -102,12 +102,12 @@
     const tabs = $("#dTabs");
     if (tabs) {
       tabs.style.maxWidth = "none"; tabs.style.gridTemplateColumns = "repeat(7,auto)";
-      tabs.insertAdjacentHTML("beforeend", `<button type="button" data-hpd="recs" aria-pressed="false">Recordings</button><button type="button" data-hpd="numbers" aria-pressed="false">Number groups</button><button type="button" data-hpd="stats" aria-pressed="false">Analytics</button><button type="button" data-hpd="inbox" aria-pressed="false">Inbox &amp; settings <span class="hpd-pill" id="hpdInboxN" hidden></span></button><button type="button" data-hpd="dnc" aria-pressed="false">Do not call</button><button type="button" data-hpd="trust" aria-pressed="false" id="hpdTrustTab" hidden>Trust Hub</button>`);
+      tabs.insertAdjacentHTML("beforeend", `<button type="button" data-hpd="recs" aria-pressed="false">Recordings</button><button type="button" data-hpd="numbers" aria-pressed="false">Number groups</button><button type="button" data-hpd="stats" aria-pressed="false">Analytics</button><button type="button" data-hpd="inbox" aria-pressed="false">Inbox &amp; settings <span class="hpd-pill" id="hpdInboxN" hidden></span></button><button type="button" data-hpd="dsettings" aria-pressed="false">Dialer settings</button><button type="button" data-hpd="dnc" aria-pressed="false">Do not call</button><button type="button" data-hpd="trust" aria-pressed="false" id="hpdTrustTab" hidden>Trust Hub</button>`);
       $$("[data-dt]", tabs).forEach((b) => b.addEventListener("click", () => { S.tab = null; $$(".hpd-pane").forEach((x) => (x.hidden = true)); $$("[data-hpd]", tabs).forEach((x) => x.setAttribute("aria-pressed", "false")); }));
       $$("[data-hpd]", tabs).forEach((b) => (b.onclick = () => openTab(b.dataset.hpd)));
     }
     const host = $("#dPane").parentNode;
-    host.insertAdjacentHTML("beforeend", `<div class="hpd-pane" id="hpdRecs" hidden></div><div class="hpd-pane" id="hpdDnc" hidden></div><div class="hpd-pane" id="hpdNumbers" hidden></div><div class="hpd-pane" id="hpdStats" hidden></div><div class="hpd-pane" id="hpdInbox" hidden></div><div class="hpd-pane" id="hpdTrust" hidden></div>`);
+    host.insertAdjacentHTML("beforeend", `<div class="hpd-pane" id="hpdRecs" hidden></div><div class="hpd-pane" id="hpdDnc" hidden></div><div class="hpd-pane" id="hpdNumbers" hidden></div><div class="hpd-pane" id="hpdStats" hidden></div><div class="hpd-pane" id="hpdInbox" hidden></div><div class="hpd-pane" id="hpdDsettings" hidden></div><div class="hpd-pane" id="hpdTrust" hidden></div>`);
 
     // phone panel replaces the WAVV launcher (kept hidden for the CSV export)
     const wavv = $("#wavvUrl")?.closest(".panel");
@@ -123,7 +123,7 @@
     $("#dPane").hidden = true; $("#hPane").hidden = true;
     $$(".hpd-pane").forEach((x) => (x.hidden = x.id !== "hpd" + t[0].toUpperCase() + t.slice(1)));
     if ($("#hpdHome")) $("#hpdHome").hidden = $("#hphMusic").hidden = true;
-    ({ numbers: renderNumbers, stats: renderStats, inbox: renderInbox, recs: renderRecs, dnc: renderDnc, trust: renderTrust })[t]?.();
+    ({ numbers: renderNumbers, stats: renderStats, inbox: renderInbox, recs: renderRecs, dnc: renderDnc, trust: renderTrust, dsettings: renderDialerSettings })[t]?.();
   }
   const setChip = (s, t) => { const c = $("#hpdState"); if (c) { c.dataset.s = s; c.innerHTML = `<i></i>${esc(t)}`; } };
   const note = (html, cls = "") => { const n = $("#hpdNote"); if (n) { n.className = "hpd-banner " + cls; n.innerHTML = html; n.hidden = !html; } };
@@ -274,24 +274,24 @@
     });
     // refresh the login token before it expires (they last 24h)
     setInterval(async () => { try { const t2 = await txToken(); client.login_token = t2.token; } catch {} }, 20 * 36e5);
+    // which of your numbers to call from: your chosen numbers, the one you fixed as caller ID, or the one that matches the lead's area code
+    const pickNum = (params) => {
+      const all = S.numbers.filter((n) => !n.paused), chosen = S.prefs.useNumbers?.length ? all.filter((n) => S.prefs.useNumbers.includes(n.e164)) : all;
+      const pool = chosen.length ? chosen : all, lp = S.prefs.localPresence ?? S.settings.localPresence;
+      return pool.find((n) => n.e164 === params.CallerId) || (lp !== false && pool.find((n) => n.areaCode === d10(params.To).slice(0, 3))) || pool.find((n) => n.mine) || pool[0];
+    };
+    const place = (params, elId, isLeg) => {
+      const pick = pickNum(params);
+      if (!pick) throw new Error("Get a phone number first (Number groups tab)");
+      let el = document.getElementById(elId); if (!el) { el = document.createElement("audio"); el.id = elId; el.autoplay = true; document.body.append(el); }
+      el.muted = !!isLeg; // a lead that's still ringing stays silent until they answer
+      if (S.sound.spk && el.setSinkId) el.setSinkId(S.sound.spk).catch(() => {});
+      const c = client.newCall({ destinationNumber: "+1" + d10(params.To), callerNumber: pick.e164, callerName: S.settings.company || "Highpoint Financial", remoteElement: elId, ...(S.sound.mic ? { micId: S.sound.mic } : {}), ...(S.sound.spk ? { speakerId: S.sound.spk } : {}) });
+      const w = txCall(c, false); w.leadNum = d10(params.To); claimTx(w.leadNum); calls.set(c.id, w); return w;
+    };
     S.device = {
-      async connect({ params }) {
-        const to = "+1" + d10(params.To);
-        const mine = S.numbers.filter((n) => !n.paused);
-        const pick = mine.find((n) => n.e164 === params.CallerId) || mine.find((n) => n.areaCode === d10(params.To).slice(0, 3)) || mine.find((n) => n.mine) || mine[0];
-        if (!pick) throw new Error("Get a phone number first (Number groups tab)");
-        const c = client.newCall({ destinationNumber: to, callerNumber: pick.e164, callerName: S.settings.company || "Highpoint Financial", remoteElement: "hpdRemote" });
-        const w = txCall(c, false); w.leadNum = d10(params.To); claimTx(w.leadNum); calls.set(c.id, w); return w;
-      },
-      connectLeg(params) { // one of several simultaneous calls; each has its own muted audio element until it wins
-        const to = "+1" + d10(params.To);
-        const mine = S.numbers.filter((n) => !n.paused);
-        const pick = mine.find((n) => n.e164 === params.CallerId) || mine.find((n) => n.areaCode === d10(params.To).slice(0, 3)) || mine.find((n) => n.mine) || mine[0];
-        if (!pick) throw new Error("Get a phone number first (Number groups tab)");
-        let el = document.getElementById(params.RemoteEl); if (!el) { el = document.createElement("audio"); el.id = params.RemoteEl; el.autoplay = true; document.body.append(el); } el.muted = true;
-        const c = client.newCall({ destinationNumber: to, callerNumber: pick.e164, callerName: S.settings.company || "Highpoint Financial", remoteElement: params.RemoteEl });
-        const w = txCall(c, false); w.leadNum = d10(params.To); claimTx(w.leadNum); calls.set(c.id, w); return w;
-      },
+      async connect({ params }) { return place(params, "hpdRemote", false); },
+      connectLeg(params) { return place(params, params.RemoteEl, true); },
       on() {}, updateToken() {}, audio: null,
     };
     client.connect();
@@ -366,9 +366,10 @@
   }
 
   /* ================= Telnyx multi-line: ring up to 3 leads at once; whoever answers first gets the agent ================= */
-  const multiOn = () => !!S.ps && S.provider === "telnyx" && S.via !== "phone" && !S.demo && Math.min(S.lines, S.settings.maxLines || 3) > 1;
+  const multiOn = () => !!S.ps && S.provider === "telnyx" && S.via !== "phone" && !S.demo;
   function multiCancel(requeue) {
     const B = S.ps?.batch; if (!B) return;
+    if (!B.winner) clearTimeout(B.timer);
     B.legs.forEach((l) => { if (l === B.winner || l.done) return; l.released = true; if (requeue) (S.ps.back = S.ps.back || []).push(l.lead.id); try { l.call.disconnect(); } catch {} });
     if (!B.winner) { S.ps.batch = null; }
   }
@@ -410,14 +411,20 @@
         call.on("accept", () => multiAnswered(P, B, leg));
         const gone = () => multiGone(P, B, leg);
         call.on("disconnect", gone); call.on("cancel", gone); call.on("reject", gone); call.on("error", gone);
-      } catch (e) { leg.done = true; toast(e.message || "Couldn't place a call"); }
+      } catch (e) { leg.done = true; leg.failed = true; B.err = e.message || "Couldn't place a call"; }
     });
+    if (B.legs.every((l) => l.failed)) { P.batch = null; toast(B.err); phoneEnd(); return; } // nothing could be dialed (no number, phone not connected): stop instead of burning through the list
     multiDraw(B);
-    if (B.legs.every((l) => l.done)) { B.legs.forEach((l) => window.hpDesk.autoLog(l.lead.id, "No answer", {})); setTimeout(multiBatch, 500); }
+    B.timer = setTimeout(() => multiTimeout(P, B), Math.min(60, Math.max(8, +S.sound.ringSec || 25)) * 1000); // nobody picks up in time: hang up, log No answer, next
+    if (B.legs.every((l) => l.done)) { clearTimeout(B.timer); B.legs.forEach((l) => { if (!l.failed) window.hpDesk.autoLog(l.lead.id, "No answer", {}); }); setTimeout(multiBatch, 500); }
+  }
+  function multiTimeout(P, B) {
+    if (S.ps !== P || P.batch !== B || B.winner) return;
+    B.legs.filter((l) => !l.done).forEach((l) => { l.timedOut = true; try { l.call.disconnect(); } catch {} multiGone(P, B, l); });
   }
   function multiAnswered(P, B, leg) {
     if (S.ps !== P || P.batch !== B || B.winner || leg.released) { leg.released = true; try { leg.call.disconnect(); } catch {} return; } // a second person picking up is dropped at once
-    B.winner = leg; B.winnerAt = Date.now();
+    clearTimeout(B.timer); B.winner = leg; B.winnerAt = Date.now();
     B.legs.forEach((l) => { if (l === leg) return; if (!l.released) { l.released = true; window.hpDesk.autoLog(l.lead.id, "No answer", {}); } l.done = true; try { l.call.disconnect(); } catch {} }); // the others stop ringing and are logged "No answer"; we move on
     const a = document.getElementById("hpdRemote" + B.legs.indexOf(leg)); if (a) { a.muted = false; a.play?.().catch(() => {}); }
     const lead = leg.lead;
@@ -432,8 +439,8 @@
     if (leg.released || S.ps !== P || P.batch !== B) return;
     multiDraw(B);
     if (!B.winner && B.legs.every((l) => l.done)) {
-      B.legs.forEach((l) => window.hpDesk.autoLog(l.lead.id, "No answer", {}));
-      P.batch = null; setTimeout(multiBatch, 500);
+      B.legs.forEach((l) => { if (!l.failed) window.hpDesk.autoLog(l.lead.id, "No answer", {}); });
+      clearTimeout(B.timer); P.batch = null; setTimeout(multiBatch, 500);
     }
   }
   function phoneEnd(done) {
@@ -748,7 +755,7 @@
       if (left <= 0) {
         clearWrap();
         window.hpDesk?.autoLog?.(leadId, "Contacted", {});
-        if (S.ps?.multi && S.phoneLead === leadId && !S.call) { S.phoneLead = null; S.callLead = null; setTimeout(phoneNext, 400); return; }
+        if (S.ps?.multi && S.phoneLead === leadId && !S.call) { S.phoneLead = null; S.callLead = null; if (S.sound.autoNext !== false) setTimeout(phoneNext, 400); else { toast("Wrap-up finished. Press Skip to dial the next lead."); dock(); } return; }
         const P = S.power;
         if (P && P.waitingDispo === leadId) { P.waitingDispo = null; setTimeout(nextBatch, 400); }
         return;
@@ -799,8 +806,8 @@
     const nm = lead ? window.hpDesk.fullName(lead) : fmt(from);
     const ini = (String(nm).replace(/[^A-Za-z\s]/g, " ").trim().split(/\s+/).filter(Boolean)) .map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "#";
     box.innerHTML = `<div class="hpd-in-h"><i></i>Incoming call</div><div class="hpd-in-who"><span class="hpd-in-av">${esc(ini)}</span><div><b>${esc(nm)}</b><span class="hpd-sm">${esc(fmt(from))}</span></div></div><div class="hpd-in-acts"><button class="btn hpd-in-ans" id="hpdAns" type="button">Answer</button><button class="btn hpd-in-rej" id="hpdRej" type="button">Decline</button></div>`;
-    document.body.append(box);
-    const close = () => box.remove();
+    document.body.append(box); ringer(true, "in");
+    const close = () => { box.remove(); ringer(false, "in"); };
     $("#hpdAns", box).onclick = () => {
       if (S.call || S.power) { toast("Finish your current call first"); return; }
       call.accept(); S.call = call; S.callLead = lead?.id || null; S.callSid = call.parameters?.CallSid;
@@ -1505,6 +1512,45 @@
     };
   }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.getElementById("hpdInfo")?.remove(); });
+  /* where the call console sits: centered by default; drag its header to move it, drag its corner to resize it, or stretch it out */
+  S.consoleWide = lsGet("hpd.consoleWide", false);
+  function placeDock(f, variant) {
+    if (f.dataset.v === variant) return;
+    f.dataset.v = variant;
+    const st = f.style;
+    st.left = st.top = st.right = st.bottom = st.width = st.height = st.transform = st.animation = "";
+    if (variant === "card") {
+      const g = lsGet("hpd.consoleGeo", null), W = Math.min(960, innerWidth - 24);
+      st.transform = "none"; st.animation = "none";
+      st.width = Math.min(g?.w || W, innerWidth - 8) + "px"; if (g?.h) st.height = Math.min(g.h, innerHeight - 8) + "px";
+      st.left = Math.max(0, Math.min(g?.x ?? Math.round((innerWidth - (g?.w || W)) / 2), innerWidth - 160)) + "px";
+      st.top = Math.max(0, Math.min(g?.y ?? 112, innerHeight - 80)) + "px";
+    } else if (variant === "min") {
+      const pos = lsGet("hpd.dockPos", null); if (pos) { st.left = Math.max(4, Math.min(pos[0], innerWidth - 340)) + "px"; st.top = Math.max(4, Math.min(pos[1], innerHeight - 160)) + "px"; st.right = "auto"; st.bottom = "auto"; }
+    }
+  }
+  function wireDock(f) {
+    if (f._wired) return; f._wired = true;
+    const geo = () => lsGet("hpd.consoleGeo", {}) || {};
+    f.addEventListener("pointerdown", (e) => {
+      if (f.dataset.v !== "card" || f.classList.contains("wide")) return;
+      const r = f.getBoundingClientRect();
+      if (e.clientX > r.right - 22 && e.clientY > r.bottom - 22) { f._resizing = true; return; } // the corner handle: the browser resizes, we remember the size
+      const h = e.target.closest(".hpdl-h"); if (!h || e.target.closest("button,input,textarea,select,a")) return;
+      const dx = e.clientX - r.left, dy = e.clientY - r.top;
+      h.setPointerCapture(e.pointerId); f.classList.add("moving");
+      h.onpointermove = (m) => { f.style.left = Math.max(0, Math.min(innerWidth - 120, m.clientX - dx)) + "px"; f.style.top = Math.max(0, Math.min(innerHeight - 60, m.clientY - dy)) + "px"; };
+      h.onpointerup = () => { h.onpointermove = h.onpointerup = null; f.classList.remove("moving"); lsSet("hpd.consoleGeo", { ...geo(), x: parseInt(f.style.left), y: parseInt(f.style.top), w: geo().w || Math.round(f.getBoundingClientRect().width) }); };
+    });
+    addEventListener("pointerup", () => { f._resizing = false; });
+    addEventListener("mouseup", () => { f._resizing = false; });
+    f.addEventListener("dblclick", (e) => { if (f.dataset.v === "card" && e.target.closest(".hpdl-h") && !e.target.closest("button")) { lsSet("hpd.consoleGeo", null); f.dataset.v = ""; dock(); toast("Window put back in the middle"); } });
+    if (window.ResizeObserver) new ResizeObserver(() => {
+      if (!f._resizing || f.dataset.v !== "card" || f.classList.contains("wide")) return;
+      const r = f.getBoundingClientRect();
+      lsSet("hpd.consoleGeo", { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: f.style.height ? Math.round(r.height) : undefined });
+    }).observe(f);
+  }
   function consoleLegs() {
     const D = window.hpDesk, B = S.ps?.batch;
     if (B && !B.winner) return B.legs.map((l) => ({ lead: l.lead, name: l.name, to: l.to, st: l.done ? "done" : l.ringing ? "ring" : "dial", label: l.done ? "No answer" : l.ringing ? "Ringing" : "Dialing", t0: l.t0, released: l.released }));
@@ -1515,23 +1561,25 @@
     let f = document.getElementById("hpdDock");
     const active = S.call || P || S.ps || S.phoneLead;
     if (!active) {
-      clearInterval(S.dockTick); S.dockLiveAt = 0; S.ringAt = 0; S.consoleLead = null;
+      clearInterval(S.dockTick); S.dockLiveAt = 0; S.ringAt = 0; S.consoleLead = null; ringSync(false);
       if (!S.ready) { f?.remove(); document.body.classList.remove("hpd-bar"); return; }
-      if (!f) { f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Dialer ready"); document.body.append(f); }
-      f.className = "hpd hpdk callbar idle-ready"; document.body.classList.add("hpd-bar");
+      if (!f) { f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Dialer ready"); document.body.append(f); wireDock(f); }
+      f.className = "hpd hpdk callbar idle-ready"; document.body.classList.add("hpd-bar"); placeDock(f, "idle");
       f.innerHTML = `<div class="hpdk-row"><span class="hpdk-state" data-tone="idle"><i></i>Dialer ready</span><span class="hpdk-prog">${esc(S.provider === "telnyx" ? "Telnyx line" : "Browser line")}</span><span class="hpdk-sp"></span><button type="button" class="hpdk-bcall" id="hpdkOpenDialer">${I.phone}<span>Open dialer</span></button></div>`;
       $("#hpdkOpenDialer", f).onclick = () => window.hpDesk?.go?.("dialer");
       return;
     }
     if (!f) {
-      f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Call controls"); document.body.append(f);
+      f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Call controls"); document.body.append(f); wireDock(f);
       const pos = lsGet("hpd.dockPos", null); if (pos) { f.style.left = Math.max(4, Math.min(pos[0], innerWidth - 340)) + "px"; f.style.top = Math.max(4, Math.min(pos[1], innerHeight - 160)) + "px"; f.style.right = "auto"; f.style.bottom = "auto"; }
     }
     const l = dockLead(), live = tiles.some((t) => t.s === "live") || (S.call && S.callSid);
+    const legsNow = consoleLegs(), ringingNow = !live && !S.phoneLead && legsNow.some((x) => x.st === "ring" || x.st === "dial");
+    ringSync(ringingNow && !!(S.ps?.batch || S.power)); // a plain click-to-call already plays the carrier's own ringback
     if (live && !S.dockLiveAt) S.dockLiveAt = Date.now(); if (!live) S.dockLiveAt = 0;
     const cell = S.via === "phone";
-    const state = cell ? (S.phoneLead ? "On your phone" : "Ready") : live ? "Connected" : P ? (P.paused ? "Paused" : `Dialing ${P.lines || 1} line${(P.lines || 1) > 1 ? "s" : ""}`) : S.call ? "Ringing" : S.ps ? "Ready for next" : "Ready";
-    const tone = live || (cell && S.phoneLead) ? "live" : P?.paused ? "pause" : (S.call || P) ? "ring" : "idle";
+    const state = cell ? (S.phoneLead ? "On your phone" : "Ready") : live ? "Connected" : ringingNow ? (legsNow.length > 1 ? `Ringing ${legsNow.length} lines` : "Ringing") : P ? (P.paused ? "Paused" : `Dialing ${P.lines || 1} line${(P.lines || 1) > 1 ? "s" : ""}`) : S.call ? "Ringing" : S.ps ? "Ready for next" : "Ready";
+    const tone = live || (cell && S.phoneLead) ? "live" : P?.paused ? "pause" : (S.call || P || ringingNow) ? "ring" : "idle";
     const prog = S.ps ? `${Math.min(S.ps.i + 1, S.ps.ids.length)} / ${S.ps.ids.length}` : P ? esc(listName()) : "";
     const ini = l ? (D.fullName(l).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?") : "•";
     const clock = l ? leadClock(l) : null;
@@ -1545,6 +1593,7 @@
     const two = l && S.settings?.record && ["CA", "CT", "DE", "FL", "IL", "MD", "MA", "MI", "MT", "NV", "NH", "OR", "PA", "WA"].includes(String(l.state || "").toUpperCase());
     const min = S.dockMin && !bar;
     f.classList.toggle("min", !!min);
+    placeDock(f, bar ? "bar" : min ? "min" : "card");
     if (bar) {
       f.innerHTML = `<div class="hpdk-row">
         <span class="hpdk-state" data-tone="${tone}"><i></i>${esc(state)}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>
@@ -1575,12 +1624,11 @@
       $("#hpdkMax", f).onclick = () => { S.dockMin = false; dock(); };
     } else {
       // the call console: every lead that's ringing side by side; whoever answers fills it with their card, the controls and the result buttons
-      f.classList.remove("hpdk", "idle-ready"); f.classList.add("hpdl");
-      f.style.left = f.style.top = f.style.right = f.style.bottom = "";
+      f.classList.remove("hpdk", "idle-ready"); f.classList.add("hpdl"); f.classList.toggle("wide", !!S.consoleWide);
       const legs = consoleLegs(), ringPhase = !live && legs.some((x) => x.st === "ring" || x.st === "dial") && !S.phoneLead;
       if (!S.ringAt) S.ringAt = Date.now();
       const stopBtn = S.ps || P ? `<button type="button" class="hpdl-b end" id="hpdkStop">End session</button>` : S.call ? `<button type="button" class="hpdl-b end" id="hpdkHang">End call</button>` : !onCall && S.phoneLead ? `<button type="button" class="hpdl-b" id="hpdkDone">Close</button>` : "";
-      const minB = `<button type="button" class="hpdl-b" id="hpdkMin" title="Minimize">Hide</button>`;
+      const minB = `<button type="button" class="hpdl-b ${S.sound.ringOn ? "on" : ""}" id="hpdkRing" title="${S.sound.ringOn ? "Ringer on. Click to mute it" : "Ringer off. Click to turn it on"}" aria-pressed="${!!S.sound.ringOn}">${S.sound.ringOn ? "🔔" : "🔕"}</button><button type="button" class="hpdl-b ${S.consoleWide ? "on" : ""}" id="hpdkWide" title="${S.consoleWide ? "Back to normal size" : "Stretch out"}">${S.consoleWide ? "⤡" : "⤢"}</button><button type="button" class="hpdl-b" id="hpdkMin" title="Minimize">–</button>`;
       if (ringPhase) {
         S.consoleLead = null;
         const n = legs.length;
@@ -1594,7 +1642,7 @@
             <b class="hpdl-nm">${esc(nm)}</b><span class="hpdl-ph num">${esc(fmt(ld?.phone || g.to))}</span><span class="hpdl-meta">${bits.join(" · ")}</span>${ld && idLine(ld) ? `<span class="hpdl-id">${idLine(ld)}</span>` : ""}<span class="hpdl-hist">${hist}</span>
             <span class="hpdl-bar"><u style="animation-delay:-${((Date.now() - g.t0) / 1000).toFixed(1)}s"></u></span></button>`;
         };
-        f.innerHTML = `<div class="hpdl-h"><b>${n > 1 ? `Dialing ${n} at once` : "Calling"}</b><span>${n > 1 ? "First to pick up comes to you" : ""}</span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${S.ps ? `<button type="button" class="hpdl-b" id="hpdkSkip">Skip${n > 1 ? " these" : ""}</button>` : P ? `<button type="button" class="hpdl-b ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? "Resume" : "Pause"}</button>` : ""}${stopBtn}${minB}</div><div class="hpdl-g" data-n="${n}">${legs.map(card).join("")}</div>`;
+        f.innerHTML = `<div class="hpdl-h"><span class="hpdl-bell" aria-hidden="true">${I.phone}</span><b>${n > 1 ? `Ringing ${n} lines` : "Ringing…"}</b><span>${n > 1 ? "First to pick up comes to you" : ""}</span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${S.ps ? `<button type="button" class="hpdl-b" id="hpdkSkip">Skip${n > 1 ? " these" : ""}</button>` : P ? `<button type="button" class="hpdl-b ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? "Resume" : "Pause"}</button>` : ""}${stopBtn}${minB}</div><div class="hpdl-g" data-n="${n}">${legs.map(card).join("")}</div>`;
       } else if (!onCall && l && (S.phoneLead || S.callLead || P?.waitingDispo)) {
         // the call is over: just the result buttons, kept slim
         const noteV = S.dockNoteFor === l.id ? S.dockNote || "" : "";
@@ -1649,6 +1697,8 @@
         doDispo(l, k);
       }));
       $("#hpdkMin", f)?.addEventListener("click", () => { S.dockMin = true; dock(); });
+      $("#hpdkRing", f)?.addEventListener("click", () => { S.sound.ringOn = !S.sound.ringOn; saveSound(); ringerChanged(); dock(); });
+      $("#hpdkWide", f)?.addEventListener("click", () => { S.consoleWide = !S.consoleWide; lsSet("hpd.consoleWide", S.consoleWide); dock(); });
       $("#hpdkOpen", f)?.addEventListener("click", () => l && infoPop(l.id));
       $("#hpdkMute", f)?.addEventListener("click", () => { toggleMute(); dock(); });
       $("#hpdkPadBtn", f)?.addEventListener("click", () => { S.dockPad = !S.dockPad; dock(); });
@@ -2039,8 +2089,48 @@
     return { dialed, convo, talk };
   }
 
-  S.sound = lsGet("hpd.sound", { ding: 0.75, open: false, spk: "", mic: "" });
-  function ding(force) { if (!force && !S.sound.ding) return; try { const a = new AudioContext(), g = a.createGain(); g.gain.value = 0.12 * S.sound.ding; g.connect(a.destination); [880, 1320].forEach((f, i) => { const o = a.createOscillator(); o.frequency.value = f; o.connect(g); o.start(a.currentTime + i * 0.12); o.stop(a.currentTime + i * 0.12 + 0.14); }); } catch {} }
+  S.sound = { ding: 0.75, open: false, spk: "", mic: "", ringOn: true, ring: 0.6, ringSec: 25, autoNext: true, ...lsGet("hpd.sound", {}) };
+  const saveSound = () => lsSet("hpd.sound", S.sound);
+  // one shared audio context: its output follows the speaker you picked in Settings
+  function ac() {
+    try {
+      if (!S.ac) S.ac = new (window.AudioContext || window.webkitAudioContext)();
+      if (S.ac.state === "suspended") S.ac.resume().catch(() => {});
+      if (S.ac.setSinkId && S.acSink !== (S.sound.spk || "")) { S.acSink = S.sound.spk || ""; S.ac.setSinkId(S.acSink).catch(() => {}); }
+      return S.ac;
+    } catch { return null; }
+  }
+  function ding(force) {
+    if (!force && !S.sound.ding) return;
+    const a = ac(); if (!a) return;
+    try { const g = a.createGain(); g.gain.value = 0.12 * S.sound.ding; g.connect(a.destination); [880, 1320].forEach((f, i) => { const o = a.createOscillator(); o.frequency.value = f; o.connect(g); o.start(a.currentTime + i * 0.12); o.stop(a.currentTime + i * 0.12 + 0.14); }); } catch {}
+  }
+  /* the ringer: a phone ringback while your leads ring, a ring while someone calls you. Always visible too (tab title). */
+  const RING = { kind: "", t: 0, base: null };
+  function ringBurst(kind) {
+    if (!S.sound.ringOn) return;
+    const a = ac(); if (!a) return;
+    try {
+      const v = 0.14 * S.sound.ring, t0 = a.currentTime, g = a.createGain(); g.connect(a.destination);
+      const pulses = kind === "in" ? [[0, 0.9], [1.2, 2.1]] : [[0, 2]];
+      for (const [from, to] of pulses) { g.gain.setValueAtTime(0, t0 + from); g.gain.linearRampToValueAtTime(v, t0 + from + 0.05); g.gain.setValueAtTime(v, t0 + to - 0.06); g.gain.linearRampToValueAtTime(0, t0 + to); }
+      (kind === "in" ? [520, 640] : [440, 480]).forEach((f) => { const o = a.createOscillator(); o.type = "sine"; o.frequency.value = f; o.connect(g); o.start(t0); o.stop(t0 + 2.1); });
+    } catch {}
+  }
+  function ringer(on, kind = "out") {
+    if (!on) {
+      if (RING.kind === kind) { clearInterval(RING.t); RING.kind = ""; if (RING.base != null) { document.title = RING.base; RING.base = null; } }
+      return;
+    }
+    if (RING.kind === kind) return;
+    clearInterval(RING.t); RING.kind = kind;
+    if (RING.base == null) RING.base = document.title;
+    document.title = (kind === "in" ? "📞 Incoming call | " : "📞 Ringing… | ") + RING.base;
+    ringBurst(kind); RING.t = setInterval(() => ringBurst(kind), kind === "in" ? 3500 : 6000);
+  }
+  // turning the ringer off (or changing its volume) takes effect right away
+  const ringerChanged = () => { if (RING.kind) { const k = RING.kind; clearInterval(RING.t); RING.kind = ""; ringer(true, k); } };
+  const ringSync = (on) => ringer(!!on, "out");
   beep = () => ding();
 
   let usage = null;
@@ -2154,6 +2244,7 @@
       <div class="hph-sound" id="hphSoundP" ${S.sound.open ? "" : "hidden"}>
         <label><span>Speaker</span><select id="hphSpk"><option value="">System default</option></select></label>
         <label><span>Microphone</span><select id="hphMic"><option value="">System default</option></select></label>
+        <label><span>Ringer</span><input type="checkbox" id="hphRingOn" ${S.sound.ringOn ? "checked" : ""}> <input type="range" id="hphRing" min="0" max="1" step="0.05" value="${S.sound.ring}" aria-label="Ringer volume"><b class="num">${Math.round(S.sound.ring * 100)}%</b></label>
         <label><span>Pick-up ding</span><input type="range" id="hphDing" min="0" max="1" step="0.05" value="${S.sound.ding}"><b class="num">${Math.round(S.sound.ding * 100)}%</b></label>
         <button type="button" class="btn" id="hphTest">Test ding</button>
       </div>
@@ -2207,6 +2298,8 @@
     $("#hphBuy")?.addEventListener("click", () => openTab("numbers"));
     $("#hphSound").onclick = () => { S.sound.open = !S.sound.open; lsSet("hpd.sound", S.sound); renderHome(); };
     $("#hphTest").onclick = () => ding(true);
+    $("#hphRingOn").onchange = (e) => { S.sound.ringOn = e.target.checked; saveSound(); ringerChanged(); dock(); };
+    $("#hphRing").oninput = (e) => { S.sound.ring = +e.target.value; e.target.nextElementSibling.textContent = Math.round(S.sound.ring * 100) + "%"; saveSound(); };
     $("#hphDing").oninput = (e) => { S.sound.ding = +e.target.value; lsSet("hpd.sound", S.sound); e.target.nextElementSibling.textContent = Math.round(S.sound.ding * 100) + "%"; };
     fillDevices();
     $("#hphSrc").onchange = (e) => { setSrc(e.target.value); renderHome(); renderPhone(); };
@@ -2237,9 +2330,91 @@
     } catch {}
   }
   function applyDevices() {
-    const a = S.device?.audio; if (!a) return;
-    try { if (S.sound.spk && a.isOutputSelectionSupported) { a.speakerDevices.set(S.sound.spk); a.ringtoneDevices.set(S.sound.spk); } } catch {}
-    try { if (S.sound.mic) a.setInputDevice?.(S.sound.mic); } catch {}
+    const a = S.device?.audio;
+    if (a) {
+      try { if (S.sound.spk && a.isOutputSelectionSupported) { a.speakerDevices.set(S.sound.spk); a.ringtoneDevices.set(S.sound.spk); } } catch {}
+      try { if (S.sound.mic) a.setInputDevice?.(S.sound.mic); } catch {}
+    }
+    // Telnyx browser calling: the speaker applies to every call's audio right away; the microphone applies to the call in progress and every call after it
+    $$("audio[id^=hpdRemote]").forEach((el) => { if (el.setSinkId) el.setSinkId(S.sound.spk || "").catch(() => {}); });
+    try { const c = S.call?.raw; if (c && S.sound.mic) c.setAudioInDevice?.(S.sound.mic); } catch {}
+    S.acSink = null; ac();
+  }
+
+  /* ================= dialer settings tab: your own preferences ================= */
+  async function renderDialerSettings() {
+    const el = $("#hpdDsettings"); if (!el) return;
+    const tx = S.provider === "telnyx" && !S.demo, maxL = S.settings?.maxLines || 3, snd = S.sound, pr = S.prefs;
+    const mine = S.numbers.filter((n) => n.mine || n.shared || S.me?.admin);
+    const chosen = new Set(Array.isArray(pr.useNumbers) ? pr.useNumbers : []);
+    const row = (label, hint, ctl) => `<div class="hds-r"><div><b>${label}</b>${hint ? `<span>${hint}</span>` : ""}</div><div class="hds-c">${ctl}</div></div>`;
+    const sw = (id, on) => `<label class="hds-sw"><input type="checkbox" id="${id}" ${on ? "checked" : ""}><i></i></label>`;
+    const rng = (id, v) => `<input type="range" id="${id}" min="0" max="1" step="0.05" value="${v}"><b class="num" id="${id}O">${Math.round(v * 100)}%</b>`;
+    el.innerHTML = `<div class="panel stack hds">
+      <h2>Dialer settings</h2><p class="hpd-sm" style="margin:0">These are yours alone. They save on this device and apply right away.</p>
+      <h3>Calling</h3>
+      ${row("Lines at once", `Ring up to ${maxL} leads together. The first to answer comes to you.`, `<div class="hph-lines" id="dsLines">${[1, 2, 3].map((n) => `<button type="button" data-n="${n}" aria-pressed="${Math.min(S.lines, maxL) === n}" ${n > maxL ? "disabled" : ""}>${n}</button>`).join("")}</div>`)}
+      ${tx ? row("Ring for", "How long to let each lead ring before hanging up and moving on.", `<select id="dsRingSec">${[10, 15, 20, 25, 30, 40, 50, 60].map((n) => `<option value="${n}" ${+snd.ringSec === n ? "selected" : ""}>${n} seconds</option>`).join("")}</select>`) : ""}
+      ${row("Wrap-up after a call", "Seconds you get to log the result before it's marked Contacted.", `<input type="number" id="dsWrap" min="10" max="120" value="${Math.min(120, Math.max(10, +S.wrapSec || 30))}"><span class="hpd-sm">seconds</span>`)}
+      ${tx ? row("Keep dialing after wrap-up", "Off: the dialer waits for you to press Skip before the next lead.", sw("dsNext", snd.autoNext !== false)) : ""}
+      <h3>Numbers</h3>
+      ${row("Call from", mine.length ? "Tick the numbers you want used. Leave all unticked to use every number you can." : "You don't have a number yet. Get one in Number groups.", mine.length ? `<div class="hds-nums">${mine.map((n) => `<label><input type="checkbox" data-num="${esc(n.e164)}" ${chosen.has(n.e164) ? "checked" : ""}><span class="num">${esc(fmt(n.e164))}</span><em>${esc(n.label || (n.areaCode ? n.areaCode + " area" : ""))}${n.shared ? " · team" : ""}${n.paused ? " · paused" : ""}</em></label>`).join("")}</div>` : "")}
+      ${row("Match the lead's area code", "Pick the number closest to where the lead lives (local presence).", sw("dsLp", (pr.localPresence ?? S.settings?.localPresence) !== false))}
+      ${row("Always use this number", "Overrides matching when set.", `<select id="dsCid"><option value="">None, choose automatically</option>${mine.map((n) => `<option value="${esc(n.e164)}" ${pr.defaultCallerId === n.e164 ? "selected" : ""}>${esc(fmt(n.e164))}</option>`).join("")}</select>`)}
+      <h3>Sound</h3>
+      ${row("Ringer", "Plays a ring while your leads ring and when someone calls you.", sw("dsRingOn", snd.ringOn) + `<button type="button" class="btn" id="dsRingTest">Test ring</button>`)}
+      ${row("Ringer volume", "", rng("dsRingVol", snd.ring))}
+      ${row("Pick-up ding", "Plays when a lead answers.", rng("dsDing", snd.ding) + `<button type="button" class="btn" id="dsDingTest">Test</button>`)}
+      ${row("Speaker (output)", "Where you hear leads, the ring and the ding.", `<select id="dsSpk"><option value="">System default</option></select><button type="button" class="btn" id="dsSpkTest">Test</button>`)}
+      ${row("Microphone (input)", "Used for new calls and the call in progress.", `<select id="dsMic"><option value="">System default</option></select><button type="button" class="btn" id="dsMicTest">Test mic</button>`)}
+      <div class="hds-meter" id="dsMeter" hidden><i></i></div>
+      <p class="hpd-sm" id="dsDevNote" style="margin:0"></p>
+      <h3>Call window</h3>
+      ${row("Calling window position", "Put the calling window back in the middle of the screen at its normal size.", `<button type="button" class="btn" id="dsResetWin">Reset window</button>`)}
+    </div>`;
+    const save = () => { saveSound(); };
+    $$("#dsLines [data-n]", el).forEach((b) => (b.onclick = () => { S.lines = +b.dataset.n; lsSet("hpd.lines", S.lines); savePrefs({ lines: S.lines }); $$("#dsLines [data-n]", el).forEach((x) => x.setAttribute("aria-pressed", x === b)); renderPhone(); renderHome(); }));
+    $("#dsRingSec", el)?.addEventListener("change", (e) => { snd.ringSec = +e.target.value; save(); });
+    $("#dsWrap", el).onchange = (e) => { S.wrapSec = Math.min(120, Math.max(10, +e.target.value || 30)); e.target.value = S.wrapSec; lsSet("hpd.wrapSec", S.wrapSec); };
+    $("#dsNext", el)?.addEventListener("change", (e) => { snd.autoNext = e.target.checked; save(); });
+    $$("[data-num]", el).forEach((c) => (c.onchange = () => { const list = $$("[data-num]:checked", el).map((x) => x.dataset.num); savePrefs({ useNumbers: list }); toast(list.length ? `Calling from ${list.length} number${list.length === 1 ? "" : "s"}` : "Calling from all your numbers"); }));
+    $("#dsLp", el).onchange = (e) => savePrefs({ localPresence: e.target.checked });
+    $("#dsCid", el).onchange = (e) => { savePrefs({ defaultCallerId: e.target.value }); renderPhone(); };
+    $("#dsRingOn", el).onchange = (e) => { snd.ringOn = e.target.checked; save(); ringerChanged(); dock(); };
+    $("#dsRingVol", el).oninput = (e) => { snd.ring = +e.target.value; $("#dsRingVolO").textContent = Math.round(snd.ring * 100) + "%"; save(); };
+    $("#dsRingTest", el).onclick = () => { const was = snd.ringOn; snd.ringOn = true; ringBurst("out"); snd.ringOn = was; };
+    $("#dsDing", el).oninput = (e) => { snd.ding = +e.target.value; $("#dsDingO").textContent = Math.round(snd.ding * 100) + "%"; save(); };
+    $("#dsDingTest", el).onclick = () => ding(true);
+    $("#dsSpkTest", el).onclick = () => { applyDevices(); ding(true); };
+    $("#dsResetWin", el).onclick = () => { lsSet("hpd.consoleGeo", null); S.consoleWide = false; lsSet("hpd.consoleWide", false); const f = document.getElementById("hpdDock"); if (f) { f.dataset.v = ""; dock(); } toast("Calling window reset"); };
+    // devices
+    const spk = $("#dsSpk", el), mic = $("#dsMic", el), note = $("#dsDevNote", el);
+    const fill = async (ask) => {
+      if (!navigator.mediaDevices?.enumerateDevices) { note.textContent = "This browser can't list audio devices."; return; }
+      if (ask) { try { (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach((t) => t.stop()); } catch { note.textContent = "Allow the microphone in your browser to choose devices."; return; } }
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      const add = (sel, kind, cur) => { sel.innerHTML = `<option value="">System default</option>`; devs.filter((d) => d.kind === kind && d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications").forEach((d, i) => sel.insertAdjacentHTML("beforeend", `<option value="${esc(d.deviceId)}" ${cur === d.deviceId ? "selected" : ""}>${esc(d.label || (kind === "audioinput" ? "Microphone " : "Speaker ") + (i + 1))}</option>`)); };
+      add(spk, "audiooutput", snd.spk); add(mic, "audioinput", snd.mic);
+      const named = devs.some((d) => d.kind === "audioinput" && d.label);
+      note.innerHTML = named ? "" : `Your browser hides device names until you allow the microphone. <button type="button" class="btn" id="dsAllow">Allow and show my devices</button>`;
+      $("#dsAllow", el)?.addEventListener("click", () => fill(true));
+      if (!spk.options.length || spk.options.length === 1 && !("setSinkId" in HTMLMediaElement.prototype)) note.textContent = "This browser can't switch the speaker. It uses the system default.";
+    };
+    spk.onchange = () => { snd.spk = spk.value; save(); applyDevices(); };
+    mic.onchange = () => { snd.mic = mic.value; save(); applyDevices(); };
+    fill(false);
+    navigator.mediaDevices?.addEventListener?.("devicechange", () => { if (!el.hidden) fill(false); });
+    // mic test: a live level bar for a few seconds
+    $("#dsMicTest", el).onclick = async () => {
+      const m = $("#dsMeter", el), bar = $("i", m);
+      try {
+        const st = await navigator.mediaDevices.getUserMedia({ audio: snd.mic ? { deviceId: { exact: snd.mic } } : true });
+        const a = new (window.AudioContext || window.webkitAudioContext)(), an = a.createAnalyser(); an.fftSize = 512; a.createMediaStreamSource(st).connect(an);
+        const buf = new Uint8Array(an.fftSize); m.hidden = false; const t0 = Date.now();
+        const tick = () => { an.getByteTimeDomainData(buf); let mx = 0; for (const v of buf) mx = Math.max(mx, Math.abs(v - 128)); bar.style.width = Math.min(100, mx * 1.6) + "%"; if (Date.now() - t0 < 6000 && !el.hidden) requestAnimationFrame(tick); else { st.getTracks().forEach((t) => t.stop()); a.close(); m.hidden = true; } };
+        tick(); fill(false);
+      } catch { toast("Couldn't open that microphone. Check the browser's permission."); }
+    };
   }
 
   /* "Who are we calling?" picker → campaigns */
