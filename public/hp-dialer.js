@@ -371,9 +371,35 @@
   function multiCancel(requeue) {
     const B = S.ps?.batch; if (!B) return;
     B.legs.forEach((l) => { if (l === B.winner || l.done) return; l.released = true; if (requeue) (S.ps.back = S.ps.back || []).push(l.lead.id); try { l.call.disconnect(); } catch {} });
-    if (!B.winner) S.ps.batch = null;
+    if (!B.winner) { S.ps.batch = null; document.getElementById('hpdLines')?.remove(); }
+  }
+  /* the lines board: every lead that's ringing, side by side, like a power-dialer wall */
+  function multiBoard(B) {
+    let el = document.getElementById("hpdLines");
+    const P = S.ps;
+    if (!B || !P || P.batch !== B || B.winner) { el?.remove(); clearInterval(S.boardTick); return; } // once someone answers, their profile takes over
+    if (!el) { el = document.createElement("div"); el.id = "hpdLines"; el.className = "hpd hpdl"; el.setAttribute("role", "region"); el.setAttribute("aria-label", "Calls ringing now"); document.body.append(el); }
+    const D = window.hpDesk, n = B.legs.length;
+    const card = (l) => {
+      const ld = l.lead, nm = D.fullName(ld), ini = nm.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
+      const ck = leadClock(ld), won = l === B.winner;
+      const st = won ? "live" : l.done ? "done" : l.ringing ? "ring" : "dial";
+      const lab = won ? "Answered" : l.released ? "Stopped" : l.done ? "No answer" : l.ringing ? "Ringing" : "Dialing";
+      const bits = [ld.state && esc(ld.state) + (ck.txt ? " · " + esc(ck.txt) + " local" : ""), ld.age && "Age " + esc(ld.age), ld.product && esc(ld.product)].filter(Boolean);
+      const hist = (ld.callCount ? `Called ${ld.callCount}×` + (ld.lastDisposition ? ` · last: ${esc(ld.lastDisposition)}` : "") : "First call");
+      return `<button type="button" class="hpdl-c" data-s="${st}" data-lead="${esc(ld.id)}"><span class="hpdl-top"><span class="hpdl-av">${esc(ini)}</span><span class="hpdl-st"><i></i>${lab}<b class="num" data-t="${l.t0}">${won || l.done ? "" : mmss(Date.now() - l.t0)}</b></span></span>
+        <b class="hpdl-nm">${esc(nm)}</b><span class="hpdl-ph num">${esc(fmt(ld.phone))}</span>
+        <span class="hpdl-meta">${bits.join(" · ")}</span><span class="hpdl-hist">${hist}${ld.stage ? ` · <em class="hph-stage s-${esc(ld.stage)}">${esc(D.stageName(ld.stage))}</em>` : ""}</span><span class="hpdl-bar"><u style="animation-delay:-${((Date.now() - l.t0) / 1000).toFixed(1)}s"></u></span></button>`;
+    };
+    el.innerHTML = `<div class="hpdl-h"><b>${B.winner ? "Connected" : `Dialing ${n} at once`}</b><span>${B.winner ? "Others released" : "First to pick up comes to you"}</span><span class="hpdl-sp"></span>${B.winner ? "" : `<button type="button" class="hpdl-b" id="hpdlSkip">Skip these</button>`}<button type="button" class="hpdl-b end" id="hpdlEnd">End session</button></div><div class="hpdl-g" data-n="${n}">${B.legs.map(card).join("")}</div>`;
+    $("#hpdlSkip", el)?.addEventListener("click", () => phoneNext());
+    $("#hpdlEnd", el)?.addEventListener("click", () => phoneEnd());
+    $$(".hpdl-c", el).forEach((b) => (b.onclick = () => openProfile(b.dataset.lead, { keepList: true })));
+    clearInterval(S.boardTick);
+    S.boardTick = setInterval(() => { const e = document.getElementById("hpdLines"); if (!e || S.ps?.batch !== B) { clearInterval(S.boardTick); return; } $$(".num[data-t]", e).forEach((x) => { if (x.textContent) x.textContent = mmss(Date.now() - +x.dataset.t); }); }, 500);
   }
   function multiDraw(B) {
+    multiBoard(B);
     tiles(B.legs.map((l) => ({ leadId: l.lead.id, name: l.name, to: l.to, s: l === B.winner ? "live" : l.done ? "done" : "ringing", label: l === B.winner ? "Connected" : l.released ? "Stopped" : l.done ? "No answer" : l.ringing ? "Ringing" : "Calling" })));
   }
   async function multiBatch() {
@@ -402,7 +428,7 @@
     if (!ok.length) { setTimeout(multiBatch, 300); return; }
     const B = P.batch = { legs: [], winner: null };
     ok.forEach((lead, k) => {
-      const leg = { lead, name: D.fullName(lead), to: d10(lead.phone), done: false, ringing: false, released: false };
+      const leg = { lead, name: D.fullName(lead), to: d10(lead.phone), done: false, ringing: false, released: false, t0: Date.now() };
       B.legs.push(leg);
       try {
         const call = S.device.connectLeg({ To: leg.to, LeadId: lead.id, LeadName: leg.name, LeadState: lead.state || "", CallerId: S.prefs.defaultCallerId || "", RemoteEl: "hpdRemote" + k });
@@ -418,7 +444,7 @@
   }
   function multiAnswered(P, B, leg) {
     if (S.ps !== P || P.batch !== B || B.winner || leg.released) { leg.released = true; try { leg.call.disconnect(); } catch {} return; } // a second person picking up is dropped at once
-    B.winner = leg;
+    B.winner = leg; B.winnerAt = Date.now();
     B.legs.forEach((l) => { if (l === leg || l.done) return; l.released = true; (P.back = P.back || []).push(l.lead.id); try { l.call.disconnect(); } catch {} });
     const a = document.getElementById("hpdRemote" + B.legs.indexOf(leg)); if (a) { a.muted = false; a.play?.().catch(() => {}); }
     const lead = leg.lead;
@@ -435,10 +461,11 @@
     multiDraw(B);
     if (!B.winner && B.legs.every((l) => l.done)) {
       B.legs.forEach((l) => window.hpDesk.autoLog(l.lead.id, "No answer", {}));
-      P.batch = null; setTimeout(multiBatch, 500);
+      P.batch = null; document.getElementById('hpdLines')?.remove(); setTimeout(multiBatch, 500);
     }
   }
   function phoneEnd(done) {
+    document.getElementById('hpdLines')?.remove(); clearInterval(S.boardTick);
     multiCancel(false); if (S.ps?.multi && S.call) { try { S.call.disconnect(); } catch {} }
     const n = S.ps ? Math.min(S.ps.i + 1, S.ps.ids.length) : 0;
     S.ps = null; S.phoneLead = null; S.callLead = null; window.hpDesk.callStop(); phoneCard(); renderHome();
