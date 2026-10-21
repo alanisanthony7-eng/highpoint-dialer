@@ -1476,6 +1476,35 @@
     const id = S.callLead || S.phoneLead || P?.connectedLead || (S.lastTiles || []).find((t) => t.s === "live")?.leadId || (S.lastTiles || [])[0]?.leadId;
     return id ? D.leads.get(id) : null;
   }
+  const addrOf = (l) => [l.address, [l.city, [l.state, l.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join(", ");
+  const idLine = (l) => [l.dob && "DOB " + esc(l.dob), addrOf(l) && esc(addrOf(l))].filter(Boolean).join(" · ");
+  /* client info: a floating panel you can drag, opened from any card. It never leaves the dialer. */
+  function infoPop(id) {
+    const D = window.hpDesk, l = id && D.leads.get(id); if (!l) return;
+    let el = document.getElementById("hpdInfo");
+    if (el && el.dataset.lead === id) { el.remove(); return; }
+    el?.remove();
+    el = document.createElement("div"); el.id = "hpdInfo"; el.className = "hpd hpdi"; el.dataset.lead = id; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", "Client info");
+    const ck = leadClock(l), row = (k, v) => (v ? `<div class="hpdi-r"><span>${k}</span><b>${v}</b></div>` : "");
+    const notes = (l.notes || []).slice(-4).reverse().map((n) => `<p><em>${new Date(n.t).toLocaleDateString([], { month: "short", day: "numeric" })}</em> ${esc(String(n.text || "").slice(0, 220))}</p>`).join("");
+    const form = Object.entries(l.fields || {}).slice(0, 12).map(([k, v]) => row(esc(k), esc(String(v).slice(0, 80)))).join("");
+    el.innerHTML = `<div class="hpdi-h" id="hpdiDrag"><b>${esc(D.fullName(l))}</b><span class="hpdi-sp"></span><button type="button" class="hpdl-b" id="hpdiFull">Full profile</button><button type="button" class="hpdi-x" id="hpdiX" aria-label="Close">×</button></div>
+      <div class="hpdi-b">${row("Phone", esc(fmt(l.phone)))}${row("Alt phone", l.phone2 ? esc(fmt(l.phone2)) : "")}${row("Email", esc(l.email || ""))}${row("Date of birth", esc(l.dob || ""))}${row("Age", l.age ? esc(l.age) : "")}${row("Address", esc(addrOf(l)))}${row("Local time", ck?.txt ? esc(ck.txt) + (ck.ok ? "" : " · outside calling hours") : "")}${row("Product", esc(l.product || ""))}${row("Stage", esc(D.stageName(l.stage || "new")))}${row("Source", esc(l.source || ""))}${row("Mortgage", l.mortgageBalance ? "$" + esc(Number(l.mortgageBalance).toLocaleString()) + (l.mortgagePayment ? " · $" + esc(l.mortgagePayment) + "/mo" : "") + (l.lender ? " · " + esc(l.lender) : "") : "")}${row("Calls", l.callCount ? `${l.callCount}×${l.lastDisposition ? " · last: " + esc(l.lastDisposition) : ""}` : "First call")}
+        ${form ? `<div class="hpdi-t">From the lead form</div>${form}` : ""}${notes ? `<div class="hpdi-t">Recent notes</div><div class="hpdi-n">${notes}</div>` : ""}</div>`;
+    document.body.append(el);
+    const pos = lsGet("hpd.infoPos", null); if (pos) { el.style.left = Math.max(4, Math.min(pos[0], innerWidth - 340)) + "px"; el.style.top = Math.max(4, Math.min(pos[1], innerHeight - 120)) + "px"; el.style.right = "auto"; }
+    if (!pos) { const dk = document.getElementById("hpdDock")?.getBoundingClientRect(); el.style.top = Math.min(innerHeight - 200, (dk ? dk.bottom : 100) + 12) + "px"; el.style.left = Math.max(8, Math.min(innerWidth - 340, dk ? dk.right - 330 : innerWidth - 340)) + "px"; el.style.right = "auto"; }
+    $("#hpdiX", el).onclick = () => el.remove();
+    $("#hpdiFull", el).onclick = () => { el.remove(); openProfile(id, { keepList: true }); };
+    const h = $("#hpdiDrag", el);
+    h.onpointerdown = (e) => {
+      if (e.target.closest("button")) return;
+      const r = el.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top; h.setPointerCapture(e.pointerId);
+      h.onpointermove = (m) => { el.style.left = Math.max(4, Math.min(innerWidth - r.width - 4, m.clientX - dx)) + "px"; el.style.top = Math.max(4, Math.min(innerHeight - 80, m.clientY - dy)) + "px"; el.style.right = "auto"; };
+      h.onpointerup = () => { h.onpointermove = null; lsSet("hpd.infoPos", [parseInt(el.style.left), parseInt(el.style.top)]); };
+    };
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.getElementById("hpdInfo")?.remove(); });
   function consoleLegs() {
     const D = window.hpDesk, B = S.ps?.batch;
     if (B && !B.winner) return B.legs.map((l) => ({ lead: l.lead, name: l.name, to: l.to, st: l.done ? "done" : l.ringing ? "ring" : "dial", label: l.done ? "No answer" : l.ringing ? "Ringing" : "Dialing", t0: l.t0, released: l.released }));
@@ -1562,10 +1591,20 @@
           const hist = ld ? (ld.callCount ? `Called ${ld.callCount}×` + (ld.lastDisposition ? ` · last: ${esc(ld.lastDisposition)}` : "") : "First call") + (ld.stage ? ` · <em class="hph-stage s-${esc(ld.stage)}">${esc(D.stageName(ld.stage))}</em>` : "") : "";
           const lab = g.released ? "Stopped" : g.label;
           return `<button type="button" class="hpdl-c" data-s="${g.st}" data-lead="${esc(ld?.id || "")}"><span class="hpdl-top"><span class="hpdl-av">${esc(ini2)}</span><span class="hpdl-st"><i></i>${esc(lab)}<b class="num" data-t="${g.t0}">${g.st === "done" ? "" : mmss(Date.now() - g.t0)}</b></span></span>
-            <b class="hpdl-nm">${esc(nm)}</b><span class="hpdl-ph num">${esc(fmt(ld?.phone || g.to))}</span><span class="hpdl-meta">${bits.join(" · ")}</span><span class="hpdl-hist">${hist}</span>
+            <b class="hpdl-nm">${esc(nm)}</b><span class="hpdl-ph num">${esc(fmt(ld?.phone || g.to))}</span><span class="hpdl-meta">${bits.join(" · ")}</span>${ld && idLine(ld) ? `<span class="hpdl-id">${idLine(ld)}</span>` : ""}<span class="hpdl-hist">${hist}</span>
             <span class="hpdl-bar"><u style="animation-delay:-${((Date.now() - g.t0) / 1000).toFixed(1)}s"></u></span></button>`;
         };
         f.innerHTML = `<div class="hpdl-h"><b>${n > 1 ? `Dialing ${n} at once` : "Calling"}</b><span>${n > 1 ? "First to pick up comes to you" : ""}</span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${S.ps ? `<button type="button" class="hpdl-b" id="hpdkSkip">Skip${n > 1 ? " these" : ""}</button>` : P ? `<button type="button" class="hpdl-b ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? "Resume" : "Pause"}</button>` : ""}${stopBtn}${minB}</div><div class="hpdl-g" data-n="${n}">${legs.map(card).join("")}</div>`;
+      } else if (!onCall && l && (S.phoneLead || S.callLead || P?.waitingDispo)) {
+        // the call is over: just the result buttons, kept slim
+        const noteV = S.dockNoteFor === l.id ? S.dockNote || "" : "";
+        S.consoleLead = l.id;
+        f.innerHTML = `<div class="hpdl-h"><span class="hpdk-state" data-tone="idle"><i></i>Call ended</span><b>${esc(D.fullName(l))}</b><span class="num hpdl-prog">${esc(fmt(l.phone))}</span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span><button type="button" class="hpdl-b" id="hpdkOpen">Info</button>${S.ps ? `<button type="button" class="hpdl-b" id="hpdkSkip">Skip</button>` : P ? `<button type="button" class="hpdl-b ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? "Resume" : "Pause"}</button>` : ""}${stopBtn}${minB}</div>
+          <div class="hpdl-end"><textarea id="hpdlNote" rows="1" placeholder="Note for this call (optional)">${esc(noteV)}</textarea>
+            <div class="hpdk-dz">${DZ.map(([k, t]) => `<button type="button" class="hpdk-chip k-${k}" data-dz="${k}" ${S.dockPend === k ? 'aria-pressed="true"' : ""}>${t}</button>`).join("")}</div>
+            ${S.dockPend ? `<div class="hpdl-when"><span>${S.dockPend === "appt" ? "Appointment" : "Call back"} time</span><input type="datetime-local" id="hpdlAt" value="${esc(S.dockAt || "")}"><button type="button" class="hpdl-b on" id="hpdlSave">Save</button></div>` : ""}
+            ${!S.call && !P ? `<button type="button" class="hpdl-b" id="hpdkRedial">Call again</button>` : ""}</div>`;
+        window.hpCopilot?.refresh?.();
       } else {
         const keepScroll = $("#hpdlCopilot .hpc-body", f)?.scrollTop || 0;
         const noteV = S.dockNoteFor === (l?.id || "") ? S.dockNote || "" : "";
@@ -1573,8 +1612,8 @@
         const phase = onCall ? "Connected" : S.phoneLead || S.callLead ? "Call ended" : state;
         f.innerHTML = `<div class="hpdl-h"><span class="hpdk-state" data-tone="${tone}"><i></i>${esc(phase)}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${l ? `<button type="button" class="hpdl-b" id="hpdkOpen">Full profile</button>` : ""}${S.ps ? `<button type="button" class="hpdl-b" id="hpdkSkip">Skip</button>` : P ? `<button type="button" class="hpdl-b ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? "Resume" : "Pause"}</button>` : ""}${stopBtn.replace('id="hpdkHang"', 'id="hpdkHangH"')}${minB}</div>
         <div class="hpdl-live">
-          <div class="hpdl-who"><span class="hpdk-av" data-tone="${tone}">${esc(ini)}</span><b class="hpdl-nm">${l ? esc(D.fullName(l)) : "—"}</b><span class="hpdl-ph num">${l ? esc(fmt(l.phone)) : ""}</span>
-            ${l ? `<span class="hpdl-meta">${esc(l.state || "")}${clock ? ` · ${esc(clock.txt)} local` : ""}${l.age ? ` · Age ${esc(l.age)}` : ""}${l.product ? ` · ${esc(l.product)}` : ""}</span><span class="hpdl-hist">${hist} · <em class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</em></span>` : ""}
+          <div class="hpdl-who hpdl-c" data-s="live" data-lead="${esc(l?.id || "")}" title="Click for client info"><span class="hpdk-av" data-tone="${tone}">${esc(ini)}</span><b class="hpdl-nm">${l ? esc(D.fullName(l)) : "—"}</b><span class="hpdl-ph num">${l ? esc(fmt(l.phone)) : ""}</span>
+            ${l ? `<span class="hpdl-meta">${esc(l.state || "")}${clock ? ` · ${esc(clock.txt)} local` : ""}${l.age ? ` · Age ${esc(l.age)}` : ""}${l.product ? ` · ${esc(l.product)}` : ""}</span>${idLine(l) ? `<span class="hpdl-id">${idLine(l)}</span>` : ""}<span class="hpdl-hist">${hist} · <em class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</em></span>` : ""}
             ${two ? `<span class="hpdl-warn">${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Say "this call may be recorded" if the notice is off.</span>` : ""}
             ${window.hpPop ? window.hpPop.dockRow() : ""}</div>
           <div class="hpdl-mid">
@@ -1610,7 +1649,7 @@
         doDispo(l, k);
       }));
       $("#hpdkMin", f)?.addEventListener("click", () => { S.dockMin = true; dock(); });
-      $("#hpdkOpen", f)?.addEventListener("click", () => l && openProfile(l.id));
+      $("#hpdkOpen", f)?.addEventListener("click", () => l && infoPop(l.id));
       $("#hpdkMute", f)?.addEventListener("click", () => { toggleMute(); dock(); });
       $("#hpdkPadBtn", f)?.addEventListener("click", () => { S.dockPad = !S.dockPad; dock(); });
       $$(".hpdk-pad [data-k]", f).forEach((bb) => (bb.onclick = () => dtmf(bb.dataset.k)));
@@ -1623,7 +1662,7 @@
       $("#hpdkRedial", f)?.addEventListener("click", () => l && dialLead(l, true));
       $("#hpdkStop", f)?.addEventListener("click", () => (S.ps ? phoneEnd() : stopPower()));
       $("#hpdkDone", f)?.addEventListener("click", () => { window.hpDesk.callStop(); S.phoneLead = null; S.callLead = null; dock(); renderHome(); });
-      $$(".hpdl-c", f).forEach((bb) => (bb.onclick = () => bb.dataset.lead && openProfile(bb.dataset.lead, { keepList: true })));
+      $$(".hpdl-c", f).forEach((bb) => (bb.onclick = (e) => { if (e.target.closest("button:not(.hpdl-c),a,input,textarea")) return; if (bb.dataset.lead) infoPop(bb.dataset.lead); }));
     }
     clearInterval(S.dockTick);
     S.dockTick = setInterval(() => { const c = document.getElementById("hpdkClock"); if (c) c.textContent = S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""; $$("#hpdDock .num[data-t]").forEach((x) => { if (x.textContent) x.textContent = mmss(Date.now() - +x.dataset.t); }); }, 1000);
