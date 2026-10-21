@@ -45,6 +45,7 @@
   };
 
   /* ================= API ================= */
+  const authHeader = () => ({}); // sign-in rides on the session cookie (credentials: "include")
   async function api(path, { method = "GET", body, raw } = {}) {
     if (S.demo) return Demo.api(path, { method, body });
     const headers = {};
