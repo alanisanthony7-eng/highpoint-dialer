@@ -283,6 +283,15 @@
         const c = client.newCall({ destinationNumber: to, callerNumber: pick.e164, callerName: S.settings.company || "Highpoint Financial", remoteElement: "hpdRemote" });
         const w = txCall(c, false); w.leadNum = d10(params.To); claimTx(w.leadNum); calls.set(c.id, w); return w;
       },
+      connectLeg(params) { // one of several simultaneous calls; each has its own muted audio element until it wins
+        const to = "+1" + d10(params.To);
+        const mine = S.numbers.filter((n) => !n.paused);
+        const pick = mine.find((n) => n.e164 === params.CallerId) || mine.find((n) => n.areaCode === d10(params.To).slice(0, 3)) || mine.find((n) => n.mine) || mine[0];
+        if (!pick) throw new Error("Get a phone number first (Number groups tab)");
+        let el = document.getElementById(params.RemoteEl); if (!el) { el = document.createElement("audio"); el.id = params.RemoteEl; el.autoplay = true; document.body.append(el); } el.muted = true;
+        const c = client.newCall({ destinationNumber: to, callerNumber: pick.e164, callerName: S.settings.company || "Highpoint Financial", remoteElement: params.RemoteEl });
+        const w = txCall(c, false); w.leadNum = d10(params.To); claimTx(w.leadNum); calls.set(c.id, w); return w;
+      },
       on() {}, updateToken() {}, audio: null,
     };
     client.connect();
@@ -349,13 +358,88 @@
   }
   function phoneNext() {
     const P = S.ps; if (!P) return;
+    if (multiOn()) { if (S.call) { try { S.call.disconnect(); } catch {} return; } multiCancel(false); multiBatch(); return; } // on a call: hang up, the wrap-up moves on
     window.hpDesk.callStop();
     const D = window.hpDesk;
     do { P.i++; } while (P.i < P.ids.length && !D.leads.get(P.ids[P.i])?.phone);
     if (P.i >= P.ids.length) { phoneEnd(true); return; }
     phoneCall(D.leads.get(P.ids[P.i])); renderHome();
   }
+
+  /* ================= Telnyx multi-line: ring up to 3 leads at once; whoever answers first gets the agent ================= */
+  const multiOn = () => !!S.ps && S.provider === "telnyx" && S.via !== "phone" && !S.demo && Math.min(S.lines, S.settings.maxLines || 3) > 1;
+  function multiCancel(requeue) {
+    const B = S.ps?.batch; if (!B) return;
+    B.legs.forEach((l) => { if (l === B.winner || l.done) return; l.released = true; if (requeue) (S.ps.back = S.ps.back || []).push(l.lead.id); try { l.call.disconnect(); } catch {} });
+    if (!B.winner) S.ps.batch = null;
+  }
+  function multiDraw(B) {
+    tiles(B.legs.map((l) => ({ leadId: l.lead.id, name: l.name, to: l.to, s: l === B.winner ? "live" : l.done ? "done" : "ringing", label: l === B.winner ? "Connected" : l.released ? "Stopped" : l.done ? "No answer" : l.ringing ? "Ringing" : "Calling" })));
+  }
+  async function multiBatch() {
+    const P = S.ps; if (!P || P.busy) return;
+    if (S.call) { setTimeout(multiBatch, 500); return; }
+    if (!P.multi) {
+      if (window.hpTeam?.can?.("dialer") === false) { window.hpTeam.upgrade("dialer"); phoneEnd(); return; }
+      if (!S.device) { toast("Phone is still connecting…"); phoneEnd(); return; }
+      if (!(await micCheck())) { phoneEnd(); return; }
+      P.multi = true;
+    }
+    const D = window.hpDesk; D.callStop();
+    const want = Math.min(S.lines, S.settings.maxLines || 3), picks = [];
+    while (picks.length < want) {
+      if (P.back?.length) { const l = D.leads.get(P.back.shift()); if (l?.phone && !picks.includes(l)) picks.push(l); continue; }
+      do { P.i++; } while (P.i < P.ids.length && !D.leads.get(P.ids[P.i])?.phone);
+      if (P.i >= P.ids.length) break;
+      picks.push(D.leads.get(P.ids[P.i]));
+    }
+    if (!picks.length) { phoneEnd(true); return; }
+    P.busy = true; renderHome();
+    const pass = await Promise.all(picks.map((l) => preCheck(l)));
+    P.busy = false;
+    if (S.ps !== P) return;
+    const ok = picks.filter((_, i) => pass[i]);
+    if (!ok.length) { setTimeout(multiBatch, 300); return; }
+    const B = P.batch = { legs: [], winner: null };
+    ok.forEach((lead, k) => {
+      const leg = { lead, name: D.fullName(lead), to: d10(lead.phone), done: false, ringing: false, released: false };
+      B.legs.push(leg);
+      try {
+        const call = S.device.connectLeg({ To: leg.to, LeadId: lead.id, LeadName: leg.name, LeadState: lead.state || "", CallerId: S.prefs.defaultCallerId || "", RemoteEl: "hpdRemote" + k });
+        leg.call = call;
+        call.on("ringing", () => { leg.ringing = true; if (P.batch === B) multiDraw(B); });
+        call.on("accept", () => multiAnswered(P, B, leg));
+        const gone = () => multiGone(P, B, leg);
+        call.on("disconnect", gone); call.on("cancel", gone); call.on("reject", gone); call.on("error", gone);
+      } catch (e) { leg.done = true; toast(e.message || "Couldn't place a call"); }
+    });
+    multiDraw(B);
+    if (B.legs.every((l) => l.done)) { B.legs.forEach((l) => window.hpDesk.autoLog(l.lead.id, "No answer", {})); setTimeout(multiBatch, 500); }
+  }
+  function multiAnswered(P, B, leg) {
+    if (S.ps !== P || P.batch !== B || B.winner || leg.released) { leg.released = true; try { leg.call.disconnect(); } catch {} return; } // a second person picking up is dropped at once
+    B.winner = leg;
+    B.legs.forEach((l) => { if (l === leg || l.done) return; l.released = true; (P.back = P.back || []).push(l.lead.id); try { l.call.disconnect(); } catch {} });
+    const a = document.getElementById("hpdRemote" + B.legs.indexOf(leg)); if (a) { a.muted = false; a.play?.().catch(() => {}); }
+    const lead = leg.lead;
+    S.call = leg.call; S.callLead = lead.id; S.phoneLead = lead.id; S.callSid = leg.call.sid; S.sidByLead.set(lead.id, S.callSid); S.txByLead.set(lead.id, []);
+    window.hpDesk.callStart(lead.id);
+    multiDraw(B); renderPhone(); renderHome();
+    openProfile(lead.id, { keepList: PF.id != null });
+    setChip("live", "On call"); livePoll(); PF.liveAt = Date.now(); beep();
+  }
+  function multiGone(P, B, leg) {
+    if (leg.done) return; leg.done = true;
+    if (B.winner === leg) { endCall(); return; }
+    if (leg.released || S.ps !== P || P.batch !== B) return;
+    multiDraw(B);
+    if (!B.winner && B.legs.every((l) => l.done)) {
+      B.legs.forEach((l) => window.hpDesk.autoLog(l.lead.id, "No answer", {}));
+      P.batch = null; setTimeout(multiBatch, 500);
+    }
+  }
   function phoneEnd(done) {
+    multiCancel(false); if (S.ps?.multi && S.call) { try { S.call.disconnect(); } catch {} }
     const n = S.ps ? Math.min(S.ps.i + 1, S.ps.ids.length) : 0;
     S.ps = null; S.phoneLead = null; S.callLead = null; window.hpDesk.callStop(); phoneCard(); renderHome();
     toast(done ? `List finished · ${n} lead${n === 1 ? "" : "s"} called` : "Phone session ended");
@@ -667,6 +751,7 @@
       if (left <= 0) {
         clearWrap();
         window.hpDesk?.autoLog?.(leadId, "Contacted", {});
+        if (S.ps?.multi && S.phoneLead === leadId && !S.call) { S.phoneLead = null; S.callLead = null; setTimeout(phoneNext, 400); return; }
         const P = S.power;
         if (P && P.waitingDispo === leadId) { P.waitingDispo = null; setTimeout(nextBatch, 400); }
         return;
@@ -1975,7 +2060,7 @@
   }
   function renderHome() {
     const el = $("#hpdHome"); if (!el || !window.hpDesk) return;
-    const D = window.hpDesk, q = campaignQueue(), oneLine = S.via === "phone" || S.provider === "telnyx", lines = oneLine ? 1 : Math.min(S.lines, S.settings.maxLines || 3);
+    const D = window.hpDesk, q = campaignQueue(), oneLine = S.via === "phone", psFlow = oneLine || S.provider === "telnyx", lines = oneLine ? 1 : Math.min(S.lines, S.settings.maxLines || 3);
     const sub = $("#v-dialer .head p"); if (sub) sub.textContent = dialSubtitle();
     const headset = S.via === "phone" ? (S.phoneLead ? "live" : "on") : S.call || S.power?.connected ? "live" : S.power ? "dial" : (S.deviceReady || S.demo) ? "on" : "off";
     const t = usage?.today || {}, m = usage?.month || {};
@@ -2022,8 +2107,8 @@
         <div class="hph-ctl">
           <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}<optgroup label="Pipeline">${["new", "contacted", "appointment", "application"].map((id) => `<option value="p:${id}" ${S.src === "p:" + id ? "selected" : ""}>${esc(pipeName(id))} (${[...D.leads.values()].filter((l) => (l.stage || "new") === id && dialable(l)).length})</option>`).join("")}</optgroup>${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
           <label class="hph-sel"><span>Who to call</span><select id="hphFilter" ${S.power ? "disabled" : ""}>${FILTERS.map(([k, n]) => `<option value="${k}" ${S.filter === k ? "selected" : ""}>${n} (${fCount[k]})</option>`).join("")}</select></label>
-          ${oneLine ? `<p class="hpd-sm" style="margin:0;align-self:center">${S.via === "phone" ? "Your phone is one line at a time." : "Telnyx browser calling is one line at a time."}</p>` : `<div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>`}
-          ${oneLine ? (S.ps ? `<button type="button" class="btn" id="hphPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hphPsEnd">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphPsGo" ${q.length ? "" : "disabled"}>${I.phone} Start calling</button>`) : S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
+          ${oneLine ? `<p class="hpd-sm" style="margin:0;align-self:center">Your phone is one line at a time.</p>` : `<div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power || S.ps ? "disabled" : ""}>${n}</button>`).join("")}</div>`}
+          ${psFlow ? (S.ps ? `<button type="button" class="btn" id="hphPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hphPsEnd">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphPsGo" ${q.length ? "" : "disabled"}>${I.phone} Start calling</button>`) : S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
         </div>
       </div>
       <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Today</h3><span class="hpd-sm">Counted as you dial</span></div>
