@@ -692,6 +692,22 @@ html.hp-pro .hpdk.callbar{border-radius:0;border-width:1px 0 0;border-color:rgba
 .hpdl-c[data-s="live"] .hpdl-bar u,.hpdl-c[data-s="done"] .hpdl-bar u{animation:none;width:100%;background:#3BD38B}
 @keyframes hpdlBar{to{width:100%}}
 @media(max-width:700px){.hpdl{top:64px}.hpdl-g{grid-template-columns:1fr!important}.hpdl-c{flex-direction:row;flex-wrap:wrap;align-items:center}}
-body:has(#hpdLines) #hpdDock:not(.callbar){display:none}
 .hpdl{top:112px}
 @media(max-width:700px){.hpdl{top:100px}}
+
+/* console: answered view */
+#hpdDock.hpdl{right:auto;bottom:auto;max-height:calc(100vh - 130px);overflow:auto}
+.hpdl-prog,.hpdl-h .hpdk-state{opacity:.9}
+.hpdl-b.on{background:rgba(255,255,255,.14)}
+.hpdl-live{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr) minmax(0,1.15fr);gap:12px}
+.hpdl-who,.hpdl-mid,.hpdl-log{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:rgba(255,255,255,.045);border:1px solid var(--line,rgba(255,255,255,.1));min-width:0}
+.hpdl-who .hpdk-av{width:48px;height:48px;font-size:17px}
+.hpdl-warn{font-size:12px;padding:6px 8px;border-radius:8px;background:rgba(255,181,71,.12);color:#ffcf85}
+.hpdl-mid .hpdk-ctl{display:flex;gap:6px}.hpdl-mid .hpdk-rb{flex:1}
+.hpdl-tx{flex:1;min-height:90px;max-height:190px;overflow:auto;font-size:13px;border-radius:10px;background:rgba(0,0,0,.25);padding:8px}
+.hpdl-tx p{margin:0 0 4px}
+.hpdl-log textarea{all:unset;box-sizing:border-box;width:100%;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.25);border:1px solid var(--line,rgba(255,255,255,.12));font-size:13px;min-height:44px;white-space:pre-wrap}
+.hpdl-log .hpdk-dz{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.hpdl-when{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px}.hpdl-when input{all:unset;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.3);border:1px solid var(--line,rgba(255,255,255,.15))}
+@media(max-width:900px){.hpdl-live{grid-template-columns:1fr}}
+#hpdDock.hpdl,.hpdl{background:var(--bg2,#070b14);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
