@@ -89,8 +89,8 @@
   .hpt-ov.pw{background:var(--theme-bg,#080b12);backdrop-filter:none;align-items:start}
   .pw .hpt-card{width:min(1040px,100%);background:transparent;border:0;box-shadow:none;padding:40px 8px 28px;margin:0 auto;overflow:visible;max-height:none}
   .pw-head{display:flex;align-items:center;gap:12px;margin-bottom:26px}
-  .pw-head img{border-radius:10px;width:36px;height:36px}
-  .pw-eyebrow{display:block;font:600 12.5px var(--f-ui,system-ui);letter-spacing:.04em;color:var(--muted,#8c97ab);margin-bottom:2px}
+  .pw-mark{color:var(--ink,#fff);flex:none}
+  .pw-eyebrow{display:block;font:700 11.5px var(--f-ui,system-ui);letter-spacing:.2em;color:var(--muted,#8c97ab);margin-bottom:2px}
   .pw .hpt-card h2{font:700 34px/1.15 var(--f-ui,system-ui);letter-spacing:-.02em;margin:0}
   .pw .pw-sub{font-size:16px;margin:0 0 26px;color:var(--muted,#8c97ab);max-width:56ch}
   .pw .hpt-card h3{margin:30px 0 12px;font-size:12px;letter-spacing:.08em;color:var(--muted,#8c97ab)}
@@ -201,7 +201,7 @@
   function paywall(u, b) {
     return new Promise(() => {
       const pd = u.access?.reason === "past_due";
-      const m = modal(`<div class="pw-head"><img src="/icons/icon-192.png" alt="" width="44" height="44"><div><span class="pw-eyebrow">Highpoint Financial</span><h2>${pd ? "Your payment didn't go through" : "Choose your plan"}</h2></div></div>
+      const m = modal(`<div class="pw-head"><svg class="pw-mark" viewBox="0 0 132 96" width="66" height="48" aria-hidden="true"><text x="18" y="66" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="currentColor">H</text><text x="58" y="86" font-family="Libre Caslon Text, Georgia, serif" font-size="70" fill="currentColor">P</text><path d="M4 80 C40 74 78 56 112 22 C82 58 44 78 4 80Z" fill="currentColor"/><g transform="translate(111.2 14.8) rotate(-38)"><path fill="currentColor" d="M-2 4.15 H13.4 C16 4.15 17.7 3.55 18.6 4.15 17.7 4.75 16 5.25 13.4 5.25 H-2Z"/><path fill="currentColor" d="M6.2 4.7 9.7-.5 11.8 4.7 9.7 9.9Z"/><path fill="#9CC3F0" d="M-2.4 4.7 2.2 1.7v6Z"/><path fill="currentColor" d="M16.4 4.15 19.6 3.15v2Z"/></g></svg><div><span class="pw-eyebrow">HIGHPOINT FINANCIAL</span><h2>${pd ? "Your payment didn't go through" : "Choose your plan"}</h2></div></div>
         <p class="pw-sub">${pd ? "Update your card to keep using the Highpoint desk. Your leads and notes are saved." : "Pick a plan to start using the Highpoint desk. Your leads stay private to your login."}</p>
         ${pd && b.hasCustomer ? `<div class="hpt-row" style="margin:12px 0"><button class="hpt-btn go" type="button" id="hptPortal">Update my card</button></div>` : plansHtml(b)}
         <div class="hpt-row" style="justify-content:space-between;margin-top:14px"><button class="hpt-btn sm" type="button" id="hptOut">Sign out</button><span class="hpt-muted">Questions? Contact your Highpoint admin.</span></div>`, { close: false, wide: !pd, cls: "pw" });
