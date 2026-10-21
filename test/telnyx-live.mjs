@@ -26,7 +26,7 @@ const env = {
 
 // Fake Telnyx REST API: records every call so the test can check what the server asked for
 const telnyx = [];
-let FAIL_HOOK = false, NEED_ANSWER = false, credN = 0;
+let FAIL_HOOK = false, NEED_ANSWER = false, credN = 0, REFUSE_ENGINE = "";
 const answeredLegs = new Set();
 globalThis.fetch = async (url, o = {}) => {
   const u = new URL(url);
@@ -48,6 +48,7 @@ globalThis.fetch = async (url, o = {}) => {
   if (cmd) {
     const [, leg, a] = cmd;
     if (a === "answer") answeredLegs.add(leg);
+    if (a === "transcription_start" && REFUSE_ENGINE && body?.transcription_engine === REFUSE_ENGINE) return J({ errors: [{ detail: "engine not enabled for this account" }] }, 422);
     if (a === "transfer" && NEED_ANSWER && !answeredLegs.has(leg)) return J({ errors: [{ detail: "Call has not been answered yet" }] }, 422);
     return J({ data: { result: "ok" } });
   }
@@ -100,7 +101,9 @@ ok((await call("rep", "/api/telnyx/claim", { method: "POST", body: { n: "3055550
 ok(await sendEvent("call.answered", { call_control_id: "v3:x1", call_session_id: "sA" }) === 200, "answer event accepted");
 const st1 = starts().at(-1);
 ok(st1?.path === "/v2/calls/v3:x1/actions/transcription_start", "answering starts transcription on that call");
-ok(st1?.body?.transcription_tracks === "both" && st1?.body?.transcription_engine === "Google" && st1?.body?.language === "en-US", "transcription asks for both tracks, Google, en-US");
+ok(st1?.body?.transcription_tracks === "both" && st1?.body?.transcription_engine === "Deepgram" && st1?.body?.transcription_engine_config?.transcription_model === "deepgram/nova-3" && st1?.body?.transcription_engine_config?.language === "en", "transcription asks for both tracks with Deepgram Nova-3, English");
+ok(st1?.body?.transcription_engine_config?.keyterms?.includes("final expense") && st1.body.transcription_engine_config.keyterms.includes("Mutual of Omaha"), "and is told the insurance words to expect");
+ok(st1?.body?.transcription_engine_config?.interim_results === true, "partial lines still stream while someone is talking");
 await sendEvent("call.transcription", { call_control_id: "v3:x1", call_session_id: "sA", transcription_data: { transcript: "Hi, this is Ann", is_final: false, confidence: 0.8, track: "inbound" } });
 let tr = (await call("rep", "/api/telnyx/transcript?n=3055550001")).j;
 ok(tr.partial.length === 1 && tr.partial[0].speaker === "Lead", "a partial line shows while the lead is still talking");
@@ -130,6 +133,20 @@ await sendEvent("call.initiated", { direction: "incoming", from: "+13055550001",
 ok((await call("rep", "/api/telnyx/claim", { method: "POST", body: { n: "3055550001" } })).s === 200, "the agent answers the new inbound call");
 await sendEvent("call.answered", { call_control_id: "v3:x2", call_session_id: "sB" });
 ok(starts().at(-1)?.path === "/v2/calls/v3:x2/actions/transcription_start", "the new call gets its own transcription");
+// ---- 5b. if Telnyx refuses the best engine, the next one takes over so the call still gets a transcript ----
+{
+  REFUSE_ENGINE = "Deepgram";
+  const n0 = starts().length;
+  await sendEvent("call.initiated", { direction: "incoming", from: "+13055550002", to: "+13055559999", call_control_id: "v3:x9", call_session_id: "sF" });
+  await call("rep", "/api/telnyx/claim", { method: "POST", body: { n: "3055550002" } });
+  await sendEvent("call.answered", { call_control_id: "v3:x9", call_session_id: "sF" });
+  const tried = starts().slice(n0).map((x) => x.body.transcription_engine + (x.body.transcription_engine_config?.model ? "/" + x.body.transcription_engine_config.model : ""));
+  ok(tried[0] === "Deepgram" && tried[1] === "Google/phone_call", "Deepgram refused, so Google's phone-call model is tried next: " + tried.join(" > "));
+  ok(starts().slice(n0).at(-1)?.body?.transcription_engine_config?.hints?.includes("final expense"), "the fallback keeps the insurance word list");
+  const tl = (await call("rep", "/api/telnyx/transcript?n=3055550002")).j;
+  ok(tl.status !== "off", "the call still counts as transcribing after the fallback");
+  REFUSE_ENGINE = "";
+}
 ok((await call("rep3", "/api/telnyx/claim", { method: "POST", body: { n: "3055550001" } })).s === 409, "another agent can't take over a live call's transcript");
 ok((await call("rep3", "/api/telnyx/transcript?n=3055550001")).s === 404, "and still can't read it");
 await sendEvent("call.transcription", { call_control_id: "v3:x2", call_session_id: "sB", transcription_data: { transcript: "Yes, I'm still here", is_final: true, track: "inbound" } });

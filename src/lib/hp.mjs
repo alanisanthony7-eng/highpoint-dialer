@@ -130,6 +130,7 @@ export const DEFAULT_SETTINGS = {
   recordNotice: false,         // legacy setting: the notice now always plays while a call is recorded (see recordNoticeFor)
   recordNoticeMode: "auto",    // legacy setting: no longer changes anything
   transcribe: true,
+  transcribeEngine: "auto",   // auto = Deepgram Nova-3 (falls back to Google); google = phone model; basic = plain Google
   localPresence: true,
   sharedPool: true,            // agents may borrow team numbers for local presence
   agentMaxNumbers: 5,          // numbers an agent may buy themselves (0 = admins only)

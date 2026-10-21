@@ -1208,6 +1208,7 @@
       ${c("hsRec", "Record calls (both sides)", s.record)}
       <p class="hpd-sm" style="margin:6px 0">Recording notice: when a call is recorded, the lead hears "This call may be recorded" first. This is always on.</p>
       ${c("hsTx", "Live transcription", s.transcribe)}
+      <label class="hpd-f" style="display:block;margin:6px 0"><span class="hpd-sm">Transcription accuracy</span><select id="hsTxE" style="width:100%;margin-top:4px">${[["auto", "Best (Deepgram Nova-3 with insurance words; falls back automatically)"], ["google", "Google phone-call model"], ["basic", "Basic (Google standard)"]].map(([v, n]) => `<option value="${v}" ${(s.transcribeEngine || "auto") === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       ${c("hsLp", "Local presence (match caller ID to the lead's area code)", s.localPresence)}
       ${c("hsPool", "Agents can borrow team numbers for local presence", s.sharedPool)}
       ${c("hsAmd", "Multi-line: hang up on machines automatically and keep dialing", s.amdAutoSkip)}
@@ -1227,7 +1228,7 @@
         const mx = rest.match(/max(\d+)/i); if (mx) r.max24h = +mx[1]; if (/nosun/i.test(rest)) r.noSunday = true; const ss = rest.match(/sun(\d+)/i); if (ss) r.sunStart = +ss[1];
         rules[m[1].toUpperCase()] = r;
       }
-      const settings = { company: $("#hsCo").value, callbackNumber: d10($("#hsCb").value), maxLines: +$("#hsLines").value, abandonCap: +$("#hsAb").value, dailyCapPerNumber: +$("#hsCap").value, maxAttempts24h: +$("#hsAtt").value, agentMaxNumbers: +$("#hsBuy").value, rampDays: +$("#hsRamp").value, record: $("#hsRec").checked, recordNotice: false, recordNoticeMode: "always", transcribe: $("#hsTx").checked, localPresence: $("#hsLp").checked, sharedPool: $("#hsPool").checked, amdAutoSkip: $("#hsAmd").checked, inboundGreeting: $("#hsGreet").value, stateRules: rules };
+      const settings = { company: $("#hsCo").value, callbackNumber: d10($("#hsCb").value), maxLines: +$("#hsLines").value, abandonCap: +$("#hsAb").value, dailyCapPerNumber: +$("#hsCap").value, maxAttempts24h: +$("#hsAtt").value, agentMaxNumbers: +$("#hsBuy").value, rampDays: +$("#hsRamp").value, record: $("#hsRec").checked, recordNotice: false, recordNoticeMode: "always", transcribe: $("#hsTx").checked, transcribeEngine: $("#hsTxE").value, localPresence: $("#hsLp").checked, sharedPool: $("#hsPool").checked, amdAutoSkip: $("#hsAmd").checked, inboundGreeting: $("#hsGreet").value, stateRules: rules };
       try { const r = await api("/setup", { method: "PUT", body: { settings } }); S.settings = r.settings; toast("Dialer settings saved"); } catch (e) { toast(e.message); }
     };
     $("#hpdDncAdd", el).onclick = async () => { const nums = $("#hpdDncN").value.split(/[\n,;]+/).map(d10).filter((x) => x.length === 10); if (!nums.length) return; await api("/calls/dnc", { method: "POST", body: { numbers: nums } }); toast(`${nums.length} added to Do Not Call`); $("#hpdDncN").value = ""; };

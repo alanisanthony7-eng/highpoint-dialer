@@ -164,6 +164,19 @@ const b64json = (o) => btoa(JSON.stringify(o));
 const unjson = (s) => { try { return JSON.parse(atob(String(s || ""))); } catch { return null; } };
 const act = (ccid, action, body = {}) => tx(`/v2/calls/${ccid}/actions/${action}`, { method: "POST", body });
 
+
+// Words the speech engine should expect to hear on these calls (it gets them right far more often when told).
+export const TX_TERMS = ["Highpoint Financial", "final expense", "burial insurance", "mortgage protection", "IUL", "indexed universal life", "whole life", "term life", "beneficiary", "premium", "underwriting", "graded benefit", "guaranteed issue", "simplified issue", "Medicare", "Mutual of Omaha", "Transamerica", "Aetna", "Americo", "Foresters", "Royal Neighbors", "Corebridge", "AIG", "Ethos", "F&G", "Columbian", "SBLI", "bank draft", "routing number", "face amount"];
+const gBody = (model) => ({ transcription_engine: "Google", transcription_tracks: "both", transcription_engine_config: { transcription_engine: "Google", language: "en", ...(model ? { model, use_enhanced: true } : {}), ...(model ? { hints: TX_TERMS } : {}), interim_results: true } });
+// Which engines to try, in order. "auto" = Deepgram Nova-3 (phone-call accuracy plus our word list), then Google's phone model, then plain Google.
+export function engineOrder(pref) {
+  const dg = { name: "Deepgram Nova-3", body: { transcription_engine: "Deepgram", transcription_tracks: "both", transcription_engine_config: { transcription_engine: "Deepgram", transcription_model: "deepgram/nova-3", language: "en", interim_results: true, smart_format: true, keyterms: TX_TERMS } } };
+  const gp = { name: "Google phone model", body: gBody("phone_call") };
+  const g0 = { name: "Google", body: { transcription_engine: "Google", transcription_tracks: "both", language: "en-US", interim_results: true } };
+  if (pref === "google") return [gp, g0];
+  if (pref === "basic") return [g0];
+  return [dg, gp, g0];
+}
 // Start live transcription once per call. `target` is the leg whose "inbound" track is the lead's voice.
 async function startTx(lead, sess, target) {
   const rec = await getJ("txlive", lead);
@@ -171,11 +184,14 @@ async function startTx(lead, sess, target) {
   if (rec.declined) return "not transcribing: the client declined";
   if (rec.started) return "transcription already running";
   if ((await loadConfig()).settings?.transcribe === false) return "not transcribing: turned off in settings";
-  let err = null;
-  try { await act(target, "transcription_start", { transcription_engine: "Google", transcription_tracks: "both", language: "en-US", interim_results: true }); }
-  catch (e) { err = e.message; }
-  await updateJ("txlive", lead, (r) => { if (r.sess === sess) Object.assign(r, { started: !err, startErr: err, ccid: target }); return r; }, {});
-  await logEvent({ type: "transcription_start", note: err ? "failed: " + err : "started" });
+  let err = null, used = "";
+  // best engine first; if Telnyx refuses it (not on this account, bad setting) the next one starts instead, so a call is never left with no transcript
+  for (const o of engineOrder((await loadConfig()).settings?.transcribeEngine)) {
+    try { await act(target, "transcription_start", o.body); err = null; used = o.name; break; }
+    catch (e) { err = `${o.name}: ${e.message}`; await logEvent({ type: "transcription_start", note: "failed: " + err }).catch(() => {}); }
+  }
+  await updateJ("txlive", lead, (r) => { if (r.sess === sess) Object.assign(r, { started: !err, startErr: err, ccid: target, engine: used || r.engine }); return r; }, {});
+  await logEvent({ type: "transcription_start", note: err ? "failed: " + err : "started with " + used });
   return err ? "transcription failed to start" : "transcription started";
 }
 
