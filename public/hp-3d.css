@@ -212,6 +212,6 @@ html.hp-pro .hpdk .hpdk-chip.k-sold{background:linear-gradient(180deg,#4BE593,#1
 html.hp-pro .hpdk .hpdk-chip.k-dnc,html.hp-pro .hpdk .hpdk-chip.k-bad{color:#FF9AAA}
 @media (prefers-reduced-motion:reduce){html.hp-pro .hpdk .hpdk-rb:hover svg,html.hp-pro .hpdk .hpdk-end:hover,html.hp-pro .hpdk .hpdk-call:hover{transform:none}}
 html.hp-pro .hpdk-state{white-space:nowrap}
-html.hp-pro .hpdk-prog{max-width:96px}
+html.hp-pro .hpdk-head .hpdk-prog{max-width:96px}
 html.hp-pro .hpdk-head{flex-wrap:wrap;row-gap:8px}
-html.hp-pro .hpdk-prog{order:9;flex:0 0 100%;max-width:none;margin:0;padding:0 0 0 2px;background:none;color:#9AA1B2;font-size:11.5px;white-space:normal;overflow:visible}
+html.hp-pro .hpdk-head .hpdk-prog{order:9;flex:0 0 100%;max-width:none;margin:0;padding:0 0 0 2px;background:none;color:#9AA1B2;font-size:11.5px;white-space:normal;overflow:visible}

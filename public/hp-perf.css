@@ -1,0 +1,38 @@
+/* Highpoint Perf: loaded last. Keeps the desk smooth without changing how it looks.
+   1) Backdrop pieces that sit under a colour filter hold still (a filtered layer re-filters on every animation frame).
+   2) While you scroll or type, or when the tab is hidden, the purely decorative loops pause (hp-perf.js sets the classes).
+   */
+html.hp-pro:not([data-theme="miami"]) .vsvg *,
+html.hp-pro:not([data-theme="miami"]) .vscene::after{animation:none!important}
+html.hp-pro:not([data-theme="miami"]) .vscene{will-change:auto}
+
+html.hp-scrolling .vscene *,html.hp-scrolling .vscene::after,html.hp-scrolling .hp-fx *,html.hp-scrolling .hp-floor>i,
+html.hp-scrolling .nn-bad,html.hp-scrolling #hpGate *,html.hp-hidden *,html.hp-hidden *::before,html.hp-hidden *::after{animation-play-state:paused!important}
+/* the backdrop never takes pointer events or triggers hit-testing */
+.vscene,.hp-fx,.hp-floor,#sky,.hp-scrim{pointer-events:none}
+/* smoother touch scrolling, no rubber-band glitches behind the page */
+html{scroll-behavior:auto}
+body{overscroll-behavior-y:none}
+@media (max-width:900px){
+  .hp-fx .mote,.hp-fx .shoot{display:none}
+  html.hp-pro .vscene::after{animation:none!important}
+}
+@media (prefers-reduced-motion:reduce){html.hp-pro *,html.hp-pro *::before,html.hp-pro *::after{animation-duration:.001s!important;animation-iteration-count:1!important}}
+
+/* tablet widths: the button row used to be wider than the screen and pushed the account menu off the right edge.
+   Let it take its own line and wrap instead. */
+@media (min-width:761px) and (max-width:1100px){
+  html.hp-pro .topbar{flex-wrap:wrap}
+  html.hp-pro .topbar>.row{flex:1 1 100%!important;flex-wrap:wrap!important;justify-content:flex-start;margin-left:0!important;min-width:0}
+  html.hp-pro .topbar>.row>.hp-acct{margin-left:auto}
+}
+/* the top bar's side margins must match the page's side padding (themes changed one but not the other: 5px overflow) */
+@media (min-width:761px){
+  html .topbar{margin-inline:calc(-1 * clamp(18px,2.4vw,38px))!important;padding-inline:clamp(18px,2.4vw,38px)!important}
+}
+/* phone: three tiles across leaves no room for long labels like "Conversations": two across, and let labels wrap */
+@media (max-width:560px){
+  .hph-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hph-tiles span{overflow-wrap:anywhere;letter-spacing:.04em}
+}
+body{overflow-x:clip}

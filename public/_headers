@@ -72,3 +72,9 @@
   Cache-Control: no-cache
 /icons/*
   Cache-Control: public, max-age=604800
+/hp-perf.js
+  Cache-Control: no-cache
+/hp-perf.css
+  Cache-Control: no-cache
+/hp-3d.css
+  Cache-Control: no-cache

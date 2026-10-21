@@ -224,7 +224,7 @@ body.hpd-pf-open{overflow:hidden}
 @media (max-width:600px){.hpf-top{gap:8px;padding:10px 12px}.hpf-who{flex-basis:calc(100% - 50px)}.hpf-who b{font-size:16px}.hpf-who b,.hpf-who .hpd-sm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hpf-who>div{min-width:0}.hpf-nav{margin-left:auto}}
 
 /* ---------- agent status bar ---------- */
-.hpd-bar{display:flex;align-items:center;gap:10px;flex:1;min-width:0;margin:0 14px;flex-wrap:nowrap}
+.hpd-bar:not(body){display:flex;align-items:center;gap:10px;flex:1;min-width:0;margin:0 14px;flex-wrap:nowrap}
 .hpd-srch{position:relative;flex:0 1 260px;min-width:140px}
 .hpd-srch input{width:100%;box-sizing:border-box;padding:8px 12px!important;border-radius:999px!important;font-size:13.5px!important}
 .hpd-srchres{position:absolute;top:calc(100% + 6px);left:0;width:min(360px,90vw);z-index:500;background:#0B0D12;border:1px solid rgba(255,255,255,.12);border-radius:12px;box-shadow:0 16px 40px rgba(0,0,0,.5);padding:4px;display:flex;flex-direction:column}
@@ -254,7 +254,7 @@ body.hpd-pf-open{overflow:hidden}
 .hpd-phonest[data-s="live"]::before{background:#FF4FA3}
 body.hpd-pf-open .hpd-phonest{display:none}
 @media (max-width:1100px){.hpd-bg{display:none}}
-@media (max-width:900px){.hpd-bar{margin:0 6px;gap:6px}.hpd-srch{display:none}.hpd-cbchip em{display:none}.hpd-phonest{left:12px;bottom:76px}}
+@media (max-width:900px){.hpd-bar:not(body){margin:0 6px;gap:6px}.hpd-srch{display:none}.hpd-cbchip em{display:none}.hpd-phonest{left:12px;bottom:76px}}
 
 /* ---------- dialer home ---------- */
 body.hpd #dPane.hpd-manualpane:not(.hpd-showmanual){display:none!important}

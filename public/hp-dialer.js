@@ -1809,9 +1809,10 @@
   const ET = "America/New_York", CT = "America/Chicago", MT = "America/Denver", PT = "America/Los_Angeles";
   const ST_TZ = { AL: CT, AK: "America/Anchorage", AZ: "America/Phoenix", AR: CT, CA: PT, CO: MT, CT: ET, DE: ET, DC: ET, FL: ET, GA: ET, HI: "Pacific/Honolulu", ID: MT, IL: CT, IN: ET, IA: CT, KS: CT, KY: ET, LA: CT, ME: ET, MD: ET, MA: ET, MI: ET, MN: CT, MS: CT, MO: CT, MT: MT, NE: CT, NV: PT, NH: ET, NJ: ET, NM: MT, NY: ET, NC: ET, ND: CT, OH: ET, OK: CT, OR: PT, PA: ET, RI: ET, SC: ET, SD: CT, TN: CT, TX: CT, UT: MT, VT: ET, VA: ET, WA: PT, WV: ET, WI: CT, WY: MT, PR: "America/Puerto_Rico" };
   const leadState = (l) => AREA_ST[d10(l.phone).slice(0, 3)] || String(l.state || "").toUpperCase().slice(0, 2);
+  const TZF = {}; // one formatter per time zone (building one per call was the slow part)
   function leadClock(l) {
     const st = leadState(l), tz = ST_TZ[st]; if (!tz) return { st: st || "—", txt: "", ok: true, h: 12 };
-    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+    const p = Object.fromEntries((TZF[tz] || (TZF[tz] = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hourCycle: "h23" }))).formatToParts(new Date()).map((x) => [x.type, x.value]));
     const h = +p.hour + +p.minute / 60; const rule = S.settings.stateRules?.[st] || {}; const start = rule.start ?? 8, end = rule.end ?? 21;
     const h12 = ((+p.hour + 11) % 12) + 1;
     return { st, h, ok: h >= start && h < end, txt: `${h12}:${p.minute} ${+p.hour < 12 ? "AM" : "PM"}`, start };
