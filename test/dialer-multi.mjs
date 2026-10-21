@@ -29,6 +29,7 @@ const { setJ } = await import("../src/lib/hp.mjs");
 
 /* ---- the simulated call world ---- */
 const legs = {}, plan = [], dials = [];
+let failDial = false;
 let n = 0;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 async function event(type, payload) {
@@ -66,6 +67,7 @@ globalThis.fetch = async (url, o = {}) => {
   if (p.startsWith("/v2/call_control_applications")) return J({ data: { id: "app1" } });
   if (p === "/v2/telephony_credentials" && m === "POST") return J({ data: { id: "tc1", sip_username: "simagent" } });
   if (/\/token$/.test(p)) return new Response("tok_sim");
+  if (p === "/v2/calls" && m === "POST" && failDial) return J({ errors: [{ detail: "Invalid destination number" }] }, 422);
   if (p === "/v2/calls" && m === "POST") {
     const id = "lead-" + ++n, web = body.link_to;
     const L = (legs[id] = { id, web, sess: legs[web]?.sess, to: body.to, from: body.from, cs: body.client_state, kind: "pstn" });
@@ -121,6 +123,12 @@ async function sim(req, res, url) {
     if (L && !L.hungup) { L.hungup = true; await event("call.hangup", { direction: "outgoing", call_control_id: L.id, call_session_id: L.sess, hangup_cause: "normal_clearing" }); }
     return J({ ok: true });
   }
+  if (url.pathname === "/__sim/lead-hangup") { // the lead hangs up first
+    const L = Object.values(legs).find((x) => x.web && x.answered && !x.hungup && String(x.to).endsWith(url.searchParams.get("to") || ""));
+    if (L) { L.hungup = true; await event("call.hangup", { ...leadPayload(L), hangup_cause: "normal_clearing" }); }
+    return J({ ok: !!L });
+  }
+  if (url.pathname === "/__sim/fail-dial") { failDial = url.searchParams.get("on") === "1"; return J({ failDial }); }
   if (url.pathname === "/__sim/plan-clear") { plan.length = 0; return J({ plan }); }
   if (url.pathname === "/__sim/plan") { plan.push(...(body.kinds || [])); return J({ plan }); }
   if (url.pathname === "/__sim/dials") return J({ dials, plan });
@@ -270,6 +278,44 @@ if (SERVE) {
     const h1 = await logged(ids[8], "hang-up-while-ringing to log itself");
     check(h1.outcome === "No answer" && h1.note === "Agent hung up while ringing", "hang up while ringing: No answer · Agent hung up while ringing");
 
+    // 1, 2 and 3 lines: answer, talk, hang up (you, the lead, or just log it), log, Resume: every time dialing picks up with the next leads in the list
+    await page.evaluate(async () => { const t = Date.now() - 5e5; for (let i = 1; i <= 40; i++) await window.hpDesk.putLead({ first: "Cycle", last: String(i).padStart(2, "0"), phone: "21255503" + String(i).padStart(2, "0"), state: "NY", stage: "new", createdAt: t - i * 1000 }); });
+    await page.waitForFunction(() => window.hpDesk.leads.size >= 52);
+    for (const N of [1, 2, 3]) {
+      await realFetch(ORIGIN + "/__sim/plan-clear", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      await plan(Array.from({ length: 4 * N }, (_, i) => (i % N === 0 ? "human" : "ring")));
+      if (await page.locator('[data-hl="' + N + '"]').count()) await page.locator('[data-hl="' + N + '"]').click();
+      const order = (await page.evaluate(() => window.hpDialer.queue().map((l) => String(l.phone).replace(/\D/g, "").slice(-10)))).slice(0, 12);
+      const seen0 = (await (await realFetch(ORIGIN + "/__sim/dials")).json()).dials.length;
+      await page.locator("#hphPsGo").click();
+      await page.locator("#hpdAskYes").waitFor();
+      await page.locator("#hpdAskYes").click();
+      for (const how of ["agent", "lead", "log"]) {
+        await until(talking, `${N} line(s): a person to answer (${how})`);
+        const who = await page.evaluate(() => window.hpDialer.liveLead);
+        const wph = await page.evaluate((id) => String(window.hpDesk.leads.get(id).phone).replace(/\D/g, "").slice(-10), who);
+        await wait(1500);
+        if (how === "agent") await page.locator("#hpdkHang").click();
+        else if (how === "lead") await realFetch(ORIGIN + "/__sim/lead-hangup?to=" + wph, { method: "POST" });
+        if (how !== "log") { await until(async () => !(await talking()), `${N} line(s): the call to end (${how})`); await page.locator('#hpdDock [data-dz="ni"]').click(); }
+        else await page.evaluate((id) => window.hpDesk.autoLog(id, "Not interested", {}), who);
+        if (how !== "agent") { // with the client's profile open the controls are the slim bar: Resume has to work there too
+          await page.evaluate((id) => window.hpDialer.openProfile(id), who);
+          await page.waitForFunction(() => document.querySelector("#hpdDock")?.classList.contains("callbar"), null, { timeout: 8000 });
+        }
+        await page.locator('#hpdDock [data-next="go"]').waitFor();
+        const b4 = (await (await realFetch(ORIGIN + "/__sim/dials")).json()).dials.length;
+        await page.locator('#hpdDock [data-next="go"]').click();
+        await until(async () => (await (await realFetch(ORIGIN + "/__sim/dials")).json()).dials.length >= b4 + N, `${N} line(s): Resume (${how}) to dial the next ${N}`);
+        check(true, `${N} line${N > 1 ? "s" : ""}, ${how === "agent" ? "you hang up" : how === "lead" ? "the lead hangs up" : "logged while still on the call"}: Resume dials the next ${N}`);
+      }
+      const all = (await (await realFetch(ORIGIN + "/__sim/dials")).json()).dials.slice(seen0).map((d) => String(d.to).replace(/\D/g, "").slice(-10));
+      check(all.length >= 4 * N - 0 && new Set(all).size === all.length && all.every((t, i) => t === order[i]), `${N} line${N > 1 ? "s" : ""}: the session works through the list in order without repeating (${all.length} dialed)`);
+      await page.locator('#hpdDock [data-next="stop"], #hpdkStop').first().click().catch(() => {});
+      await until(async () => !(await page.evaluate(() => window.hpDialer.session)), `${N} line(s): the session to end`);
+      await page.locator("#hpfClose").click().catch(() => {}); // close the client profile again
+    }
+
     // logging a call while it is still up, then pressing Resume right away, must dial the next leads (the old leg can still be winding down)
     await realFetch(ORIGIN + "/__sim/plan-clear", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     await plan(["human", "noanswer", "noanswer", "noanswer", "noanswer", "noanswer", "noanswer", "noanswer"]);
@@ -306,7 +352,7 @@ if (SERVE) {
 
     // lines that drop before ringing: nothing is logged as No answer, the leads are kept, and the session pauses with Resume
     await realFetch(ORIGIN + "/__sim/plan-clear", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    await plan(Array(9).fill("failed"));
+    await realFetch(ORIGIN + "/__sim/fail-dial?on=1", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     const noAns = () => page.evaluate(() => [...window.hpDesk.calls.values()].filter((c) => c.outcome === "No answer").length);
     const noAns0 = await noAns();
     await page.locator("#hphPsGo").click();
@@ -318,6 +364,7 @@ if (SERVE) {
     check((await noAns()) === noAns0, "nothing was logged No answer for lines that never rang");
     await page.locator('#hpdDock [data-next="stop"]').click();
     await until(async () => !(await page.evaluate(() => window.hpDialer.session)), "Stop to end the paused session");
+    await realFetch(ORIGIN + "/__sim/fail-dial?on=0", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     console.log("ALL PASSED");
   } finally {
     await browser?.close().catch(() => {});

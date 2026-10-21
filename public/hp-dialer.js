@@ -532,14 +532,23 @@
     multiDraw(B);
     if (!B.winner && B.legs.every((l) => l.done)) {
       clearTimeout(B.timer);
-      // every line dropped in a couple of seconds without ever ringing: the line is the problem, not the leads. Don't log them as No answer.
-      const quick = B.legs.every((l) => l.failed || (!l.ringing && !l.timedOut && !l.released && Date.now() - l.t0 < 6000));
-      P.fast = quick ? (P.fast || 0) + 1 : 0;
-      if (quick && P.fast >= 2) { lineDropped(P, B); return; }
-      if (quick) { (P.back = P.back || []).unshift(...B.legs.filter((l) => !l.failed).map((l) => l.lead.id)); P.batch = null; setTimeout(multiBatch, 1500); return; } // once more before blaming the line; nothing is logged for it
-      B.legs.forEach((l) => { if (!l.failed && !l.released) multiLog(l); });
-      P.batch = null; setTimeout(multiBatch, 500);
+      const done = B.legs.filter((l) => !l.failed && !l.released); P.batch = null;
+      // Did the server ever get these calls out? If none reached the lead's phone (couldn't dial, the browser leg was dropped), the line
+      // is the problem, not the leads: don't log them as No answer. Retry once, then pause with Resume.
+      lineDead(done).then((dead) => {
+        if (S.ps !== P || P.batch) return;
+        P.fast = dead ? (P.fast || 0) + 1 : 0;
+        if (dead && P.fast >= 2) { lineDropped(P, B); return; }
+        if (dead) { (P.back = P.back || []).unshift(...done.map((l) => l.lead.id)); setTimeout(multiBatch, 1500); return; }
+        done.forEach((l) => multiLog(l));
+        setTimeout(multiBatch, 500);
+      });
     }
+  }
+  async function lineDead(legs) {
+    if (!legs.length || S.demo || S.provider !== "telnyx") return false;
+    const rows = await Promise.all(legs.map(async (l) => { if (!l.sid) return null; try { return (await api("/calls/live?sid=" + encodeURIComponent(l.sid))).call; } catch { return undefined; } }));
+    return legs.every((l, i) => { const c = rows[i]; if (c === undefined || l.sid === "") return false; if (c === null) return !!l.sid; return !c.answeredAt && !c.machine && !c.cause && !c.ringingAt && (c.amd === "dial-failed" || (!c.amd && Date.now() - (c.at || l.t0) < 12000 && c.status !== "completed")); });
   }
   async function lineDropped(P, B) {
     const legs = B.legs.filter((l) => !l.failed); P.batch = null;
@@ -1872,6 +1881,7 @@
       $("#hpdkTel", f)?.addEventListener("click", () => l && ringMyPhone(l));
       $("#hpdkStop", f)?.addEventListener("click", () => (S.ps ? phoneEnd() : stopPower()));
       $("#hpdkDone", f)?.addEventListener("click", () => { window.hpDesk.callStop(); S.phoneLead = null; S.callLead = null; dock(); renderHome(); });
+      $$("[data-next]", f).forEach((b) => (b.onclick = () => (b.dataset.next === "go" ? sessGo(true) : b.dataset.next === "pause" ? sessGo(false) : (S.ps ? phoneEnd() : stopPower())))); // Resume / Pause on the slim bar (a client's profile is open)
       $$(".hpdk-bline", f).forEach((b) => (b.onclick = () => b.dataset.lead && openProfile(b.dataset.lead, { keepList: true })));
     } else if (min) {
       f.innerHTML = `<button type="button" class="hpdk-pill" id="hpdkMax" data-tone="${tone}"><i></i><b>${esc(state)}</b><span class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</span><span class="nm">${l ? esc(D.fullName(l)) : ""}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>`;
