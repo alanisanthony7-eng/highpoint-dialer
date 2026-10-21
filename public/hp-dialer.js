@@ -1811,11 +1811,21 @@
   const leadState = (l) => AREA_ST[d10(l.phone).slice(0, 3)] || String(l.state || "").toUpperCase().slice(0, 2);
   const TZF = {}; // one formatter per time zone (building one per call was the slow part)
   function leadClock(l) {
-    const st = leadState(l), tz = ST_TZ[st]; if (!tz) return { st: st || "—", txt: "", ok: true, h: 12 };
-    const p = Object.fromEntries((TZF[tz] || (TZF[tz] = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hourCycle: "h23" }))).formatToParts(new Date()).map((x) => [x.type, x.value]));
-    const h = +p.hour + +p.minute / 60; const rule = S.settings.stateRules?.[st] || {}; const start = rule.start ?? 8, end = rule.end ?? 21;
+    const st = leadState(l), tz = ST_TZ[st];
+    // unknown state: the server only allows it when it's inside the window on BOTH coasts, so do the same here
+    if (!tz) { const a = tzClock(ET, st, l), b = tzClock(PT, st, l); return { st: st || "—", h: a.h, ok: a.ok && b.ok, txt: "", start: a.start }; }
+    return { st, ...tzClock(tz, st, l) };
+  }
+  // is it calling time in this zone right now? Same rules the server applies: per-state hours, Sunday limits.
+  // the stricter states, built in so they apply even before the saved settings have loaded (the server enforces the same list)
+  const BASE_RULES = { FL: { end: 20 }, OK: { end: 20 }, MD: { end: 20 }, TX: { start: 9, sunStart: 12 }, LA: { end: 20, noSunday: true }, AL: { end: 20, noSunday: true }, MS: { end: 20, noSunday: true } };
+  function tzClock(tz, st, l) {
+    const p = Object.fromEntries((TZF[tz + "w"] || (TZF[tz + "w"] = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", weekday: "short", hourCycle: "h23" }))).formatToParts(new Date()).map((x) => [x.type, x.value]));
+    const h = +p.hour + +p.minute / 60, sun = p.weekday === "Sun";
+    const rule = { start: 8, end: 21, ...(S.settings.quietHours || {}), ...(BASE_RULES[st] || {}), ...(S.settings.stateRules?.[st] || {}) };
+    const start = sun && rule.sunStart ? rule.sunStart : rule.start, end = rule.end;
     const h12 = ((+p.hour + 11) % 12) + 1;
-    return { st, h, ok: h >= start && h < end, txt: `${h12}:${p.minute} ${+p.hour < 12 ? "AM" : "PM"}`, start };
+    return { h, ok: h >= start && h < end && !(sun && rule.noSunday), txt: `${h12}:${p.minute} ${+p.hour < 12 ? "AM" : "PM"}`, start };
   }
   const WARM = ["contacted", "appointment", "application"];
   const scrubbedOut = (l) => !!(l.scrub?.blocked && Date.now() - (l.scrub.at || 0) < 30 * 864e5); // on a DNC or litigator list (checked again after 30 days)
