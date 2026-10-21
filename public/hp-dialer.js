@@ -333,7 +333,7 @@
   }
   function phoneCall(lead) {
     if (!lead?.phone) { toast("This lead has no phone number"); return; }
-    if (S.via !== "phone") { S.phoneLead = lead.id; phoneCard(); dialLead(lead, true).then((ok) => { if (ok === false && S.ps) phoneEnd(); }); return; }
+    if (S.via !== "phone") { S.phoneLead = lead.id; phoneCard(); dialLead(lead, true).then((ok) => { if (ok === false && S.ps) { if (S.refusal) { S.refusal = false; sessSkip(); } else phoneEnd(); } }); return; }
     // "My phone" calls skip the voice webhook, so the same checks run here before the phone rings
     preCheck(lead).then((ok) => { if (ok) phoneCallGo(lead); else if (S.ps) phoneNext(); });
   }
@@ -378,7 +378,7 @@
   // After a call someone answered and you logged, a session doesn't dial on by itself: Resume, Pause or Stop.
   function sessGo(go) {
     const P = S.ps || S.power; if (!P) return;
-    if (go) { P.hold = null; P.paused = false; P.holdLabel = ""; if (S.ps) { dock(); renderHome(); phoneNext(); } else { renderPhone(); renderFloat(S.lastTiles); nextBatch(); } }
+    if (go) { P.hold = null; P.paused = false; P.holdLabel = ""; P.holdMsg = ""; P.refused = 0; P.fast = 0; if (S.ps) { dock(); renderHome(); phoneNext(); } else { renderPhone(); renderFloat(S.lastTiles); nextBatch(); } }
     else { P.paused = true; renderPhone(); dock(); renderHome(); toast("Paused. Press Resume dialing when you're ready."); }
   }
   function holdAfter(leadId, label) {
@@ -387,7 +387,20 @@
     if (S.power) P.paused = true; // power dialing waits for Resume
     renderPhone(); dock(); renderHome();
   }
-  const nextRowHTML = (P) => `<div class="hpd-next"><p class="hpd-sm" role="status"><b>${P.holdLabel ? "Logged: " + esc(P.holdLabel) : "Call ended"}</b> · ${P.paused ? "Dialing is paused." : "The next lead won't dial until you choose."}</p><div class="hpd-next-row" role="group" aria-label="What next"><button type="button" class="btn primary" data-next="go">Resume dialing</button><button type="button" class="btn" data-next="pause" ${P.paused ? "disabled" : ""}>${P.paused ? "Paused" : "Pause dialing"}</button><button type="button" class="btn hpd-hang" data-next="stop">Stop dialing</button></div></div>`;
+  // The session stops on a screen with Resume / Stop instead of ending, so a problem with the list or the line never throws the session away.
+  function pauseWhy(P, msg, leadId) {
+    P.paused = true; P.hold = leadId || P.ids[Math.max(0, Math.min(P.i, P.ids.length - 1))] || P.ids[0]; P.holdMsg = msg; P.refused = 0; P.fast = 0; P.batch = null;
+    S.phoneLead = null; S.lastTiles = []; try { tiles([]); } catch {} // clear the old "ringing" rows so the Resume / Stop screen shows
+    dock(); renderHome(); renderPhone(); toast(msg);
+  }
+  // A lead the server won't let us dial (Do Not Call, calling hours, attempt limit...) is skipped. Three in a row and we stop to say why.
+  function sessSkip() {
+    const P = S.ps; if (!P) return;
+    P.refused = (P.refused || 0) + 1;
+    if (P.refused >= 3) { pauseWhy(P, `The last ${P.refused} leads couldn't be called${S.lastWhy ? ": " + S.lastWhy : ""}. Resume to keep skipping ahead, or Stop.`); return; }
+    setTimeout(() => { if (S.ps === P && !P.paused) phoneNext(); }, 300);
+  }
+  const nextRowHTML = (P) => `<div class="hpd-next"><p class="hpd-sm" role="status"><b>${P.holdMsg ? esc(P.holdMsg) : P.holdLabel ? "Logged: " + esc(P.holdLabel) : "Call ended"}</b>${P.holdMsg ? "" : ` · ${P.paused ? "Dialing is paused." : "The next lead won't dial until you choose."}`}</p><div class="hpd-next-row" role="group" aria-label="What next"><button type="button" class="btn primary" data-next="go">Resume dialing</button><button type="button" class="btn" data-next="pause" ${P.paused ? "disabled" : ""}>${P.paused ? "Paused" : "Pause dialing"}</button><button type="button" class="btn hpd-hang" data-next="stop">Stop dialing</button></div></div>`;
   function phoneNext() {
     const P = S.ps; if (!P) return;
     if (P.paused && !P.hold && !S.call) { dock(); return; }
@@ -416,7 +429,12 @@
     if (S.call) { setTimeout(multiBatch, 500); return; }
     if (!P.multi) {
       if (window.hpTeam?.can?.("dialer") === false) { window.hpTeam.upgrade("dialer"); phoneEnd(); return; }
-      if (!S.device) { toast("Phone is still connecting…"); phoneEnd(); return; }
+      if (!S.device || !(S.deviceReady || S.demo)) { // pressed Start while the phone was still signing in: wait for it instead of ending
+        toast("Connecting your phone…");
+        for (let i = 0; i < 50 && S.ps === P && (!S.device || !(S.deviceReady || S.demo)); i++) await new Promise((r) => setTimeout(r, 400));
+        if (S.ps !== P) return;
+        if (!S.device) { pauseWhy(P, "Your phone didn't connect. Check your connection and Number groups, then press Resume.", P.ids[0]); return; }
+      }
       if (!(await micCheck())) { phoneEnd(); return; }
       P.multi = true;
     }
@@ -434,7 +452,12 @@
     P.busy = false;
     if (S.ps !== P) return;
     const ok = picks.filter((_, i) => recs[i].ok), started = new Map(picks.map((l, i) => [l.id, recs[i]]));
-    if (!ok.length) { setTimeout(multiBatch, 300); return; }
+    if (!ok.length) { // every lead in this set was refused (Do Not Call, hours, no number...): skip them, but stop after three in a row
+      P.refused = (P.refused || 0) + picks.length;
+      if (P.refused >= 3) { pauseWhy(P, `The last ${P.refused} leads couldn't be called${S.lastWhy ? ": " + S.lastWhy : ""}. Resume to keep skipping ahead, or Stop.`, picks[picks.length - 1].id); return; }
+      setTimeout(multiBatch, 300); return;
+    }
+    P.refused = 0; P.dialed = (P.dialed || 0) + ok.length;
     const B = P.batch = { legs: [], winner: null };
     ok.forEach((lead, k) => {
       const rec = started.get(lead.id) || {};
@@ -451,7 +474,7 @@
         call.on("disconnect", gone); call.on("cancel", gone); call.on("reject", gone); call.on("error", gone);
       } catch (e) { leg.done = true; leg.failed = true; B.err = e.message || "Couldn't place a call"; }
     });
-    if (B.legs.every((l) => l.failed)) { P.batch = null; toast(B.err); phoneEnd(); return; } // nothing could be dialed (no number, phone not connected): stop instead of burning through the list
+    if (B.legs.every((l) => l.failed)) { P.batch = null; (P.back = P.back || []).unshift(...B.legs.map((l) => l.lead.id)); pauseWhy(P, (B.err || "The call couldn't be placed") + ". Fix that, then press Resume.", B.legs[0].lead.id); return; } // nothing could be dialed (no number, phone not connected): stop here, keep the leads for Resume
     multiDraw(B);
     B.timer = setTimeout(() => multiTimeout(P, B), Math.min(60, Math.max(8, +S.sound.ringSec || 25)) * 1000); // nobody picks up in time: hang up, log No answer, next
     if (B.legs.every((l) => l.done)) { clearTimeout(B.timer); B.legs.forEach((l) => { if (!l.failed) multiLog(l); }); setTimeout(multiBatch, 500); }
@@ -497,15 +520,30 @@
     if (leg.released || S.ps !== P || P.batch !== B) return;
     multiDraw(B);
     if (!B.winner && B.legs.every((l) => l.done)) {
+      clearTimeout(B.timer);
+      // every line dropped in a couple of seconds without ever ringing: the line is the problem, not the leads. Don't log them as No answer.
+      const quick = B.legs.every((l) => l.failed || (!l.ringing && !l.timedOut && !l.released && Date.now() - l.t0 < 6000));
+      P.fast = quick ? (P.fast || 0) + 1 : 0;
+      if (quick && P.fast >= 2) { lineDropped(P, B); return; }
+      if (quick) { (P.back = P.back || []).unshift(...B.legs.filter((l) => !l.failed).map((l) => l.lead.id)); P.batch = null; setTimeout(multiBatch, 1500); return; } // once more before blaming the line; nothing is logged for it
       B.legs.forEach((l) => { if (!l.failed && !l.released) multiLog(l); });
-      clearTimeout(B.timer); P.batch = null; setTimeout(multiBatch, 500);
+      P.batch = null; setTimeout(multiBatch, 500);
     }
+  }
+  async function lineDropped(P, B) {
+    const legs = B.legs.filter((l) => !l.failed); P.batch = null;
+    let why = "";
+    const sid = legs.find((l) => l.sid)?.sid;
+    if (sid) { try { const c = (await api("/calls/live?sid=" + encodeURIComponent(sid))).call; if (c?.amd === "dial-failed") why = "Telnyx couldn't place the call to the lead"; else if (c?.outcome?.kind === "failed") why = "the call failed"; else if (c?.cause) why = String(c.cause).replace(/_/g, " "); } catch {} }
+    if (S.ps !== P) return;
+    (P.back = P.back || []).unshift(...legs.map((l) => l.lead.id));
+    pauseWhy(P, `Calls are dropping before they ring${why ? " (" + why + ")" : ""}. Nothing was logged. Check your number and phone line, then press Resume.`, legs[0]?.lead.id);
   }
   function phoneEnd(done) {
     multiCancel(false); if (S.ps?.multi && S.call) { try { S.call.disconnect(); } catch {} }
-    const n = S.ps ? Math.min(S.ps.i + 1, S.ps.ids.length) : 0;
+    const P0 = S.ps, n = S.ps ? Math.min(S.ps.i + 1, S.ps.ids.length) : 0;
     S.ps = null; S.phoneLead = null; S.callLead = null; window.hpDesk.callStop(); phoneCard(); renderHome();
-    toast(done ? `List finished · ${n} lead${n === 1 ? "" : "s"} called` : "Phone session ended");
+    toast(done ? (P0?.dialed === 0 ? "Nobody in this list could be called" : `List finished · ${n} lead${n === 1 ? "" : "s"} called`) : "Phone session ended");
   }
 
   /* ================= keypad: dial any number ================= */
@@ -604,7 +642,7 @@
     try {
       const r = await api("/calls/check", { method: "POST", body: { to: d10(lead.phone), leadState: lead.state || "" } });
       if (r.ok) return true;
-      toast(r.why || "This number can't be called right now"); return false;
+      S.lastWhy = r.why || ""; toast(r.why || "This number can't be called right now"); return false;
     } catch (e) { toast("Couldn't check this number, so the call didn't go through" + (e.message ? ": " + e.message : "")); return false; }
   }
   // Opens the call record on the server before Telnyx rings (Do Not Call, hours, caller ID). Voicemail detection and the
@@ -613,7 +651,7 @@
     if (S.demo) return (await preCheck(lead)) ? { ok: true } : { ok: false };
     try {
       const r = await api("/calls/start", { method: "POST", body: { to: d10(lead.phone), leadId: lead.id, leadName: window.hpDesk.fullName(lead), leadState: lead.state || "", prefer: S.prefs.defaultCallerId || "", ps: !!ps } });
-      if (!r.ok) toast(r.why || "This number can't be called right now");
+      if (!r.ok) { S.lastWhy = r.why || ""; toast(r.why || "This number can't be called right now"); }
       return r;
     } catch (e) { toast("Couldn't start the call" + (e.message ? ": " + e.message : "")); return { ok: false }; }
   }
@@ -665,7 +703,8 @@
     if (!(await micCheck())) return false;
     const tel = S.provider === "telnyx" && !S.demo;
     const started = tel ? await openRecord(lead, !!S.ps) : { ok: await preCheck(lead) };
-    if (!started.ok) return false;
+    if (!started.ok) { S.refusal = true; return false; }
+    if (S.ps) S.ps.refused = 0;
     note("");
     const params = { To: d10(lead.phone), LeadId: lead.id, LeadName: window.hpDesk.fullName(lead), LeadState: lead.state || "", CallerId: started.callerId || S.prefs.defaultCallerId || "" };
     try {

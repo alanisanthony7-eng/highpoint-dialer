@@ -269,6 +269,36 @@ if (SERVE) {
     await page.locator("#hpdkHang").click();
     const h1 = await logged(ids[8], "hang-up-while-ringing to log itself");
     check(h1.outcome === "No answer" && h1.note === "Agent hung up while ringing", "hang up while ringing: No answer · Agent hung up while ringing");
+
+    // a list whose leads the server refuses (calling hours here) must not burn through the list and end: it pauses and says why
+    await realFetch(ORIGIN + "/__sim/plan-clear", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const nyHour = +new Intl.DateTimeFormat("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" }).format(new Date()) % 24, st0 = (nyHour + 6) % 24;
+    await api("/api/dialer/setup", "PUT", { settings: { quietHours: { start: st0, end: st0 + 1 }, stateRules: { NY: { start: st0, end: st0 + 1 } } } });
+    const dials0 = await nDials();
+    await page.locator("#hphPsGo").click();
+    await page.locator("#hpdAskYes").waitFor();
+    await page.locator("#hpdAskYes").click();
+    await until(async () => { const s = await page.evaluate(() => window.hpDialer.session); return s && s.paused && s.hold; }, "a fully refused list to pause instead of ending");
+    check(true, "leads the server refuses pause the session instead of ending it");
+    check((await nDials()) === dials0, "refused leads are never dialed");
+    const dockTxt = await page.locator("#hpdDock").innerText(); if (!/couldn.t be called/.test(dockTxt)) console.log("DOCK:", dockTxt.replace(/\s+/g, " ").slice(0, 500), "| SESSION", JSON.stringify(await page.evaluate(() => window.hpDialer.session)));
+    check(/couldn.t be called/.test(dockTxt), "the pause says why (couldn't be called)");
+    await page.locator('#hpdDock [data-next="stop"]').click();
+    await until(async () => !(await page.evaluate(() => window.hpDialer.session)), "Stop to end the paused session");
+    await api("/api/dialer/setup", "PUT", { settings: { quietHours: { start: 0, end: 24 }, stateRules: { NY: { start: 0, end: 24 } } } });
+
+    // lines that drop before ringing: nothing is logged as No answer, the leads are kept, and the session pauses with Resume
+    await plan(Array(9).fill("failed"));
+    const noAns = () => page.evaluate(() => [...window.hpDesk.calls.values()].filter((c) => c.outcome === "No answer").length);
+    const noAns0 = await noAns();
+    await page.locator("#hphPsGo").click();
+    await page.locator("#hpdAskYes").waitFor();
+    await page.locator("#hpdAskYes").click();
+    await until(async () => { const s = await page.evaluate(() => window.hpDialer.session); return s && s.paused && s.hold; }, "dropped lines to pause the session", 40000);
+    check(/dropping before they ring/.test(await page.locator("#hpdDock").innerText()), "calls that drop before ringing pause with an explanation");
+    check((await noAns()) === noAns0, "nothing was logged No answer for lines that never rang");
+    await page.locator('#hpdDock [data-next="stop"]').click();
+    await until(async () => !(await page.evaluate(() => window.hpDialer.session)), "Stop to end the paused session");
     console.log("ALL PASSED");
   } finally {
     await browser?.close().catch(() => {});
