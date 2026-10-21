@@ -258,6 +258,8 @@
     const client = new TelnyxWebRTC.TelnyxRTC({ login_token: t.token });
     client.remoteElement = "hpdRemote";
     const calls = new Map();
+    const L = (window.__hpTx = { client, log: [] }).log;
+    ["telnyx.ready", "telnyx.error", "telnyx.socket.open", "telnyx.socket.close", "telnyx.socket.error"].forEach((ev) => client.on(ev, (x) => L.push(new Date().toISOString().slice(11, 23) + " " + ev + " " + String(x?.error?.message || x?.message || x?.code || "").slice(0, 160))));
     client.on("telnyx.ready", () => { S.deviceReady = true; renderHome(); if (!S.call && !S.power) setChip("ready", "Ready"); });
     client.on("telnyx.error", (e) => { console.warn(e); note(esc(e?.error?.message || e?.message || "Phone error"), "warn"); });
     client.on("telnyx.socket.close", () => { S.deviceReady = false; setTimeout(() => { try { client.connect(); } catch {} }, 3000); });
