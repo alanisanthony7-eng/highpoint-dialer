@@ -418,7 +418,7 @@
   function multiAnswered(P, B, leg) {
     if (S.ps !== P || P.batch !== B || B.winner || leg.released) { leg.released = true; try { leg.call.disconnect(); } catch {} return; } // a second person picking up is dropped at once
     B.winner = leg; B.winnerAt = Date.now();
-    B.legs.forEach((l) => { if (l === leg || l.done) return; l.released = true; (P.back = P.back || []).push(l.lead.id); try { l.call.disconnect(); } catch {} });
+    B.legs.forEach((l) => { if (l === leg) return; if (!l.released) { l.released = true; window.hpDesk.autoLog(l.lead.id, "No answer", {}); } l.done = true; try { l.call.disconnect(); } catch {} }); // the others stop ringing and are logged "No answer"; we move on
     const a = document.getElementById("hpdRemote" + B.legs.indexOf(leg)); if (a) { a.muted = false; a.play?.().catch(() => {}); }
     const lead = leg.lead;
     S.call = leg.call; S.callLead = lead.id; S.phoneLead = lead.id; S.callSid = leg.call.sid; S.sidByLead.set(lead.id, S.callSid); S.txByLead.set(lead.id, []);
@@ -1486,7 +1486,7 @@
     let f = document.getElementById("hpdDock");
     const active = S.call || P || S.ps || S.phoneLead;
     if (!active) {
-      clearInterval(S.dockTick); S.dockLiveAt = 0; S.ringAt = 0;
+      clearInterval(S.dockTick); S.dockLiveAt = 0; S.ringAt = 0; S.consoleLead = null;
       if (!S.ready) { f?.remove(); document.body.classList.remove("hpd-bar"); return; }
       if (!f) { f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Dialer ready"); document.body.append(f); }
       f.className = "hpd hpdk callbar idle-ready"; document.body.classList.add("hpd-bar");
@@ -1553,6 +1553,7 @@
       const stopBtn = S.ps || P ? `<button type="button" class="hpdl-b end" id="hpdkStop">End session</button>` : S.call ? `<button type="button" class="hpdl-b end" id="hpdkHang">End call</button>` : !onCall && S.phoneLead ? `<button type="button" class="hpdl-b" id="hpdkDone">Close</button>` : "";
       const minB = `<button type="button" class="hpdl-b" id="hpdkMin" title="Minimize">Hide</button>`;
       if (ringPhase) {
+        S.consoleLead = null;
         const n = legs.length;
         const card = (g) => {
           const ld = g.lead, nm = ld ? D.fullName(ld) : g.name || fmt(g.to), ini2 = nm.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase() || "?";
@@ -1566,6 +1567,7 @@
         };
         f.innerHTML = `<div class="hpdl-h"><b>${n > 1 ? `Dialing ${n} at once` : "Calling"}</b><span>${n > 1 ? "First to pick up comes to you" : ""}</span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${S.ps ? `<button type="button" class="hpdl-b" id="hpdkSkip">Skip${n > 1 ? " these" : ""}</button>` : P ? `<button type="button" class="hpdl-b ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? "Resume" : "Pause"}</button>` : ""}${stopBtn}${minB}</div><div class="hpdl-g" data-n="${n}">${legs.map(card).join("")}</div>`;
       } else {
+        const keepScroll = $("#hpdlCopilot .hpc-body", f)?.scrollTop || 0;
         const noteV = S.dockNoteFor === (l?.id || "") ? S.dockNote || "" : "";
         const hist = l ? (l.callCount ? `Called ${l.callCount}×` + (l.lastDisposition ? ` · last: ${esc(l.lastDisposition)}` : "") : "First call") : "";
         const phase = onCall ? "Connected" : S.phoneLead || S.callLead ? "Call ended" : state;
@@ -1576,19 +1578,22 @@
             ${two ? `<span class="hpdl-warn">${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Say "this call may be recorded" if the notice is off.</span>` : ""}
             ${window.hpPop ? window.hpPop.dockRow() : ""}</div>
           <div class="hpdl-mid">
-            <div class="hpdk-ctl">${cell ? "" : `<button type="button" class="hpdk-rb ${S.muted ? "on" : ""}" id="hpdkMute" ${onCall ? "" : "disabled"}>${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button>
+            <div class="hpdk-ctl" ${onCall ? "" : "hidden"}>${cell ? "" : `<button type="button" class="hpdk-rb ${S.muted ? "on" : ""}" id="hpdkMute" ${onCall ? "" : "disabled"}>${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button>
               <button type="button" class="hpdk-rb ${S.dockPad ? "on" : ""}" id="hpdkPadBtn" ${onCall ? "" : "disabled"}>${I.pad}<span>Keypad</span></button>
               <button type="button" class="hpdk-rb" id="hpdkVm" ${onCall ? "" : "disabled"}>${I.vm}<span>Drop VM</span></button>`}</div>
             ${S.dockPad && onCall && !cell ? `<div class="hpdk-pad">${["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((k) => `<button type="button" data-k="${k}">${k}</button>`).join("")}</div>` : ""}
             ${onCall && !cell ? `<button type="button" class="hpdk-end" id="hpdkHang">${I.phone}<span>End call</span></button>` : cell && l ? `<button type="button" class="hpdk-call" id="hpdkTel">${I.phone}<span>Call on my phone</span></button>` : l && !S.call && !P ? `<button type="button" class="hpdk-call" id="hpdkRedial">${I.phone}<span>Call again</span></button>` : ""}
-            <div class="hpdl-tx hpd-tx" id="hpdlTx" aria-live="polite"></div></div>
-          <div class="hpdl-log"><div class="hpdk-dz-h">Log the call${S.ps || P ? " · next lead dials after" : ""}</div>
+            ${onCall ? "" : `<div class="hpdk-dz-h">Log the call${S.ps || P ? " · next lead dials after" : ""}</div>
             <textarea id="hpdlNote" rows="2" placeholder="Note for this call (optional)">${esc(noteV)}</textarea>
             <div class="hpdk-dz">${DZ.map(([k, t]) => `<button type="button" class="hpdk-chip k-${k}" data-dz="${k}" ${S.dockPend === k ? 'aria-pressed="true"' : ""} ${l ? "" : "disabled"}>${t}</button>`).join("")}</div>
-            ${S.dockPend ? `<div class="hpdl-when"><span>${S.dockPend === "appt" ? "Appointment" : "Call back"} time</span><input type="datetime-local" id="hpdlAt" value="${esc(S.dockAt || "")}"><button type="button" class="hpdl-b on" id="hpdlSave">Save</button></div>` : ""}
+            ${S.dockPend ? `<div class="hpdl-when"><span>${S.dockPend === "appt" ? "Appointment" : "Call back"} time</span><input type="datetime-local" id="hpdlAt" value="${esc(S.dockAt || "")}"><button type="button" class="hpdl-b on" id="hpdlSave">Save</button></div>` : ""}`}
+            <div class="hpdl-tx hpd-tx" id="hpdlTx" aria-live="polite"></div></div>
+          <div class="hpdl-log">
+            <div class="hpc-slot" id="hpdlCopilot" data-lead="${esc(l?.id || "")}"></div>
           </div>
         </div>`;
         const tx = $("#hpdlTx", f); if (tx && l) drawTxIn(tx, S.txByLead.get(l.id) || [], []);
+        S.consoleLead = l?.id || null; window.hpCopilot?.refresh?.(); if (keepScroll) requestAnimationFrame(() => { const bd = $("#hpdlCopilot .hpc-body", f); if (bd) bd.scrollTop = keepScroll; });
       }
       const doDispo = async (ld, k) => {
         if (k === "dnc") api("/calls/dnc", { method: "POST", body: { number: ld.phone, reason: "Agent marked Do Not Call" } }).catch(() => {});
@@ -2376,7 +2381,7 @@
     else toast(`Calling list set to ${pipeName(stage)}.`);
     return n;
   }
-  window.hpDialer = { dialPipeline, recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, queue: () => campaignQueue(), sendSms: (to, body, leadId) => api("/sms/send", { method: "POST", body: { to, body, leadId } }), refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
+  window.hpDialer = { dialPipeline, get consoleLead() { return S.consoleLead || null; }, recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, queue: () => campaignQueue(), sendSms: (to, body, leadId) => api("/sms/send", { method: "POST", body: { to, body, leadId } }), refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
   window.addEventListener("hp:leadchange", () => { if (!S.call && !S.power) renderActions(); if (!$("#hpdHome")?.hidden) renderHome(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();

@@ -300,7 +300,7 @@
     if (s.lines.length >= 6) aiPass(s); // Highpoint Bot writes the summary (the local one stays if it can't)
     draftSms(s);
     schedule();
-    setTimeout(() => { if (!DL()?.busy && DL()?.profileId === s.leadId && !CP.modal && s.state === "review") openModal(s.id); }, 300);
+    setTimeout(() => { if (!DL()?.busy && (DL()?.profileId === s.leadId || DL()?.consoleLead === s.leadId) && !CP.modal && s.state === "review") openModal(s.id); }, 300);
   }
 
   function localSummary(s) {
@@ -490,8 +490,8 @@ Never include Social Security, bank, card or account numbers. Transcript:
     if (CP.modal) { const s = CP.pending.find((x) => x.id === CP.modal); const box = $("#hpcModal .hpc"); if (s && box && (f || !box.contains(document.activeElement))) { box.innerHTML = reviewHTML(s, true); wireReview(box, s); } }
   }
   function renderSlot(f) {
-    const slot = $("#hpfCopilot"); if (!slot) return;
-    const pid = DL()?.profileId; const l = lead(pid); if (!l) { slot.innerHTML = ""; return; }
+    const slot = $("#hpfCopilot") || $("#hpdlCopilot"); if (!slot) return;
+    const pid = slot.id === "hpdlCopilot" ? slot.dataset.lead : DL()?.profileId; const l = lead(pid); if (!l) { slot.innerHTML = ""; return; }
     const live = CP.cur && CP.cur.leadId === pid ? CP.cur : null;
     const rev = !live && CP.pending.filter((x) => x.leadId === pid && !x.later).slice(-1)[0];
     if (!f && slot.contains(document.activeElement) && document.activeElement.matches("input,textarea,select")) return;
@@ -742,12 +742,12 @@ Never include Social Security, bank, card or account numbers. Transcript:
 
   /* floating "calls to review" button + review window */
   function renderPill() {
-    const pend = CP.pending.filter((s) => s.state === "review" && (s.later || s.leadId !== DL()?.profileId));
+    const pend = CP.pending.filter((s) => s.state === "review" && (s.later || (s.leadId !== DL()?.profileId && s.leadId !== DL()?.consoleLead)));
     let pill = $("#hpcPill");
     if (!pend.length || CP.modal) { pill?.remove(); return; }
     if (!pill) { pill = document.createElement("button"); pill.id = "hpcPill"; pill.type = "button"; pill.className = "hpc-pill"; document.body.append(pill); pill.onclick = () => openModal(pend[0]?.id); }
     pill.innerHTML = `${ICON}Calls to review <b>${pend.length}</b>`;
-    pill.onclick = () => { const p2 = CP.pending.filter((s) => s.state === "review" && (s.later || s.leadId !== DL()?.profileId)); if (p2[0]) openModal(p2[0].id); };
+    pill.onclick = () => { const p2 = CP.pending.filter((s) => s.state === "review" && (s.later || (s.leadId !== DL()?.profileId && s.leadId !== DL()?.consoleLead))); if (p2[0]) openModal(p2[0].id); };
   }
   function openModal(id) {
     const s = CP.pending.find((x) => x.id === id); if (!s) return;
@@ -767,6 +767,7 @@ Never include Social Security, bank, card or account numbers. Transcript:
     writeup,
     agree() { if (CP.cur) agree(CP.cur); },
     decline() { if (CP.cur) decline(CP.cur); },
+    refresh() { schedule(true); },
     FIELDS, OBJ, CHECK,
   };
 

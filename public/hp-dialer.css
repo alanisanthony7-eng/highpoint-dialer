@@ -711,3 +711,5 @@ html.hp-pro .hpdk.callbar{border-radius:0;border-width:1px 0 0;border-color:rgba
 .hpdl-when{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px}.hpdl-when input{all:unset;padding:6px 8px;border-radius:8px;background:rgba(0,0,0,.3);border:1px solid var(--line,rgba(255,255,255,.15))}
 @media(max-width:900px){.hpdl-live{grid-template-columns:1fr}}
 #hpdDock.hpdl,.hpdl{background:var(--bg2,#070b14);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.hpdl-log .hpc-slot{margin:0;max-height:340px;overflow:auto}
+.hpdl-log .hpc-slot:empty{display:none}
