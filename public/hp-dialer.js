@@ -1824,7 +1824,7 @@
   // Two simple choices: which LIST to call from, and WHO in that list.
   {
     const old = lsGet("hpd.list", null);
-    S.src = lsGet("hpd.src", old && /^(c|s):/.test(old) ? old : "all");
+    S.src = lsGet("hpd.src", old && /^(c|s|p):/.test(old) ? old : "all");
     S.filter = lsGet("hpd.filter", old && !/^(c|s):/.test(old) ? ({ followups: "callbacks", new: "never", warm: "retry" }[old] || old) : "ready");
   }
   const FILTERS = [
@@ -1838,6 +1838,7 @@
     const all = [...(window.hpDesk?.leads.values() || [])];
     if (src.startsWith("c:")) { const c = S.camps.find((x) => x.id === src.slice(2)); const set = new Set(c?.ids || []); return all.filter((l) => set.has(l.id)); }
     if (src.startsWith("s:")) return all.filter((l) => (l.source || "No campaign") === src.slice(2));
+    if (src.startsWith("p:")) return all.filter((l) => (l.stage || "new") === src.slice(2)); // a pipeline column
     return all;
   }
   function applyFilter(arr, f = S.filter) {
@@ -1848,7 +1849,9 @@
     if (f === "retry") return d.filter((l) => (l.callCount || l.lastCallAt) && ["new", "contacted"].includes(l.stage || "new") && !later(l));
     return d;
   }
-  const srcName = (src = S.src) => src === "all" ? "All my leads" : src.startsWith("c:") ? (S.camps.find((c) => c.id === src.slice(2))?.name || "Campaign") : src.slice(2);
+  const PIPE = { new: "New", contacted: "Contacted", appointment: "Appointment", application: "Application", sold: "Sold", lost: "Not interested" };
+  const pipeName = (id) => (window.hpDesk?.stageName ? window.hpDesk.stageName(id) : PIPE[id]) || id;
+  const srcName = (src = S.src) => src === "all" ? "All my leads" : src.startsWith("c:") ? (S.camps.find((c) => c.id === src.slice(2))?.name || "Campaign") : src.startsWith("p:") ? "Pipeline: " + pipeName(src.slice(2)) : src.slice(2);
   const filterName = (f = S.filter) => (FILTERS.find((x) => x[0] === f) || FILTERS[0])[1];
   const listName = () => `${srcName()} · ${filterName()}`;
   const listLeads = (k) => applyFilter(sourceLeads(), k); // kept for older callers
@@ -2000,7 +2003,7 @@
       <div class="hph-ready">
         <div><h3>${S.power ? (S.power.paused ? "Paused" : "Dialing") : "Ready to dial"}</h3><p class="hpd-sm">${q.length.toLocaleString()} lead${q.length === 1 ? "" : "s"} · ${lines} line${lines > 1 ? "s" : ""} · no time limit · calls as long as needed${outside ? ` · ${outside} outside calling hours${S.demo ? " (preview dials them anyway)" : ""}` : ""}</p></div>
         <div class="hph-ctl">
-          <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
+          <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}<optgroup label="Pipeline">${["new", "contacted", "appointment", "application"].map((id) => `<option value="p:${id}" ${S.src === "p:" + id ? "selected" : ""}>${esc(pipeName(id))} (${[...D.leads.values()].filter((l) => (l.stage || "new") === id && dialable(l)).length})</option>`).join("")}</optgroup>${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
           <label class="hph-sel"><span>Who to call</span><select id="hphFilter" ${S.power ? "disabled" : ""}>${FILTERS.map(([k, n]) => `<option value="${k}" ${S.filter === k ? "selected" : ""}>${n} (${fCount[k]})</option>`).join("")}</select></label>
           ${oneLine ? `<p class="hpd-sm" style="margin:0;align-self:center">${S.via === "phone" ? "Your phone is one line at a time." : "Telnyx browser calling is one line at a time."}</p>` : `<div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power ? "disabled" : ""}>${n}</button>`).join("")}</div>`}
           ${oneLine ? (S.ps ? `<button type="button" class="btn" id="hphPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hphPsEnd">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphPsGo" ${q.length ? "" : "disabled"}>${I.phone} Start calling</button>`) : S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
@@ -2242,7 +2245,18 @@
     }
     catch (e) { toast(e.message); return false; }
   }
-  window.hpDialer = { recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, queue: () => campaignQueue(), sendSms: (to, body, leadId) => api("/sms/send", { method: "POST", body: { to, body, leadId } }), refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
+  // "Dial this pipeline column": pick it as the calling list (calling hours still respected) and start the session
+  function dialPipeline(stage, start = true) {
+    setSrc("p:" + stage); setFilter("ready"); S.mode = "power"; lsSet("hpd.mode", "power");
+    if ($("#v-dialer")?.hidden) window.hpDesk.go("dialer");
+    renderHome(); renderPhone();
+    const n = campaignQueue().length;
+    if (!n) { toast(`No one in ${pipeName(stage)} can be called right now (outside calling hours, on a do-not-call list, or already closed).`); return n; }
+    if (start && !S.power && !S.call) { if (S.ready === false) toast(`Calling list set to ${pipeName(stage)}. Press Start calling when your line is ready.`); else startPower(); }
+    else toast(`Calling list set to ${pipeName(stage)}.`);
+    return n;
+  }
+  window.hpDialer = { dialPipeline, recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, queue: () => campaignQueue(), sendSms: (to, body, leadId) => api("/sms/send", { method: "POST", body: { to, body, leadId } }), refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
   window.addEventListener("hp:leadchange", () => { if (!S.call && !S.power) renderActions(); if (!$("#hpdHome")?.hidden) renderHome(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();

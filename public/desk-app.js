@@ -149,10 +149,12 @@ function renderPipeline(){renderStart();
   renderToday();
   $("#board").innerHTML=STAGES.map(([id,n,c])=>{
     const items=all.filter(l=>(l.stage||"new")===id).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
-    return `<div class="col" data-stage="${id}"><header><h3><i style="background:${c}"></i>${n}</h3><span class="muted num">${items.length}</span></header>
+    return `<div class="col" data-stage="${id}"><header><h3><i style="background:${c}"></i>${n}</h3><span class="muted num">${items.length}</span>${items.length&&!["sold","lost"].includes(id)?`<button type="button" class="colDial" data-dialstage="${id}" title="Dial everyone in ${n}">Dial</button>`:""}</header>
       ${items.slice(0,150).map(l=>`<div class="card" draggable="true" data-id="${esc(l.id)}" tabindex="0"><span class="nm">${esc(fullName(l))}</span><span class="meta"><span class="num">${esc(fmtPhone(l.phone))}</span>${l.age?`<span>${esc(l.age)} yrs</span>`:""}</span><span class="meta">${prodPill(l.product)}<span>${esc(l.state||"")}</span>${normPhone(l.phone)?`<button type="button" class="btn sm card-call" data-call="${esc(l.id)}">Call</button>`:""}</span></div>`).join("")}
       ${items.length>150?`<div class="empty-col">+${items.length-150} more in Contacts</div>`:""}
       ${!items.length?`<div class="empty-col">${leads.size?"No leads here":(id==="new"?"Import a CSV or add a lead to start":"—")}</div>`:""}</div>`}).join("");
+  $$("#board [data-dialstage]").forEach(b=>b.onclick=e=>{e.stopPropagation();const st=b.dataset.dialstage;
+    ensureDialer().then(()=>window.hpDialer.dialPipeline(st)).catch(err=>toast(err.message))});
   $$("#board .card").forEach(c=>{
     c.onclick=()=>openDrawer(c.dataset.id); c.onkeydown=e=>{if(e.key==="Enter")openDrawer(c.dataset.id)};
     c.ondragstart=e=>{if(e.target.closest("[data-call]")){e.preventDefault();return}e.dataTransfer.setData("text/plain",c.dataset.id);e.dataTransfer.effectAllowed="move"};
