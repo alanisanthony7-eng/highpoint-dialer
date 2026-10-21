@@ -230,7 +230,7 @@
   .hp-acct-b svg{width:14px;height:14px;opacity:.7}
   .hp-acct i{position:relative;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;background:linear-gradient(135deg,#FF2E88,#FF9E3D);color:#fff;flex:none;overflow:hidden}
   .hp-acct i img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-  .hp-acct-m{position:absolute;right:0;top:calc(100% + 8px);z-index:1200;min-width:220px;padding:6px;border-radius:14px;background:rgba(16,10,26,.97);border:1px solid rgba(255,79,163,.35);box-shadow:0 18px 40px rgba(0,0,0,.55);backdrop-filter:blur(12px)}
+  .hp-acct-m{position:absolute;right:0;top:calc(100% + 8px);z-index:1200;min-width:220px;max-height:calc(100vh - 96px);max-height:calc(100dvh - 96px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:6px;border-radius:14px;background:rgba(16,10,26,.97);border:1px solid rgba(255,79,163,.35);box-shadow:0 18px 40px rgba(0,0,0,.55);backdrop-filter:blur(12px)}
   .hp-acct-m[hidden]{display:none}
   .hp-acct-who{display:flex;flex-direction:column;gap:2px;padding:8px 10px 10px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,.08);font-size:13px}
   .hp-acct-who span{font-size:12px;color:#8C92A0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
