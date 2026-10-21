@@ -74,7 +74,9 @@
     const ov = document.createElement("div"); ov.className = "hpt-ov"; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true");
     ov.innerHTML = `<div class="hpt-card"><button class="hpt-x" type="button" aria-label="Close">✕</button>${html}</div>`;
     document.body.append(ov);
-    const done = () => ov.remove();
+    let gone = false; const onEsc = (e) => { if (e.key === "Escape") done(); };
+    const done = () => { if (gone) return; gone = true; document.removeEventListener("keydown", onEsc); ov.remove(); };
+    document.addEventListener("keydown", onEsc);
     $(".hpt-x", ov).onclick = done; ov.addEventListener("click", (e) => { if (e.target === ov) done(); }); ov.addEventListener("keydown", (e) => { if (e.key === "Escape") done(); });
     return { el: ov, close: done };
   }
