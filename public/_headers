@@ -44,6 +44,16 @@
   Cache-Control: no-cache
 /hp-myscripts.js
   Cache-Control: no-cache
+/hp-lists.js
+  Cache-Control: no-cache
+/hp-quote-facts.js
+  Cache-Control: no-cache
+/hp-mp-script.js
+  Cache-Control: no-cache
+/hp-iul-script.js
+  Cache-Control: no-cache
+/hp-iul-rates.js
+  Cache-Control: no-cache
 /hp-theme.js
   Cache-Control: no-cache
 /hp-pop.js

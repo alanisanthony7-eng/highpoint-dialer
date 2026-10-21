@@ -8,10 +8,48 @@
 //  GET  /api/dialer/calls/inbox   POST /api/dialer/calls/inbox {key, done}
 import { Buffer } from "node:buffer";
 import { wrap, json, bad, requireUser, getJ, setJ, updateJ, store, listKeys, aggregate, patchCallBySid, tw, to10, today, SID, TOKEN, preflight, addAttempt, config as loadConfig, siteUrl, pickCallerId, bumpNumber, saveCall, e164, stateOf } from "../lib/hp.mjs";
+import { randomUUID } from "node:crypto";
 import { redact } from "../lib/redact.mjs";
-import { isTelnyx } from "../telnyx/tx.mjs";
+import { tx, isTelnyx } from "../telnyx/tx.mjs";
+import { callOutcome, leadState } from "../lib/calls.mjs";
 
 const days = (n) => Array.from({ length: n }, (_, i) => today("America/New_York", Date.now() - i * 864e5));
+const FIXTURE = "/fixtures/sample-ring.wav";
+function isFixtureUrl(url) {
+  const u = String(url || "");
+  return u.startsWith(FIXTURE) || u.startsWith("demo-recording:") || u.startsWith("demo-");
+}
+async function telnyxAudio(id, fallbackUrl) {
+  const tryUrl = async (url) => {
+    if (!url) return null;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      return new Response(r.body, { headers: { "content-type": r.headers.get("content-type") || "audio/mpeg", "cache-control": "private, max-age=600" } });
+    } catch { return null; }
+  };
+  if (isFixtureUrl(fallbackUrl) || isFixtureUrl(id)) {
+    const local = await tryUrl((siteUrl() || "") + FIXTURE);
+    if (local) return local;
+  }
+  const fromId = async () => {
+    if (!id || isFixtureUrl(id)) return null;
+    const j = await tx(`/v2/recordings/${id}`).catch(() => null);
+    return tryUrl(j?.data?.download_urls?.mp3 || j?.data?.download_urls?.wav);
+  };
+  return (await fromId()) || (await tryUrl(fallbackUrl));
+}
+
+const isTwilioRec = (id) => /^RE[0-9a-f]{32}$/i.test(String(id || ""));
+async function twilioAudio(id) {
+  if (!SID() || !TOKEN()) return null;
+  const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${SID()}/Recordings/${id}.mp3`, { headers: { authorization: "Basic " + Buffer.from(SID() + ":" + TOKEN()).toString("base64") } }).catch(() => null);
+  return r && r.ok ? new Response(r.body, { headers: { "content-type": "audio/mpeg", "cache-control": "private, max-age=600" } }) : null;
+}
+async function recordingAudio(id, fallbackUrl) {
+  if (isTwilioRec(id)) return twilioAudio(id);
+  return telnyxAudio(id, fallbackUrl);
+}
 
 export default wrap(async (req) => {
   const user = await requireUser(req);
@@ -33,13 +71,36 @@ export default wrap(async (req) => {
   }
 
   // Telnyx browser calls and "My phone" calls don't pass through the voice webhook, so the browser asks here first:
-  // Do Not Call, state calling hours and the 24-hour attempt cap all apply the same way.
+  // Do Not Call and state calling hours apply the same way.
   if (action === "check" && req.method === "POST") {
     const b = await req.json().catch(() => ({}));
     const cfg = await loadConfig();
     const r = await preflight(user, b.to, cfg.settings, b.leadState || "");
     if (r.ok) await addAttempt(b.to);
     return json(r);
+  }
+
+  // Browser line: run the same checks, pick a local caller ID, and open a call record before Telnyx rings.
+  if (action === "start" && req.method === "POST") {
+    const b = await req.json().catch(() => ({}));
+    const cfg = await loadConfig();
+    const r = await preflight(user, b.to, cfg.settings, b.leadState || "");
+    if (!r.ok) return json(r);
+    const prefs = (await getJ("prefs", user.identity)) || {};
+    const cid = await pickCallerId(user, b.to, { ...cfg.settings, localPresence: prefs.localPresence ?? cfg.settings.localPresence, useNumbers: prefs.useNumbers }, b.prefer || prefs.defaultCallerId || "");
+    if (!cid) return json({ ok: false, why: "Get a phone number first (Number groups tab)" });
+    const id = randomUUID().replace(/-/g, "").slice(0, 12);
+    const to = to10(b.to);
+    const rec = { id, sid: id, webrtcId: String(b.webrtcId || ""), agent: user.identity, dir: "out", mode: "webrtc", to, from: cid.e164, leadId: b.leadId || "", leadName: String(b.leadName || "").slice(0, 80), at: Date.now(), status: "initiated", ...(b.ps ? { ps: true } : {}) };
+    await saveCall(rec);
+    await addAttempt(b.to);
+    await bumpNumber(cid.e164, "dials");
+    await aggregate(rec, "dial");
+    await updateJ("txlive", to, (x) => {
+      const live = x?.sess && !x.endedAt && x.started;
+      return Object.assign(x || {}, { owner: user.identity, callSid: rec.sid, callId: rec.id, at: Date.now(), ...(live ? {} : { started: false, startErr: null }) });
+    }, {});
+    return json({ ok: true, sid: rec.sid, id, callerId: cid.e164 });
   }
 
   // Client declined recording: stop recording + transcription and erase what was captured.
@@ -50,16 +111,19 @@ export default wrap(async (req) => {
     if (!sid) return json({ ok: true, stopped: false });
     await setJ("txoff", sid, { at: Date.now(), by: user.identity });
     await setJ("tx", sid, { lines: [], declined: true });
-    if (ix) await patchCallBySid(sid, (c) => { c.declined = true; c.recordingSid = null; return c; });
-    if (SID() && TOKEN()) {
+    if (ix) await patchCallBySid(sid, (c) => { c.declined = true; c.recordingSid = null; c.recordingUrl = null; return c; });
+    const rec = ix && (await getJ("calls", `${ix.agent}/${ix.id}`));
+    if (rec?.to) await updateJ("txlive", rec.to, (r) => { Object.assign(r, { declined: true, lines: [], partial: {} }); return r; }, {});
+    const live = rec?.to ? await getJ("txlive", rec.to) : null;
+    if (live?.ccid) await tx(`/v2/calls/${live.ccid}/actions/transcription_stop`, { method: "POST", body: {} }).catch(() => null);
+    if (SID() && TOKEN() && /^CA/.test(sid)) { // Twilio calls
       await tw(`/Accounts/{SID}/Calls/${sid}/Recordings/Twilio.CURRENT.json`, { method: "POST", form: { Status: "stopped" } }).catch(() => null);
       await tw(`/Accounts/{SID}/Calls/${sid}/Transcriptions/hp-${sid}.json`, { method: "POST", form: { Status: "stopped" } }).catch(() => null);
     }
     return json({ ok: true, stopped: true });
   }
 
-  // Calls to the agent's own cell go through the desk, so they're recorded and transcribed like browser calls.
-  // Twilio rings the agent first; when they answer, the lead is dialed inside the same recorded <Dial> (voice step=cell).
+  // Recorded cell bridging isn't available on Telnyx. The desk opens the agent's phone app instead.
   if (action === "cell" && req.method === "POST") {
     if (isTelnyx()) return bad("Calls to your cell are only available on Twilio numbers for now.", 400);
     const b = await req.json().catch(() => ({}));
@@ -106,9 +170,14 @@ export default wrap(async (req) => {
     const sid = q.get("sid"); const ix = await getJ("callidx", sid);
     if (!ix) return json({ call: null });
     if (ix.agent !== user.identity && !user.admin) return bad("Not your call", 403);
-    const [call, tx, p1, p2] = await Promise.all([getJ("calls", `${ix.agent}/${ix.id}`), getJ("tx", sid), getJ("txp", `${sid}/inbound_track`), getJ("txp", `${sid}/outbound_track`)]);
+    const [call, stored, p1, p2] = await Promise.all([getJ("calls", `${ix.agent}/${ix.id}`), getJ("tx", sid), getJ("txp", `${sid}/inbound_track`), getJ("txp", `${sid}/outbound_track`)]);
+    const live = call?.to ? await getJ("txlive", call.to) : null;
     const clean = (l) => ({ ...l, text: redact(l.text) });
-    return json({ call, transcript: (tx?.lines || []).map(clean), partial: [p1, p2].filter((p) => p && p.t > Date.now() - 8000).map(clean) });
+    const lines = (stored?.lines?.length ? stored.lines : live?.lines) || [];
+    const partial = stored?.lines?.length
+      ? [p1, p2].filter((p) => p && p.t > Date.now() - 8000)
+      : Object.values(live?.partial || {}).filter((p) => p && p.t > Date.now() - 8000);
+    return json({ call: call && { ...call, outcome: callOutcome(call), leadState: leadState(call) }, transcript: lines.map(clean), partial: partial.map(clean) });
   }
 
   if (action === "dispo") {
@@ -116,7 +185,10 @@ export default wrap(async (req) => {
     const rec = await patchCallBySid(b.sid, (c) => {
       if (c.agent !== user.identity && !user.admin) return undefined;
       c.disposition = String(b.disposition || "").slice(0, 60); c.note = redact(String(b.note || "").slice(0, 2000));
-      if (b.leadId) c.leadId = b.leadId; c.dispoAt = Date.now(); return c;
+      if (b.leadId) c.leadId = b.leadId; c.dispoAt = Date.now();
+      if (b.recordingUrl) c.recordingUrl = String(b.recordingUrl).slice(0, 2000);
+      if (b.recordingSid) c.recordingSid = String(b.recordingSid).slice(0, 80);
+      return c;
     });
     if (!rec) return bad("Call not found", 404);
     await aggregate({ ...rec, at: rec.at }, "dispo");
@@ -134,18 +206,21 @@ export default wrap(async (req) => {
   if (action === "recording") {
     const sid = q.get("sid"); const ix = await getJ("callidx", sid);
     const rec = ix && (await getJ("calls", `${ix.agent}/${ix.id}`));
-    if (!rec?.recordingSid) return bad("No recording for this call", 404);
+    if (!rec?.recordingSid && !rec?.recordingUrl) return bad("No recording for this call", 404);
     if (rec.agent !== user.identity && !user.admin) return bad("Not your call", 403);
     if (rec.declined) return bad("The client declined recording, so this call has no recording.", 404);
-    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${SID()}/Recordings/${rec.recordingSid}.mp3`, { headers: { authorization: "Basic " + Buffer.from(SID() + ":" + TOKEN()).toString("base64") } });
-    if (!r.ok) return bad("Recording isn't ready yet", 404);
-    return new Response(r.body, { headers: { "content-type": "audio/mpeg", "cache-control": "private, max-age=600" } });
+    const audio = await recordingAudio(rec.recordingSid, rec.recordingUrl);
+    if (!audio) return bad("Recording isn't ready yet", 404);
+    return audio;
   }
 
   if (action === "transcript") {
     const sid = q.get("sid"); const ix = await getJ("callidx", sid);
     if (!ix || (ix.agent !== user.identity && !user.admin)) return bad("Not found", 404);
-    return json({ lines: (((await getJ("tx", sid)) || {}).lines || []).map((l) => ({ ...l, text: redact(l.text) })) });
+    const stored = ((await getJ("tx", sid)) || {}).lines || [];
+    const rec = await getJ("calls", `${ix.agent}/${ix.id}`);
+    const live = !stored.length && rec?.to ? ((await getJ("txlive", rec.to)) || {}).lines || [] : [];
+    return json({ lines: (stored.length ? stored : live).map((l) => ({ ...l, text: redact(l.text) })) });
   }
 
   if (action === "analytics") {
@@ -221,8 +296,8 @@ export default wrap(async (req) => {
   if (action === "vmaudio") { // inbound voicemail playback
     const k = q.get("key"); if (!k?.startsWith(user.identity + "/") && !(user.admin && k?.startsWith("_team/"))) return bad("Not yours", 403);
     const v = await getJ("inbox", k); if (!v?.recordingSid) return bad("Not found", 404);
-    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${SID()}/Recordings/${v.recordingSid}.mp3`, { headers: { authorization: "Basic " + Buffer.from(SID() + ":" + TOKEN()).toString("base64") } });
-    return new Response(r.body, { status: r.status, headers: { "content-type": "audio/mpeg" } });
+    const audio = await recordingAudio(v.recordingSid);
+    return audio || bad("Not found", 404);
   }
   return bad("Unknown action", 404);
 });

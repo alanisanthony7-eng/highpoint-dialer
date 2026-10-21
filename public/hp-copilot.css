@@ -75,6 +75,10 @@
 .hpc-mem li.new{border-color:rgba(134,227,160,.3)}
 .hpc-mem li time{display:block;font-size:10.5px;color:var(--hp-mut,#9AA1AE)}
 .hpc-empty{font-size:12px;color:var(--hp-mut,#9AA1AE);line-height:1.5}
+.hpc-tx{max-height:280px;overflow-y:auto;font-size:13px;line-height:1.5;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.07)}
+.hpc-tx p{margin:0 0 6px}
+.hpc-tx p:last-child{margin:0}
+.hpc-tx .who{display:inline-block;min-width:38px;margin-right:6px;font:800 10px/1.4 var(--f-ui,system-ui);letter-spacing:.08em;text-transform:uppercase;color:var(--sky,#9cc3f0)}
 .hpc-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .hpc-row .btn{padding:6px 11px;font-size:12px}
 .hpc-foot{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:11px;color:var(--hp-mut,#9AA1AE)}
@@ -100,7 +104,8 @@
 .hpc-pill{position:fixed;left:calc(262px + 18px);bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:310;display:inline-flex;align-items:center;gap:8px;padding:9px 14px 9px 10px;border-radius:999px;border:1px solid rgba(156,195,240,.45);background:rgba(8,14,26,.92);backdrop-filter:blur(10px);color:#fff;font:700 13px var(--f-ui,system-ui);cursor:pointer;box-shadow:0 12px 30px -10px rgba(0,0,0,.8),0 0 24px -10px rgba(127,180,255,.7);animation:hpcIn .35s cubic-bezier(.2,.8,.2,1)}
 .hpc-pill svg{width:16px;height:16px;color:var(--sky,#9cc3f0)}
 .hpc-pill b{background:#f4f7fb;color:#06101f;border-radius:999px;font:800 11px/1 var(--f-num,monospace);padding:4px 7px}
-.hpc-modal{position:fixed;inset:0;z-index:400;display:grid;place-items:center;padding:16px;background:rgba(3,5,10,.7);backdrop-filter:blur(4px)}
+.hpc-modal{position:fixed;inset:0;z-index:400;display:grid;justify-items:center;align-items:start;align-content:start;overflow-y:auto;overscroll-behavior:contain;padding:16px;background:rgba(3,5,10,.7);backdrop-filter:blur(4px)}
+@supports (align-items:safe center){.hpc-modal{align-items:safe center;align-content:safe center}}
 .hpc-modal>.hpc{width:min(520px,100%);max-height:calc(100vh - 32px);overflow-y:auto;background:#0a1120}
 .hpc-x{all:unset;cursor:pointer;width:26px;height:26px;display:grid;place-items:center;border-radius:8px;color:var(--hp-mut,#9AA1AE)}
 .hpc-x:hover{background:rgba(255,255,255,.08);color:#fff}
@@ -120,7 +125,9 @@
 .hpc-next{font-size:12.5px;line-height:1.5}
 .hpc-next span{display:block;font:800 10px/1 var(--f-ui,system-ui);letter-spacing:.14em;text-transform:uppercase;color:#9CC3F0;margin-bottom:5px}
 .hpc-acts:has([data-consent]) .btn.primary{grid-column:auto} /* the two consent answers sit side by side, same size */
-.hpf-mid .hpc-slot{margin:10px 16px}
+.hpf-mid .hpc-slot{margin:10px 16px;flex:none}
+.hpf-mid .hpc-slot:not(:empty){flex:0 1 auto;min-height:140px;max-height:min(44vh,460px);overflow-y:auto;overscroll-behavior:contain}
+.hpf-live,.hpf-compose{flex:none}
 .hpc-slot .hpc-alert{animation:none} /* the copilot redraws every few seconds; a fade-in here would flicker */
 
 /* notes during the call */

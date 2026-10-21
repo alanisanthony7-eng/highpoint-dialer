@@ -127,7 +127,7 @@ export const DEFAULT_SETTINGS = {
   dailyCapPerNumber: 75,       // outbound dials per number per day
   rampDays: 14,                // new numbers ramp up over this many days
   record: true,
-  recordNotice: false,         // legacy setting: the notice now always plays while a call is recorded (see recordNoticeFor)
+  recordNotice: false,         // legacy setting: no recording announcement is played (see recordNoticeFor)
   recordNoticeMode: "auto",    // legacy setting: no longer changes anything
   transcribe: true,
   transcribeEngine: "auto",   // auto = Deepgram Nova-3 (falls back to Google); google = phone model; basic = plain Google
@@ -189,11 +189,9 @@ for (const [st, codes] of Object.entries(AC)) for (const c of codes.split(" ")) 
 export const stateOf = (num) => AREA[to10(num).slice(0, 3)] || "";
 // States that require every party's consent to record a phone call (kept for reference)
 export const ALL_PARTY = new Set(["CA", "CT", "DE", "FL", "IL", "MD", "MA", "MI", "MT", "NV", "NH", "OR", "PA", "WA"]);
-// Decided for the whole product: whenever a call is recorded, the lead hears "this call may be recorded" first, in every
-// state. This overrides the old "never" option, so the notice can't be switched off by mistake.
-export function recordNoticeFor(S, num, leadState) {
-  return !!S.record;
-}
+// Decided: no "this call may be recorded" announcement is played to the lead on any call. Recording and saving the call
+// are unchanged (recordings still attach to the call log). The agent tells the lead in states that need everyone's consent.
+export function recordNoticeFor() { return false; }
 export const zonesOf = (num, leadState) => {
   const ac = to10(num).slice(0, 3);
   if (SPLIT[ac]) return SPLIT[ac];

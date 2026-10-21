@@ -14,10 +14,12 @@ const normPhone=s=>{let d=digits(s);if(d.length===11&&d[0]==="1")d=d.slice(1);re
 const fmtPhone=s=>{const d=normPhone(s);return d.length===10?`(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`:(s||"")};
 const ago=t=>{if(!t)return"—";const m=(Date.now()-t)/6e4;if(m<1)return"just now";if(m<60)return Math.round(m)+"m ago";const h=m/60;if(h<24)return Math.round(h)+"h ago";const d=h/24;return d<30?Math.round(d)+"d ago":new Date(t).toLocaleDateString()};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
-let toastT;function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600)}
+let toastT;function toast(m,ms){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,ms||2600)}
 
 /* ---------- data layer ---------- */
-const leads=new Map(); let db=null, col=null, live=false;
+const leads=new Map(), imports=new Map(), lists=new Map(); let db=null, col=null, icol=null, lcol=null, live=false;
+let activeListId=ls.get("hp.list",""), scTab="FE";
+function leadPipeline(l){const p=l?.pipeline||l?.product;return PROD[p]?p:""}
 function setSync(txt){$("#syncState").textContent=txt}
 async function initDb(){
   try{ if(window.claude?.use) db=await window.claude.use("db"); }catch{ db=null }
@@ -27,7 +29,20 @@ async function initDb(){
     leads.clear(); snap.docs.forEach(d=>{const v=d.data(); if(v) leads.set(d.id,{...v,id:d.id})});
     live=true; setSync(`${leads.size} lead${leads.size===1?"":"s"} · saved & synced`); renderAll();
   },e=>{ setSync("Sync stopped: "+(e?.message||"reload the page")); });
-  initAppts(); initCalls(); initLogos(); initCrew();
+  initAppts(); initCalls(); initLogos(); initCrew(); initLists();
+}
+function initLists(){
+  if(!db)return;
+  icol=db.collection("imports");
+  icol.onSnapshot(s=>{imports.clear();s.docs.forEach(d=>{const v=d.data();if(v)imports.set(d.id,{...v,id:d.id})});fillListSelects();if(view==="import")renderBatches()});
+  lcol=db.collection("lists");
+  lcol.onSnapshot(s=>{lists.clear();s.docs.forEach(d=>{const v=d.data();if(v)lists.set(d.id,{...v,id:d.id})});fillListSelects();if(view==="contacts")renderContacts();if(view==="pipeline")renderPipeline();if(view==="import")renderBatches();if(view==="dialer")renderDialer()});
+}
+async function putDoc(kind,rec){
+  const id=rec.id||uid(); const body={...rec}; delete body.id;
+  const store=kind==="imports"?imports:lists; const c=kind==="imports"?icol:lcol;
+  if(c) await c.doc(id).set(body); else store.set(id,{...body,id});
+  return id;
 }
 async function putLead(l){
   const id=l.id||uid(); const body={...l}; delete body.id; body.updatedAt=Date.now(); if(!body.createdAt)body.createdAt=body.updatedAt;
@@ -39,7 +54,20 @@ async function patchLead(id,patch){
   const cur=leads.get(id); if(!cur) throw new Error("Lead not found");
   const next={...cur,...patch}; await putLead(next); return next;
 }
-async function removeLead(id){ if(col) await col.doc(id).delete(); else { leads.delete(id); renderAll() } }
+async function removeLead(id){
+  const kids=[...calls.values()].filter(c=>c.leadId===id);
+  if(col) await col.doc(id).delete(); else leads.delete(id);
+  for(const c of kids){ if(ccol) await ccol.doc(c.id).delete(); else calls.delete(c.id) }
+  if(dCurId===id) dCurId=null;
+  window.dispatchEvent(new Event("hp:leadchange"));
+  if(!col) renderAll();
+}
+async function askDeleteLead(id){
+  const l=leads.get(id); if(!l) return false;
+  if(!confirm(`Delete ${fullName(l)}? They'll be removed from Clients, lists, and the dialer. This can't be undone.`)) return false;
+  try{ await removeLead(id); toast("Lead deleted"); closeDrawer(); return true }
+  catch(e){ toast("Couldn't delete: "+(e.message||e)); return false }
+}
 function addNoteObj(l,text){ return [...(l.notes||[]),{t:Date.now(),text}] }
 
 /* ---------- navigation ---------- */
@@ -59,13 +87,20 @@ function ensureFeature(src){
   });
   featureLoads.set(src,ready);return ready;
 }
+function ensureQuote(){
+  return Promise.all([ensureFeature("/hp-rates.js"),ensureFeature("/hp-est.js"),ensureFeature("/hp-grid.js")]);
+}
+function ensureScreenData(){
+  return Promise.all([ensureQuote(),ensureFeature("/hp-drugs.js")]);
+}
+function ensureFex(){return Promise.all([ensureFeature("/hp-fex-script.js"),ensureFeature("/hp-mp-script.js"),ensureFeature("/hp-iul-script.js"),ensureFeature("/hp-iul-rates.js")])}
 function ensureDialer(){
   if(window.hpDialer)return Promise.resolve(window.hpDialer);
   if(dialerLoad)return dialerLoad;
   dialerLoad=new Promise((resolve,reject)=>{
     if(!document.querySelector('link[href="/hp-dialer.css"]')){const c=document.createElement("link");c.rel="stylesheet";c.href="/hp-dialer.css";document.head.append(c)}
-    const found=document.querySelector('script[src="/hp-dialer.js"]');
-    if(found){found.addEventListener("load",()=>resolve(window.hpDialer),{once:true});found.addEventListener("error",reject,{once:true});return}
+    const found=document.querySelector('script[src="/hp-dialer.js"],script[src*="hp-dialer.js"]');
+    if(found){if(window.hpDialer||found.dataset.loaded)return resolve(window.hpDialer);found.addEventListener("load",()=>{found.dataset.loaded="1";resolve(window.hpDialer)},{once:true});found.addEventListener("error",reject,{once:true});return}
     const sc=document.createElement("script");sc.src="/hp-dialer.js";sc.onload=()=>resolve(window.hpDialer);sc.onerror=()=>{dialerLoad=null;reject(new Error("The dialer couldn't load."))};document.body.append(sc);
   });
   return dialerLoad;
@@ -84,12 +119,37 @@ function go(v){ if(!document.getElementById("v-"+v))v="pipeline";
   view=v; {const g=ls.get("hp.gs",{});if(!g[v]){g[v]=Date.now();ls.set("hp.gs",g)}} ls.set("hp.view",v);
   $$("section[data-v]").forEach(s=>{const on=s.id==="v-"+v;s.hidden=!on;s.inert=!on;if(on)s.removeAttribute("aria-hidden");else s.setAttribute("aria-hidden","true")});
   syncNav(); renderAll();
-  if(v==="dialer")ensureDialer().catch(e=>toast(e.message));
+  if(v==="dialer"){ensureDialer().catch(e=>toast(e.message));ensureFex().catch(()=>{})}
+  if(v==="quoter"||v==="iul"){ensureQuote().then(()=>{if(view===v)renderAll()}).catch(e=>toast(e.message));if(v==="iul")ensureFex().then(()=>{if(view==="iul")renderIul()}).catch(()=>{})}
+  if(v==="screen")ensureScreenData().then(()=>{if(view===v)renderAll()}).catch(e=>toast(e.message));
+  if(v==="scripts"){
+    const cur=leads.get(dCurId||drawerId);
+    const p=leadPipeline(cur)||lists.get(activeListId)?.pipeline;
+    if(PROD[p])scTab=p;
+    ensureFex().then(()=>{if(view===v)renderAll()}).catch(e=>toast(e.message));
+  }
   if(v==="import")ensureFeature("/hp-leadpost.js").catch(e=>toast(e.message));
   if(v==="calendar")ensureFeature("/hp-booking.js").catch(e=>toast(e.message));
   if(typeof crewPresence==="function")crewPresence(v);
   if(typeof loungeWatch==="function")loungeWatch(v==="crew");
-  window.scrollTo(0,0); if(typeof stagger==="function")stagger($("#v-"+v)) }
+  const sc=document.scrollingElement||document.documentElement; sc.scrollTop=0; window.scrollTo(0,0); const main=document.querySelector("main"); if(main) main.scrollTop=0; if(typeof stagger==="function")stagger($("#v-"+v)) }
+document.addEventListener("wheel",(e)=>{
+  if(e.ctrlKey||e.defaultPrevented)return;
+  if(e.target.closest?.(".hpt-ov,.hpt-picker,.hpa,.hpc-modal,.hph-modal,.hpk,.drawer,[role=dialog]"))return;
+  let el=e.target instanceof Element?e.target:null, n=0;
+  while(el&&el!==document.body&&n++<8){
+    const room=el.scrollHeight-el.clientHeight;
+    if(room>1){
+      const atTop=el.scrollTop<=0&&e.deltaY<0;
+      const atBot=el.scrollTop+el.clientHeight>=el.scrollHeight-1&&e.deltaY>0;
+      if(!atTop&&!atBot)return;
+      break;
+    }
+    el=el.parentElement;
+  }
+  const y=window.scrollY, dy=e.deltaY;
+  requestAnimationFrame(()=>{ if(Math.abs(window.scrollY-y)<1) window.scrollBy(0,dy) });
+},{passive:true});
 $$(".nav").forEach(b=>b.onclick=()=>{if(b.dataset.view)go(b.dataset.view)});
 $("#navMore").onclick=()=>{
   document.querySelector(".hpn-more")?.remove();
@@ -106,7 +166,50 @@ $$("[data-new]").forEach(b=>b.onclick=()=>openDrawer(null));
 $$("[data-goto]").forEach(b=>b.onclick=()=>go(b.dataset.goto));
 
 /* ---------- pipeline ---------- */
-function filteredLeads(){return [...leads.values()]}
+function listBatchId(id){return lists.get(id)?.filter?.batchId||""}
+// "My lists" are hand-picked ({kind:"picked", ids}); every other list is an import's smart list
+const isPicked=l=>l?.kind==="picked";
+const listCount=l=>isPicked(l)?(window.hpLists?hpLists.liveCount(l.ids,leads):(l.ids||[]).length):0;
+function inList(id,l){const list=lists.get(id);if(!list)return true;if(!l)return false;
+  if(isPicked(list))return window.hpLists?hpLists.members(list).has(l.id):(list.ids||[]).includes(l.id);
+  if(list.filter?.batchId)return l.batchId===list.filter.batchId;
+  if(list.filter?.pipeline)return leadPipeline(l)===list.filter.pipeline;
+  return true}
+function setActiveList(id){
+  activeListId=id&&lists.has(id)?id:"";
+  ls.set("hp.list",activeListId);
+  fillListSelects();
+  renderListChips();
+  if(view==="contacts")renderContacts(); else if(view==="pipeline")renderPipeline(); else if(view==="dialer")renderDialer();
+}
+function fillListSelects(){
+  const rows=[...lists.values()].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)), mine=rows.filter(isPicked), imps=rows.filter(l=>!isPicked(l));
+  const opts=`<option value="">All leads</option>`+(mine.length?`<optgroup label="My lists">${mine.map(l=>`<option value="${esc(l.id)}">${esc(l.name)} (${listCount(l).toLocaleString()})</option>`).join("")}</optgroup>`:"")
+    +(imps.length?`<optgroup label="Imports">${imps.map(l=>`<option value="${esc(l.id)}">${esc(l.name)}</option>`).join("")}</optgroup>`:"");
+  ["#fList","#pipeList","#dqList"].forEach(s=>{const el=$(s);if(!el)return;el.innerHTML=opts;el.value=lists.has(activeListId)?activeListId:"";});
+  if(activeListId&&!lists.has(activeListId))activeListId="";
+}
+function renderListChips(){
+  const list=lists.get(activeListId);
+  const n=list?filteredLeads().length:0, picked=isPicked(list);
+  const html=list?`<span>Showing ${picked?"list":"import"} <b>${esc(list.name)}</b> · ${n.toLocaleString()} lead${n===1?"":"s"}</span><button type="button" class="btn sm" data-clear-list>Show all</button>${picked?`<button type="button" class="btn sm" data-del-list>Delete list</button>`:""}`:"";
+  ["#listChip","#pipeChip"].forEach(s=>{const el=$(s);if(!el)return;el.hidden=!list;el.innerHTML=html;el.querySelector("[data-clear-list]")?.addEventListener("click",()=>setActiveList(""));el.querySelector("[data-del-list]")?.addEventListener("click",()=>deletePickedList(list.id))});
+}
+async function deletePickedList(id){
+  const list=lists.get(id);if(!isPicked(list))return;
+  if(!confirm(`Delete the list “${list.name}”? The leads stay in Clients and the dialer.`))return;
+  try{if(lcol)await lcol.doc(id).delete();else lists.delete(id);if(activeListId===id)setActiveList("");else fillListSelects();toast(`Deleted the list “${list.name}”. The leads are still in Clients.`)}
+  catch(e){toast("Couldn't delete the list: "+(e.message||e))}
+}
+function filteredLeads(){
+  const cur=lists.get(activeListId);
+  if(isPicked(cur)){const m=window.hpLists?hpLists.members(cur):new Set(cur.ids||[]);return [...leads.values()].filter(l=>m.has(l.id))}
+  const batch=listBatchId(activeListId);
+  if(batch) return [...leads.values()].filter(l=>l.batchId===batch);
+  const list=lists.get(activeListId);
+  if(list?.filter?.pipeline) return [...leads.values()].filter(l=>leadPipeline(l)===list.filter.pipeline);
+  return [...leads.values()];
+}
 /* getting started: a short checklist for new agents; ticks itself off, hides when done or dismissed */
 function renderStart(){const host=$("#v-pipeline");if(!host)return;let card=$("#gsCard");const g=ls.get("hp.gs",{});
   if(g._hide){card?.remove();return}
@@ -130,20 +233,43 @@ function renderStart(){const host=$("#v-pipeline");if(!host)return;let card=$("#
 function renderToday(){
   const host=$("#todayStrip");if(!host)return;
   const now=Date.now(),today=new Date().toDateString(),end=new Date();end.setHours(23,59,59,999);
-  const callbacks=[...leads.values()].filter(l=>l.callbackAt&&l.callbackAt<=end.getTime()&&!["sold","lost"].includes(l.stage)).sort((a,b)=>a.callbackAt-b.callbackAt).slice(0,4);
-  const meetings=typeof appts!=="undefined"?[...appts.values()].filter(a=>!a.done&&new Date(a.at).toDateString()===today).sort((a,b)=>a.at-b.at).slice(0,4):[];
-  const ready=dialQueue().slice(0,4);
-  const list=(items,empty,draw)=>items.length?items.map(draw).join(""):`<span class="today-empty">${empty}</span>`;
-  host.innerHTML=`<article><header><span>Callbacks</span><b>${callbacks.length}</b></header>${list(callbacks,"Nothing due today",l=>`<button data-today-lead="${esc(l.id)}"><span><b>${esc(fullName(l))}</b><small>${l.callbackAt<now?"Overdue · ":""}${new Date(l.callbackAt).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</small></span><i>→</i></button>`)}</article>
-    <article><header><span>Appointments</span><b>${meetings.length}</b></header>${list(meetings,"Your calendar is clear",a=>`<button data-today-lead="${esc(a.leadId||"")}" data-today-view="calendar"><span><b>${esc(a.leadName||a.title||"Appointment")}</b><small>${new Date(a.at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})} · ${esc(a.type||"Call")}</small></span><i>→</i></button>`)}</article>
-    <article><header><span>Ready to call</span><b>${ready.length}</b></header>${list(ready,"Import leads to build a queue",l=>`<button data-today-lead="${esc(l.id)}" data-today-call="1"><span><b>${esc(fullName(l))}</b><small>${esc(stageName(l.stage))} · ${esc(fmtPhone(l.phone))}</small></span><i>Call</i></button>`)}</article>`;
+  const callbacks=[...leads.values()].filter(l=>l.callbackAt&&l.callbackAt<=end.getTime()&&!["sold","lost"].includes(l.stage)).sort((a,b)=>a.callbackAt-b.callbackAt);
+  const meetings=typeof appts!=="undefined"?[...appts.values()].filter(a=>!a.done&&new Date(a.at).toDateString()===today).sort((a,b)=>a.at-b.at):[];
+  const ready=dialQueue(), SHOW=4, dueNow=callbacks.filter(l=>l.callbackAt<=now&&normPhone(l.phone)&&!l.dnc).length, dial=canDial();
+  const list=(items,empty,draw,more)=>(items.length?items.slice(0,SHOW).map(draw).join(""):`<span class="today-empty">${empty}</span>`)+(items.length>SHOW?`<button type="button" class="today-more" data-today-more="${more}">+${(items.length-SHOW).toLocaleString()} more</button>`:"");
+  host.innerHTML=`<article><header><span>Callbacks</span>${dial&&dueNow?`<button type="button" class="today-go" data-today-dial="callbacks">Call ${dueNow.toLocaleString()} due now</button>`:""}<b>${callbacks.length.toLocaleString()}</b></header>${list(callbacks,"Nothing due today",l=>`<button data-today-lead="${esc(l.id)}"><span><b>${esc(fullName(l))}</b><small>${l.callbackAt<now?"Overdue · ":""}${new Date(l.callbackAt).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})}</small></span><i>→</i></button>`,"callbacks")}</article>
+    <article><header><span>Appointments</span><b>${meetings.length.toLocaleString()}</b></header>${list(meetings,"Your calendar is clear",a=>`<button data-today-lead="${esc(a.leadId||"")}" data-today-view="calendar"><span><b>${esc(a.leadName||a.title||"Appointment")}</b><small>${new Date(a.at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})} · ${esc(a.type||"Call")}</small></span><i>→</i></button>`,"calendar")}</article>
+    <article><header><span>Ready to call</span><b>${ready.length.toLocaleString()}</b></header>${list(ready,leads.size?"Nobody to call right now. Callbacks set for later and leads outside their calling hours come back on their own.":"Import leads to build a queue",l=>`<button data-today-lead="${esc(l.id)}" data-today-call="1"><span><b>${esc(fullName(l))}</b><small>${esc(stageName(l.stage))} · ${esc(fmtPhone(l.phone))}</small></span><i>Call</i></button>`,"dialer")}</article>`;
   host.querySelectorAll("[data-today-lead]").forEach(b=>b.onclick=()=>{const id=b.dataset.todayLead;if(b.dataset.todayView==="calendar"){go("calendar");return}if(!id)return;if(b.dataset.todayCall){startLeadCall(leads.get(id));return}openDrawer(id)});
+  host.querySelectorAll("[data-today-more]").forEach(b=>b.onclick=()=>{const k=b.dataset.todayMore;if(k==="callbacks")callTodayList("callbacks");else go(k)});
+  host.querySelector("[data-today-dial]")?.addEventListener("click",()=>callTodayList("callbacks"));
 }
-function renderPipeline(){renderStart();
+// Home → the dialer with "Who to call" already set (Start calling still asks first)
+async function callTodayList(filter){
+  go("dialer");
+  try{const d=await ensureDialer();await d?.campaigns?.ready;if(d?.useList&&!d.useList({src:"all",filter}))toast("Finish the dialing session first, then pick Callbacks due.")}
+  catch(e){toast(e.message||"The dialer couldn't load.")}
+}
+function leadMonthly(l){const n=parseFloat(String(l?.app?.monthly??"").replace(/[^0-9.]/g,""));if(isFinite(n)&&n>0)return n;const q=(l?.quotes||[]).slice(-1)[0];const m=parseFloat(String(q?.monthly??"").replace(/[^0-9.]/g,""));return isFinite(m)&&m>0?m:0}
+function leadAp(l){return leadMonthly(l)*12}
+function scoreboard(list){
+  const all=list||[...leads.values()];
+  const mStart=new Date(new Date().getFullYear(),new Date().getMonth(),1).getTime();
+  const sold=all.filter(l=>l.stage==="sold"), soldM=sold.filter(l=>(l.updatedAt||0)>=mStart);
+  const submitted=all.filter(l=>l.stage==="application"||l.stage==="sold");
+  return{sold:sold.length,soldM:soldM.length,ap:sold.reduce((a,l)=>a+leadAp(l),0),apM:soldM.reduce((a,l)=>a+leadAp(l),0),submitted:submitted.length,submittedAp:submitted.reduce((a,l)=>a+leadAp(l),0)};
+}
+function renderScoreboard(){
+  const el=$("#hpScore"); if(!el)return;
+  const s=scoreboard();
+  el.innerHTML=`<div><span class="label">Sold this month</span><span class="num gold">${s.soldM}</span></div><div><span class="label">AP this month</span><span class="num gold">${money(s.apM,0)}</span></div><div><span class="label">Sold (your book)</span><span class="num">${s.sold}</span></div><div><span class="label">Submitted AP</span><span class="num">${money(s.submittedAp,0)}</span></div>`;
+}
+function renderPipeline(){renderStart();fillListSelects();renderListChips();
   const pf=$("#pipeProduct").value; const all=filteredLeads().filter(l=>!pf||l.product===pf);
   const all2=filteredLeads(), mStart=new Date(new Date().getFullYear(),new Date().getMonth(),1).getTime();
   const soldM=all2.filter(l=>l.stage==="sold"&&(l.updatedAt||0)>=mStart).length, closed=all2.filter(l=>l.stage==="sold"||l.stage==="lost").length;
   $("#kpis").innerHTML=`<div><span class="label">Leads in book</span><span class="num" data-count="${all2.length}" data-key="k1" data-fmt="int">${all2.length.toLocaleString()}</span></div><div><span class="label">Appointments</span><span class="num" data-count="${all2.filter(l=>l.stage==="appointment").length}" data-key="k2" data-fmt="int">${all2.filter(l=>l.stage==="appointment").length}</span></div><div><span class="label">Sold this month</span><span class="num gold" data-count="${soldM}" data-key="k3" data-fmt="int">${soldM}</span></div><div><span class="label">Close rate</span><span class="num">${closed?Math.round(all2.filter(l=>l.stage==="sold").length/closed*100)+"%":"—"}</span></div>`;
+  renderScoreboard();
   setTimeout(()=>countUp($("#kpis")));
   $("#strip").innerHTML=STAGES.map(([id,n,c])=>`<div><span class="label"><i style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${c};margin-right:5px"></i>${n}</span><span class="num">${all.filter(l=>(l.stage||"new")===id).length}</span></div>`).join("");
   renderToday();
@@ -168,10 +294,12 @@ function renderPipeline(){renderStart();
   });
 }
 $("#pipeProduct").onchange=renderPipeline;
+$("#pipeList")?.addEventListener("change",()=>setActiveList($("#pipeList").value));
 
 /* ---------- contacts ---------- */
 const stageOpts=(withAll)=>(withAll?`<option value="">All stages</option>`:"")+STAGES.map(([i,n])=>`<option value="${i}">${n}</option>`).join("");
 $("#fStage").innerHTML=stageOpts(true); $("#impStage").innerHTML=stageOpts(false); $("#dqStage").innerHTML=stageOpts(true);
+const sel=new Set(); let cPage=1, cFilterKey=null, cLastIdx=-1, cRows=[], cShown=[], bulkBusy=false;
 function contactRows(){
   const q=$("#q").value.trim().toLowerCase(), st=$("#fStage").value, pr=$("#fProduct").value, so=$("#fSource").value;
   const qd=digits(q);
@@ -179,16 +307,177 @@ function contactRows(){
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
 function renderContacts(){
+  fillListSelects();renderListChips();
   const sources=[...new Set(filteredLeads().map(l=>l.source).filter(Boolean))].sort();
   const cur=$("#fSource").value; $("#fSource").innerHTML=`<option value="">All sources</option>`+sources.map(s=>`<option ${s===cur?"selected":""}>${esc(s)}</option>`).join("");
   const rows=contactRows();
+  const fk=[activeListId,$("#q").value.trim().toLowerCase(),$("#fStage").value,$("#fProduct").value,$("#fSource").value].join("\u0001");
+  if(fk!==cFilterKey){cFilterKey=fk;cPage=1;sel.clear();cLastIdx=-1}
+  if(sel.size){const inRows=new Set(rows.map(l=>l.id));for(const id of sel)if(!inRows.has(id))sel.delete(id)}
+  const size=pageSize(), pg=pageWindow(rows.length,cPage,size); cPage=pg.page;
+  const shown=rows.slice(pg.start,pg.end); cRows=rows; cShown=shown;
   $("#contactCount").textContent=`${rows.length} of ${leads.size} leads`;
-  $("#rows").innerHTML=rows.slice(0,500).map(l=>`<tr data-id="${esc(l.id)}" tabindex="0"><td><b>${esc(fullName(l))}</b></td><td class="num">${esc(fmtPhone(l.phone))}</td><td>${normPhone(l.phone)?`<button type="button" class="btn sm" data-call="${esc(l.id)}">Call</button>`:""}</td><td>${prodPill(l.product)}</td><td><span class="stage"><i style="background:${stageColor(l.stage)}"></i>${stageName(l.stage)}</span></td><td>${esc(l.state||"")}</td><td class="num">${esc(l.age||"")}</td><td>${esc(l.source||"")}</td><td class="muted">${ago(l.updatedAt)}</td></tr>`).join("")
-    || `<tr><td colspan="9" class="muted" style="text-align:center;padding:28px">${leads.size?"No leads match these filters.":"No leads yet. Use Import to upload a CSV, or add one with + New lead."}</td></tr>`;
-  $$("#rows tr[data-id]").forEach(r=>{r.onclick=()=>openDrawer(r.dataset.id);r.onkeydown=e=>{if(e.key==="Enter")openDrawer(r.dataset.id)}});
+  $("#rows").innerHTML=shown.map(l=>`<tr data-id="${esc(l.id)}" tabindex="0"${sel.has(l.id)?' class="sel"':""}><td class="ck"><input type="checkbox" data-sel="${esc(l.id)}" ${sel.has(l.id)?"checked":""} aria-label="Select ${esc(fullName(l))}"></td><td><b>${esc(fullName(l))}</b></td><td class="num">${esc(fmtPhone(l.phone))}</td><td>${normPhone(l.phone)?`<button type="button" class="btn sm" data-call="${esc(l.id)}">Call</button>`:""}</td><td>${prodPill(l.product)}</td><td><span class="stage"><i style="background:${stageColor(l.stage)}"></i>${stageName(l.stage)}</span></td><td>${esc(l.state||"")}</td><td class="num">${esc(l.age||"")}</td><td>${esc(l.source||"")}</td><td class="muted">${ago(l.updatedAt)}</td></tr>`).join("")
+    || `<tr><td colspan="10" class="muted" style="text-align:center;padding:28px">${leads.size?`${isPicked(lists.get(activeListId))&&!filteredLeads().length?"This list is empty. Tick leads under All leads and use Add to list.":"No leads match these filters."} <button type="button" class="btn sm" data-clear-filters style="margin-left:8px">Clear filters</button>`:"No leads yet. Use Import to upload a CSV, or add one with + New lead."}</td></tr>`;
+  $("#rows [data-clear-filters]")?.addEventListener("click",clearClientFilters);
+  $$("#rows tr[data-id]").forEach(r=>{r.onclick=()=>openDrawer(r.dataset.id);r.onkeydown=e=>{if(e.key==="Enter"&&e.target===r)openDrawer(r.dataset.id)}});
   $$("#rows [data-call]").forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();startLeadCall(leads.get(b.dataset.call))});
+  $$("#rows td.ck").forEach(td=>td.onclick=e=>{e.stopPropagation();if(e.target===td)td.querySelector("input")?.click()});
+  $$("#rows [data-sel]").forEach((c,i)=>c.onclick=e=>{e.stopPropagation();
+    const from=e.shiftKey&&cLastIdx>=0?Math.min(cLastIdx,i):i, to=e.shiftKey&&cLastIdx>=0?Math.max(cLastIdx,i):i;
+    for(let k=from;k<=to;k++){const id=shown[k]?.id;if(id)c.checked?sel.add(id):sel.delete(id)}
+    cLastIdx=i; syncSel()});
+  paintPager(rows.length,pg,size); syncSel();
+}
+function clearClientFilters(){["#q","#fStage","#fProduct","#fSource"].forEach(s=>{const el=$(s);if(el)el.value=""});if(activeListId)setActiveList("");else renderContacts();$("#q")?.focus()}
+/* ---------- clients: pages, selection, bulk actions ---------- */
+const PAGE_SIZES=[20,50,100], PAGE_DEFAULT=50;
+function pageWindow(total,page,size){const pages=Math.max(1,Math.ceil(total/size));page=Math.min(Math.max(1,Math.floor(page)||1),pages);const start=(page-1)*size,nums=[];for(let n=1;n<=pages;n++){if(n===1||n===pages||Math.abs(n-page)<=1)nums.push(n);else if(nums[nums.length-1]!=="…")nums.push("…")}return{page,pages,start,end:Math.min(total,start+size),nums}}
+const pageSizeKey=()=>"hp.clientsPage."+(window.hpUser?.id||"me");
+function pageSize(){const n=+ls.get(pageSizeKey(),PAGE_DEFAULT);return PAGE_SIZES.includes(n)?n:PAGE_DEFAULT}
+function paintPager(total,pg,size){
+  const el=$("#pager"); if(!el)return;
+  el.hidden=!total; if(!total){el.innerHTML="";return}
+  el.innerHTML=`<span class="pg-info">Showing <b class="num">${(pg.start+1).toLocaleString()}–${pg.end.toLocaleString()}</b> of <b class="num">${total.toLocaleString()}</b></span>
+    <span class="pg-nav"><button type="button" class="btn sm" data-pg="${pg.page-1}" ${pg.page<=1?"disabled":""}>‹ Prev</button>${pg.nums.map(n=>n==="…"?`<span class="pg-gap" aria-hidden="true">…</span>`:`<button type="button" class="btn sm pg-num" data-pg="${n}" aria-label="Page ${n}"${n===pg.page?' aria-current="page"':""}>${n}</button>`).join("")}<button type="button" class="btn sm" data-pg="${pg.page+1}" ${pg.page>=pg.pages?"disabled":""}>Next ›</button></span>
+    <label class="pg-size"><span>Per page</span><select id="pgSize" aria-label="Leads per page">${PAGE_SIZES.map(n=>`<option value="${n}" ${n===size?"selected":""}>${n}</option>`).join("")}</select></label>`;
+  el.querySelectorAll("[data-pg]").forEach(b=>b.onclick=()=>{cPage=+b.dataset.pg;cLastIdx=-1;renderContacts();$("#v-contacts .tablewrap")?.scrollIntoView({block:"nearest"})});
+  $("#pgSize",el).onchange=e=>{const n=+e.target.value;ls.set(pageSizeKey(),n);cPage=Math.floor(pg.start/n)+1;cLastIdx=-1;renderContacts()};
+}
+function syncSel(){
+  const shown=cShown, on=shown.filter(l=>sel.has(l.id)).length, h=$("#selPage");
+  if(h){h.checked=!!shown.length&&on===shown.length;h.indeterminate=on>0&&on<shown.length;h.disabled=!shown.length}
+  $$("#rows tr[data-id]").forEach(tr=>{const s=sel.has(tr.dataset.id);tr.classList.toggle("sel",s);const c=tr.querySelector("[data-sel]");if(c)c.checked=s});
+  paintBulk();
+}
+$("#selPage")?.addEventListener("change",e=>{const on=e.target.checked;cShown.forEach(l=>on?sel.add(l.id):sel.delete(l.id));cLastIdx=-1;syncSel()});
+// "Add to list…" / "Add to dialer…": picking "New…" swaps the dropdown for a name box right in the bar
+let bulkNew="", bulkNewVal="", campLoad=null;
+function canDial(){return !(window.hpUser?.access&&!window.hpUser.access.dialer)}
+function loadCamps(){if(campLoad||!canDial())return;campLoad=ensureDialer().then(d=>d?.campaigns?.ready).then(()=>{if(sel.size&&!bulkBusy)paintBulk()}).catch(()=>{})}
+function campDefaultName(){const d=new Date().toLocaleDateString([],{month:"short",day:"numeric"}),lst=lists.get(activeListId)?.name||$("#fSource")?.value||"";return lst?`${d} · ${lst}`.slice(0,60):d}
+function paintBulk(){
+  const bar=$("#bulkBar"); if(!bar)return;
+  if(!sel.size){bar.hidden=true;bar.innerHTML="";bulkNew="";return}
+  const typing=bar.querySelector(".bulk-new input"); if(typing)bulkNewVal=typing.value; const hadFocus=!!typing&&document.activeElement===typing;
+  const total=cRows.length, pageAll=cShown.length>0&&cShown.every(l=>sel.has(l.id)), allMatch=sel.size>=total, n=sel.size;
+  const more=total>cShown.length&&pageAll?(allMatch?`<span class="bulk-more">All ${total.toLocaleString()} matching leads are selected.</span>`:`<span class="bulk-more">All ${cShown.length} on this page are selected. <button type="button" class="bulk-link" data-bulk="all">Select all ${total.toLocaleString()} matching</button></span>`):"";
+  const cur=lists.get(activeListId), mine=[...lists.values()].filter(isPicked).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
+  const dial=canDial(), C=dial?window.hpDialer?.campaigns:null; if(dial&&!C)loadCamps();
+  const camps=C?.list?.()||[];
+  const newBox=k=>`<span class="bulk-new"><input type="text" maxlength="60" aria-label="${k==="list"?"Name the new list":"Name the new campaign"}" placeholder="${k==="list"?"List name":"Campaign name"}" value="${esc(bulkNewVal)}"><button type="button" class="btn sm primary" data-bulk="newgo">${k==="list"?"Create list":"Create campaign"}</button><button type="button" class="btn sm" data-bulk="newx">Cancel</button></span>`;
+  bar.hidden=false;
+  bar.innerHTML=`<b class="bulk-n num">${n.toLocaleString()} selected</b>${more}<span class="bulk-acts">
+    ${bulkNew==="list"?newBox("list"):`<select data-bulk="list" aria-label="Add the selected leads to one of My lists"><option value="">Add to list…</option>${mine.map(l=>`<option value="${esc(l.id)}">${esc(l.name)} (${listCount(l).toLocaleString()})</option>`).join("")}<option value="__new">＋ New list…</option></select>`}
+    ${!dial?"":bulkNew==="camp"?newBox("camp"):`<select data-bulk="camp" aria-label="Add the selected leads to a dialer campaign"><option value="">Add to dialer…</option>${camps.map(c=>`<option value="${esc(c.id)}">${esc(c.name)} (${c.count.toLocaleString()})${c.paused?" · paused":""}</option>`).join("")}<option value="__new">＋ New campaign…</option></select>`}
+    ${isPicked(cur)?`<button type="button" class="btn sm" data-bulk="unlist">Remove from “${esc(cur.name)}”</button>`:""}
+    <select data-bulk="pipe" aria-label="Change pipeline for the selected leads"><option value="">Change pipeline…</option>${Object.entries(PROD).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select>
+    <select data-bulk="stage" aria-label="Change stage for the selected leads"><option value="">Change stage…</option>${STAGES.map(([i,v])=>`<option value="${i}">${v}</option>`).join("")}</select>
+    <button type="button" class="btn sm" data-bulk="export">Export</button>
+    <button type="button" class="btn sm danger" data-bulk="delete">Delete ${n.toLocaleString()}</button>
+    <button type="button" class="btn sm" data-bulk="clear">Clear</button></span>`;
+  bar.querySelectorAll("button,select,input").forEach(x=>x.disabled=bulkBusy);
+  const B=k=>bar.querySelector(`[data-bulk="${k}"]`);
+  const nb=bar.querySelector(".bulk-new input");
+  if(nb){
+    const go=()=>{const name=nb.value.trim();if(!name){toast(bulkNew==="list"?"Name the new list first":"Name the new campaign first");nb.focus();return}
+      const ids=[...sel];if(bulkNew==="list")bulkToList(ids,{name});else bulkToCamp(ids,{name})};
+    const cancel=()=>{bulkNew="";bulkNewVal="";paintBulk()};
+    nb.oninput=()=>{bulkNewVal=nb.value};
+    nb.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();go()}else if(e.key==="Escape"){e.preventDefault();e.stopPropagation();cancel()}};
+    B("newgo").onclick=go;B("newx").onclick=cancel;
+    if(hadFocus||!typing){nb.focus();if(!typing)nb.select()}
+  }
+  if(B("list"))B("list").onchange=e=>{const v=e.target.value;if(!v)return;if(v==="__new"){bulkNew="list";bulkNewVal="";paintBulk();return}bulkToList([...sel],{listId:v})};
+  if(B("camp"))B("camp").onchange=e=>{const v=e.target.value;if(!v)return;if(v==="__new"){bulkNew="camp";bulkNewVal=campDefaultName();paintBulk();return}bulkToCamp([...sel],{id:v})};
+  if(B("unlist"))B("unlist").onclick=()=>bulkUnlist([...sel]);
+  if(B("all"))B("all").onclick=()=>{cRows.forEach(l=>sel.add(l.id));syncSel()};
+  B("clear").onclick=()=>{sel.clear();cLastIdx=-1;syncSel()};
+  B("export").onclick=()=>{const rows=cRows.filter(l=>sel.has(l.id));offerFile(`leads-${rows.length}-${new Date().toISOString().slice(0,10)}.csv`,toCSV([...EXPORT_COLS,"notes"],rows.map(l=>[...EXPORT_COLS.map(k=>k==="stage"?stageName(l.stage):l[k]??""),(l.notes||[]).map(x=>x.text).join(" | ")])))};
+  B("delete").onclick=()=>bulkDeleteLeads([...sel]);
+  B("pipe").onchange=e=>{const p=e.target.value;if(p)bulkPatch([...sel],{product:p,pipeline:p},`Moved to ${PROD[p]}`)};
+  B("stage").onchange=e=>{const s=e.target.value;if(s)bulkPatch([...sel],{stage:s},`Moved to ${stageName(s)}`,true)};
+}
+async function bulkToList(ids,target){
+  if(!ids.length)return;
+  bulkBusy=true;paintBulk();toast(`Adding ${ids.length.toLocaleString()} lead${ids.length===1?"":"s"}…`);
+  try{
+    const r={added:0,already:0,overCap:0};let listId=target.listId||"",name=target.name||lists.get(listId)?.name||"List";
+    if(col){
+      for(let i=0;i<ids.length;i+=5000){const j=await deskApi("/api/docs/lists/members",{...(listId?{listId}:{name}),add:ids.slice(i,i+5000)});listId=j.id;name=j.name;r.added+=j.added;r.already+=j.already;r.overCap+=j.overCap}
+      await lcol?.refresh();
+    }else{
+      const cur=lists.get(listId)||{name,kind:"picked",ids:[],createdAt:Date.now()},t=hpLists.tally(ids,{have:cur.ids,cap:10000});
+      listId=await putDoc("lists",{...cur,id:listId||undefined,ids:[...cur.ids,...t.add],updatedAt:Date.now()});Object.assign(r,t);
+    }
+    toast(hpLists.summary(r,name,{cap:10000,what:"list"})+(target.name&&activeListId!==listId?" · open it from the List menu":""),5000);
+  }catch(e){toast("Couldn't add to the list: "+(e.message||e))}
+  finally{bulkBusy=false;bulkNew="";bulkNewVal="";fillListSelects();if(view==="contacts")renderContacts()}
+}
+async function bulkUnlist(ids){
+  const list=lists.get(activeListId);if(!isPicked(list)||!ids.length)return;
+  bulkBusy=true;paintBulk();
+  try{
+    let removed=0;
+    if(col){for(let i=0;i<ids.length;i+=5000)removed+=(await deskApi("/api/docs/lists/members",{listId:list.id,remove:ids.slice(i,i+5000)})).removed||0;await lcol?.refresh()}
+    else{const drop=new Set(ids),kept=list.ids.filter(x=>!drop.has(x));removed=list.ids.length-kept.length;await putDoc("lists",{...list,ids:kept,updatedAt:Date.now()})}
+    ids.forEach(id=>sel.delete(id));
+    toast(`Removed ${removed.toLocaleString()} from “${list.name}”. They're still in Clients.`,4000);
+  }catch(e){toast("Couldn't remove them: "+(e.message||e))}
+  finally{bulkBusy=false;renderAll()}
+}
+async function bulkToCamp(ids,target){
+  if(!ids.length)return;
+  bulkBusy=true;paintBulk();
+  try{
+    const d=await ensureDialer();if(!d?.campaigns)throw new Error("The dialer couldn't load.");
+    const r=await d.campaigns.add(ids,target);
+    toast(hpLists.summary(r,r.name,{cap:r.cap,what:"campaign"})+(r.active?" · it's your calling list now":""),5000);
+  }catch(e){toast("Couldn't add to the dialer: "+(e.message||e))}
+  finally{bulkBusy=false;bulkNew="";bulkNewVal="";paintBulk()}
+}
+async function bulkPatch(ids,patch,label,note){
+  const todo=ids.map(id=>leads.get(id)).filter(Boolean); if(!todo.length)return;
+  bulkBusy=true; paintBulk(); toast(`Updating ${todo.length.toLocaleString()} lead${todo.length===1?"":"s"}…`);
+  try{
+    const now=Date.now(), items=todo.map(l=>{const d={...l,...patch,updatedAt:now};if(note)d.notes=addNoteObj(l,label);delete d.id;return{id:l.id,data:d}});
+    if(col){for(let i=0;i<items.length;i+=500)await deskApi("/api/docs/_batch",{col:"leads",items:items.slice(i,i+500)});await col.refresh()}
+    else items.forEach(it=>leads.set(it.id,{...it.data,id:it.id}));
+    toast(`${label}: ${todo.length.toLocaleString()} lead${todo.length===1?"":"s"}`);
+  }catch(e){toast("Couldn't update: "+(e.message||e));col?.refresh()}
+  finally{bulkBusy=false;window.dispatchEvent(new Event("hp:leadchange"));renderAll()}
+}
+async function bulkDeleteLeads(ids,o={}){
+  const n=o.batchId?o.count:ids.length; if(!n&&!o.batchId)return false;
+  const onCall=window.hpDialer?.liveLead;
+  if(onCall&&(o.batchId?leads.get(onCall)?.batchId===o.batchId:ids.includes(onCall))){toast(`Finish the call with ${fullName(leads.get(onCall)||{})} first`);return false}
+  const what=o.batchId?(n?`Delete the import “${o.name}” and all ${n.toLocaleString()} lead${n===1?"":"s"} in it?`:`Delete the import “${o.name}”? It has no leads left, so only the import and its smart list go.`):`Delete ${n.toLocaleString()} lead${n===1?"":"s"}?`;
+  if(!confirm(n?`${what} They'll be removed from Clients, lists, and the dialer. This can't be undone.`:what))return false;
+  bulkBusy=true; paintBulk(); toast(`Deleting ${n.toLocaleString()} lead${n===1?"":"s"}…`);
+  let gone=0;
+  try{
+    if(col){
+      if(o.batchId)gone=(await deskApi("/api/docs/leads/bulk-delete",{batchId:o.batchId})).deleted||0;
+      else for(let i=0;i<ids.length;i+=5000)gone+=(await deskApi("/api/docs/leads/bulk-delete",{ids:ids.slice(i,i+5000)})).deleted||0;
+      await Promise.all([col.refresh(),ccol?.refresh(),o.batchId&&icol?.refresh(),lcol?.refresh()]);
+    }else{
+      const drop=new Set(o.batchId?[...leads.values()].filter(l=>l.batchId===o.batchId).map(l=>l.id):ids);
+      drop.forEach(id=>leads.delete(id)); gone=drop.size;
+      for(const c of [...calls.values()])if(drop.has(c.leadId))calls.delete(c.id);
+      if(o.batchId){imports.delete(o.batchId);for(const l of [...lists.values()])if(l.filter?.batchId===o.batchId)lists.delete(l.id)}
+      for(const l of lists.values())if(isPicked(l))l.ids=l.ids.filter(id=>!drop.has(id));
+    }
+    ids.forEach(id=>sel.delete(id));
+    if(dCurId&&!leads.has(dCurId))dCurId=null;
+    if(drawerId&&!leads.has(drawerId))closeDrawer();
+    if(activeListId&&!lists.has(activeListId))setActiveList("");
+    toast(`Deleted ${gone.toLocaleString()} lead${gone===1?"":"s"}${o.batchId?` and the “${o.name}” import`:""}`);
+    return true;
+  }catch(e){toast("Couldn't delete: "+(e.message||e));col?.refresh();return false}
+  finally{bulkBusy=false;window.dispatchEvent(new Event("hp:leadchange"));renderAll()}
 }
 ["#q","#fStage","#fProduct","#fSource"].forEach(s=>$(s).addEventListener("input",renderContacts));
+$("#fList")?.addEventListener("change",()=>setActiveList($("#fList").value));
 
 /* ---------- CSV ---------- */
 function parseCSV(text){
@@ -208,36 +497,100 @@ async function offerFile(filename,data){
   if(!dl){ toast("Downloads aren't available in this view."); return }
   try{ await dl.save({filename,data}); }catch(e){ if(e?.code!=="cancelled"&&e?.code!=="declined") toast("File not saved: "+(e?.message||e?.code||"")) }
 }
-const EXPORT_COLS=["first","last","phone","email","state","zip","age","dob","product","stage","source","mortgageBalance","mortgagePayment","lender"];
+const EXPORT_COLS=["first","last","phone","email","state","zip","age","dob","product","pipeline","stage","source","mortgageBalance","mortgagePayment","lender"];
 $("#exportAll").onclick=()=>{const rows=contactRows();if(!rows.length){toast("No leads to export");return}
   offerFile(`leads-${new Date().toISOString().slice(0,10)}.csv`,toCSV([...EXPORT_COLS,"notes"],rows.map(l=>[...EXPORT_COLS.map(k=>k==="stage"?stageName(l.stage):l[k]??""),(l.notes||[]).map(n=>n.text).join(" | ")])))};
 
 /* ---------- import ---------- */
 const FIELDS=[["","Skip this column"],["first","First name"],["last","Last name"],["full","Full name (split)"],["phone","Phone"],["phone2","Alt phone"],["email","Email"],["address","Street address"],["city","City"],["state","State"],["zip","ZIP"],["age","Age"],["dob","Date of birth"],["mortgageBalance","Mortgage balance"],["mortgagePayment","Mortgage payment"],["lender","Lender"],["product","Product"],["notes","Notes"]];
-const SYN={first:/^(first|fname|first ?name|given)/,last:/^(last|lname|last ?name|surname)/,full:/^(name|full ?name|contact ?name|lead ?name)$/,phone:/(^phone|cell|mobile|primary ?phone|phone ?1|telephone|^tel)/,phone2:/(alt|secondary|home ?phone|phone ?2|other ?phone)/,email:/e-?mail/,address:/(address|street)/,city:/^city/,state:/^(state|st)$/,zip:/(zip|postal)/,age:/^age$/,dob:/(dob|birth)/,mortgageBalance:/(mortgage ?(amount|balance)|loan ?(amount|balance)|balance)/,mortgagePayment:/(payment|monthly)/,lender:/(lender|bank)/,product:/(product|lead ?type|campaign)/,notes:/(note|comment)/};
+const SYN={first:/^(first|fname|first ?name|given)/,last:/^(last|lname|last ?name|surname)/,full:/^(name|full ?name|contact ?name|lead ?name)$/,phone:/(^phone|cell|mobile|primary ?phone|phone ?1|telephone|^tel)/,phone2:/(\balt\b|^alt ?phone|alternate|secondary|home ?phone|phone ?2|other ?phone)/,email:/e-?mail/,address:/(address|street)/,city:/^city/,state:/^(state|st)$/,zip:/(zip|postal)/,age:/^age$/,dob:/(dob|birth)/,mortgageBalance:/(mortgage ?(amount|balance)|loan ?(amount|balance)|balance)/,mortgagePayment:/(payment|^monthly$)/,lender:/(lender|bank)/,product:/(product|lead ?type|campaign)/,notes:/(note|comment)/};
+const PIPE_HINT={IUL:{header:/\b(iul|indexed|index(?:ed)?\s*universal|cash\s*value|accumulation|illustration|cap\b|floor\b)\b/i,value:/\b(iul|indexed\s*universal|index\s*universal|cash\s*value|iul\s*lead)\b/i},MP:{header:/\b(mortgage|mp\b|piti|lender|loan\s*(?:amount|balance|term)|home\s*(?:value|owner)|house\s*payment|ltv|property)\b/i,value:/\b(mortgage\s*protect|mp\s*lead|\bpiti\b|home\s*protect)\b/i},FE:{header:/\b(final\s*expense|fex?\b|burial|funeral|whole\s*life|face\s*amount|graded|guaranteed\s*issue)\b/i,value:/\b(final\s*expense|fex?\b|burial|funeral|whole\s*life)\b/i}};
 let imp=null;
 function guessField(h){h=h.trim().toLowerCase();for(const k of ["phone2","first","last","email","dob","mortgageBalance","mortgagePayment","lender","zip","city","state","age","full","phone","address","product","notes"])if(SYN[k].test(h))return k;return ""}
+function prodFrom(s){s=String(s||"").toLowerCase();if(/\b(fe|fex)\b|final\s*expense|burial|funeral|whole\s*life|senior\s*life/.test(s))return"FE";if(/\b(mp)\b|mortgage|piti|home\s*protect|house\s*payment/.test(s))return"MP";if(/\biul\b|index(?:ed)?|universal\s*life|cash\s*value/.test(s))return"IUL";return""}
+function detectPipeline(head,body,filename,map){
+  const scores={FE:0,MP:0,IUL:0}, reasons={FE:[],MP:[],IUL:[]};
+  const bump=(k,n,why)=>{scores[k]+=n;if(why&&reasons[k].length<4&&!reasons[k].includes(why))reasons[k].push(why)};
+  const fp=prodFrom(filename||""); if(fp)bump(fp,4,filename);
+  (head||[]).forEach((h,i)=>{const text=String(h||"").trim(), mapped=map?.[i];
+    if(mapped==="mortgageBalance"||mapped==="lender")bump("MP",3,text||mapped);
+    for(const [k,hint] of Object.entries(PIPE_HINT)) if(text&&hint.header.test(text)) bump(k,3,text);
+    const p=prodFrom(text); if(p)bump(p,2,text)});
+  for(const row of (body||[]).slice(0,40)) for(const cell of row||[]){const v=String(cell||"").trim();if(!v)continue;const p=prodFrom(v);if(p)bump(p,1);for(const [k,hint] of Object.entries(PIPE_HINT)) if(hint.value.test(v)) bump(k,1)}
+  const ranked=Object.entries(scores).sort((a,b)=>b[1]-a[1]); const [best,bestScore]=ranked[0], second=ranked[1][1];
+  if(!bestScore) return {pipeline:"",confidence:0,reasons:[],guess:""};
+  if(bestScore<2||bestScore===second) return {pipeline:"",confidence:.3,reasons:reasons[best],guess:best};
+  return {pipeline:best,confidence:bestScore>=6?.9:.65,reasons:reasons[best],guess:best};
+}
+function uniqueImportName(name){
+  const base=String(name||"").trim().replace(/\s+/g," ").slice(0,80); if(!base)return"";
+  const have=new Set([...imports.values()].map(x=>String(x.name||"").toLowerCase()));
+  if(!have.has(base.toLowerCase()))return base;
+  for(let n=2;n<200;n++){const c=`${base} (${n})`;if(!have.has(c.toLowerCase()))return c}
+  return base+" "+Date.now().toString(36);
+}
 function loadImport(text,name){
   const rows=parseCSV(text); if(rows.length<2){toast("That file needs a header row and at least one lead.");return}
   const head=rows[0].map(h=>h.trim()); const body=rows.slice(1);
+  if(!head.some(h=>h)||!body.length){toast("That CSV doesn't look usable. It needs a header row and at least one lead.");return}
   const used=new Set(); const map=head.map(h=>{const g=guessField(h);if(g&&!used.has(g)){used.add(g);return g}return ""});
-  imp={head,body,map,name}; $("#impSource").value=$("#impSource").value||(name?name.replace(/\.[^.]+$/,""):"Pasted list");
+  const detect=detectPipeline(head,body,name,map);
+  imp={head,body,map,name,detect};
+  const el=$("#impName"); if(el&&!el.value.trim()) el.value=name?name.replace(/\.[^.]+$/,""):"Pasted list";
+  $("#impPipeline").value=detect.pipeline||"";
   $("#impStep2").hidden=false; $("#impProgress").hidden=true; renderImport();
 }
+function paintDetect(){
+  const box=$("#impDetect"); if(!box)return;
+  const d=imp?.detect||{pipeline:"",confidence:0,reasons:[],guess:""};
+  const pick=$("#impPipeline")?.value||"";
+  if(d.pipeline&&pick===d.pipeline){
+    box.hidden=false; box.className="imp-detect";
+    box.innerHTML=`Detected <b>${esc(PROD[d.pipeline])}</b>${d.reasons.length?` from ${d.reasons.map(esc).join(", ")}`:""}. Confirm or change the pipeline below.`;
+  }else if(!d.pipeline){
+    box.hidden=false; box.className="imp-detect unsure";
+    box.innerHTML=d.guess?`Couldn't be sure — it might be ${esc(PROD[d.guess])}. Pick IUL, Mortgage Protection, or Final Expense.`:`Couldn't tell the product line from this file. Pick IUL, Mortgage Protection, or Final Expense.`;
+  }else {box.hidden=false; box.className="imp-detect"; box.innerHTML=`Using <b>${esc(PROD[pick])}</b> (you overrode the file).`}
+}
+function paintNameHint(){
+  const raw=($("#impName")?.value||"").trim(), hint=$("#impNameHint"); if(!hint)return;
+  if(!raw){hint.textContent="Name this import to create the smart list.";return}
+  const uniq=uniqueImportName(raw); hint.textContent=uniq!==raw?`Will be saved as “${uniq}” — that name is already used.`:"A smart list with this name opens this batch later.";
+}
+function renderBatches(){
+  const host=$("#impBatches"); if(!host)return;
+  const q=($("#impSearch")?.value||"").trim().toLowerCase();
+  const rows=[...imports.values()].filter(b=>!q||String(b.name||"").toLowerCase().includes(q)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  if(!imports.size){host.innerHTML=`<div class="imp-empty">No named imports yet. Upload a CSV, name it, and a smart list is created for that batch.</div>`;return}
+  if(!rows.length){host.innerHTML=`<div class="imp-empty">No imports match “${esc($("#impSearch").value)}”.</div>`;return}
+  const inBatch=new Map(); if(live||!col)for(const l of leads.values())if(l.batchId)inBatch.set(l.batchId,(inBatch.get(l.batchId)||0)+1);
+  const countOf=b=>live||!col?inBatch.get(b.id)||0:b.imported??b.rows??0;
+  host.innerHTML=rows.map(b=>{
+    const n=countOf(b);
+    return `<div class="imp-row"><button type="button" class="imp-batch" data-open-import="${esc(b.id)}"><span class="imp-who"><b>${esc(b.name)}</b><small>${esc(b.filename||"Import")} · ${new Date(b.createdAt||0).toLocaleDateString(undefined,{month:"short",day:"numeric"})}${b.createdBy?` · ${esc(b.createdBy)}`:""}</small></span><span class="imp-meta">${prodPill(b.pipeline)}<span class="muted num">${n} lead${n===1?"":"s"}</span></span></button><button type="button" class="btn sm danger imp-del" data-del-import="${esc(b.id)}" aria-label="Delete the ${esc(b.name)} import and its leads">Delete</button></div>`;
+  }).join("");
+  host.querySelectorAll("[data-open-import]").forEach(b=>b.onclick=()=>{
+    const rec=imports.get(b.dataset.openImport); const listId=rec?.listId||[...lists.values()].find(l=>l.filter?.batchId===rec?.id)?.id;
+    if(listId) setActiveList(listId); go("contacts");
+  });
+  host.querySelectorAll("[data-del-import]").forEach(b=>b.onclick=()=>{const rec=imports.get(b.dataset.delImport);if(rec)bulkDeleteLeads([],{batchId:rec.id,name:rec.name||"Import",count:countOf(rec)})});
+}
 function renderImport(){
+  renderBatches();
   if(!imp)return;
   $("#impMeta").textContent=`${imp.body.length} rows · ${imp.head.length} columns${imp.name?` · ${imp.name}`:""}`;
   $("#mapgrid").innerHTML=imp.head.map((h,i)=>`<label class="field"><span>${esc(h||"Column "+(i+1))}</span><select data-ci="${i}">${FIELDS.map(([k,n])=>`<option value="${k}" ${imp.map[i]===k?"selected":""}>${n}</option>`).join("")}</select><small>e.g. ${esc(imp.body.find(r=>r[i])?.[i]||"—")}</small></label>`).join("");
-  $$("#mapgrid select").forEach(s=>s.onchange=()=>{imp.map[+s.dataset.ci]=s.value;renderImport()});
+  $$("#mapgrid select").forEach(s=>s.onchange=()=>{imp.map[+s.dataset.ci]=s.value;imp.detect=detectPipeline(imp.head,imp.body,imp.name,imp.map);renderImport()});
+  paintDetect(); paintNameHint();
   const recs=buildRecords().slice(0,5);
   $("#pvHead").innerHTML="<tr><th>Name</th><th>Phone</th><th>Email</th><th>State</th><th>Age</th><th>Product</th></tr>";
-  $("#pvBody").innerHTML=recs.map(r=>`<tr><td>${esc(fullName(r))}</td><td class="num">${esc(fmtPhone(r.phone))}</td><td>${esc(r.email||"")}</td><td>${esc(r.state||"")}</td><td>${esc(r.age||"")}</td><td>${prodPill(r.product)}</td></tr>`).join("");
+  $("#pvBody").innerHTML=recs.map(r=>`<tr><td>${esc(fullName(r))}</td><td class="num">${esc(fmtPhone(r.phone))}</td><td>${esc(r.email||"")}</td><td>${esc(r.state||"")}</td><td>${esc(r.age||"")}</td><td>${prodPill(r.product||$("#impPipeline")?.value)}</td></tr>`).join("");
   const all=buildRecords(); const {fresh,dupes,nophone}=splitDupes(all);
-  $("#impSummary").textContent=`${fresh.length} will be imported${dupes?` · ${dupes} duplicates skipped`:""}${nophone?` · ${nophone} without a phone`:""}`;
-  $("#impGo").disabled=!fresh.length;
+  const named=!!($("#impName")?.value||"").trim();
+  $("#impSummary").textContent=`${fresh.length} will be imported${dupes?` · ${dupes} duplicates skipped`:""}${nophone?` · ${nophone} without a phone`:""}${named?"":" · name the import to continue"}`;
+  $("#impGo").disabled=!fresh.length||!named;
 }
 function ageFromDob(s){const d=new Date(s);if(isNaN(d))return"";const n=new Date();let a=n.getFullYear()-d.getFullYear();if(n<new Date(n.getFullYear(),d.getMonth(),d.getDate()))a--;return a>0&&a<120?a:""}
-function prodFrom(s){s=String(s||"").toLowerCase();if(/fe|final|burial|funeral/.test(s))return"FE";if(/mort|mp\b/.test(s))return"MP";if(/iul|index|universal/.test(s))return"IUL";return""}
 function buildRecords(){
   if(!imp)return[];
   return imp.body.map(r=>{const o={};imp.map.forEach((k,i)=>{const v=(r[i]||"").trim();if(!v)return;if(!k){const h=imp.head[i]||("Column "+(i+1));(o.fields=o.fields||{})[h]=v;return}
@@ -264,50 +617,86 @@ const drop=$("#drop");
 drop.ondragover=e=>{e.preventDefault();drop.classList.add("over")};drop.ondragleave=()=>drop.classList.remove("over");
 drop.ondrop=e=>{e.preventDefault();drop.classList.remove("over");const f=e.dataTransfer.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>loadImport(String(rd.result),f.name);rd.readAsText(f)};
 document.addEventListener("paste",e=>{if(view!=="import")return;if(e.target.closest("input,textarea"))return;const t=e.clipboardData?.getData("text");if(t&&t.includes("\n")){e.preventDefault();loadImport(t,"")}});
-$("#impCancel").onclick=()=>{imp=null;$("#impStep2").hidden=true};
+$("#impCancel").onclick=()=>{imp=null;$("#impStep2").hidden=true;renderBatches()};
+$("#impName")?.addEventListener("input",()=>{paintNameHint();if(imp)renderImport()});
+$("#impPipeline")?.addEventListener("change",paintDetect);
+$("#impSearch")?.addEventListener("input",renderBatches);
 $("#impGo").onclick=async()=>{
-  const {fresh}=splitDupes(buildRecords()); if(!fresh.length)return;
-  const src=$("#impSource").value.trim()||"Import", stg=$("#impStage").value, dp=$("#impProduct").value;
+  const {fresh,dupes}=splitDupes(buildRecords()); if(!fresh.length)return;
+  const raw=($("#impName")?.value||"").trim(); if(!raw){toast("Name this import before you bring the leads in.");$("#impName")?.focus();return}
+  const name=uniqueImportName(raw), stg=$("#impStage").value, pipeline=$("#impPipeline")?.value||"";
+  const batchId=uid(), listId=uid(), now=Date.now(), user=window.hpUser||{};
   $("#impGo").disabled=true; $("#impProgress").hidden=false; let done=0,fail=0; const total=fresh.length;
   const upd=()=>{$("#impBar").style.width=(done/total*100)+"%";$("#impProgText").textContent=`Imported ${done} of ${total}${fail?` · ${fail} failed`:""}`};
-  const queue=fresh.map(r=>({...r,product:r.product||dp,stage:stg,source:src,notes:r.notes?[{t:Date.now(),text:String(r.notes)}]:[],callCount:0}));
+  await putDoc("imports",{id:batchId,name,pipeline,filename:imp?.name||"",createdAt:now,createdBy:user.name||user.email||"",userId:user.id||"",rows:imp?.body?.length||fresh.length,imported:0,skipped:dupes,listId});
+  await putDoc("lists",{id:listId,name,kind:"smart",filter:{batchId},importId:batchId,pipeline,createdAt:now});
+  const queue=fresh.map(r=>{const p=r.product||pipeline;return{...r,product:p,pipeline:p,batchId,stage:stg,source:name,notes:r.notes?[{t:Date.now(),text:String(r.notes)}]:[],callCount:0}});
   let i=0; async function worker(){while(i<queue.length){const r=queue[i++];try{await putLead(r)}catch(e){fail++;if(e?.code==="quota_exceeded"){i=queue.length;toast("Your lead storage is full. Delete old leads to import more.")}}done++;upd()}}
   await Promise.all(Array.from({length:6},worker));
-  window.dispatchEvent(new CustomEvent("hp:imported",{detail:{phones:queue.map(r=>r.phone).filter(Boolean)}})); // the dialer scrubs new numbers against the DNC lists
-  toast(`Imported ${done-fail} leads into ${stageName(stg)}`);if(done-fail>0)setTimeout(()=>awardXP(Math.min(50,5+Math.ceil((done-fail)/20)),"leads imported"),600); imp=null; $("#impStep2").hidden=true; go("pipeline");
+  await putDoc("imports",{id:batchId,name,pipeline,filename:imp?.name||"",createdAt:now,createdBy:user.name||user.email||"",userId:user.id||"",rows:imp?.body?.length||fresh.length,imported:done-fail,skipped:dupes,listId});
+  window.dispatchEvent(new CustomEvent("hp:imported",{detail:{phones:queue.map(r=>r.phone).filter(Boolean)}}));
+  toast(`Imported ${done-fail} leads into “${name}” · smart list ready`);if(done-fail>0)setTimeout(()=>awardXP(Math.min(50,5+Math.ceil((done-fail)/20)),"leads imported"),600);
+  imp=null; $("#impStep2").hidden=true; setActiveList(listId); go("contacts");
 };
 
 /* ---------- drawer ---------- */
-let drawerId=null;
+let drawerId=null, drawerMore=false;
+const noteLogHtml=l=>(l.notes||[]).slice().reverse().map(n=>`<div><time>${new Date(n.t).toLocaleString()}</time>${esc(n.text)}</div>`).join("")||`<span class="muted">No notes yet.</span>`;
+function leadCallsHtml(id){
+  const mine=[...calls.values()].filter(c=>c.leadId===id).sort((a,b)=>(b.at||0)-(a.at||0));
+  return mine.length?`<div class="hcp-calls">${mine.slice(0,50).map(c=>`<div><time>${new Date(c.at).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</time><b>${esc(c.outcome||"Call")}</b>${c.dur?`<span class="muted num">${fmtDur(c.dur)}</span>`:""}<span class="sp"></span>${callHasRec(c)?`<button type="button" class="btn sm" data-drec="${esc(c.id)}">Play</button>`:""}${c.note?`<span class="muted" style="flex-basis:100%;font-size:12px">${esc(c.note)}</span>`:""}</div>`).join("")}</div>`:`<span class="muted">No calls yet.</span>`;
+}
 function openDrawer(id){
   drawerId=id; const l=id?leads.get(id):{stage:"new",product:""}; if(id&&!l)return;
+  if(id)window.dispatchEvent(new CustomEvent("hp:leadopen",{detail:{id}}));
+  const P=id?window.hpProfile:null;
   const f=(k,lab,type="text",extra="")=>`<label class="field"><span>${lab}</span><input id="d_${k}" type="${type}" value="${esc(l[k]??"")}" ${extra}></label>`;
   $("#drawer").innerHTML=`
-   <div class="dh"><div><h2>${id?esc(fullName(l)):"New lead"}</h2>${id?`<div class="muted" style="font-size:12px;margin-top:3px">${esc(l.source||"Added by hand")} · created ${ago(l.createdAt)}</div>`:""}</div><button class="btn" id="dClose" aria-label="Close">✕</button></div>
+   <div class="dh"><div><h2>${id?esc(fullName(l)):"New lead"}</h2>${id&&!P?`<div class="muted" style="font-size:12px;margin-top:3px">${esc(l.source||"Added by hand")} · created ${ago(l.createdAt)}</div>`:""}</div><button class="btn" id="dClose" aria-label="Close">✕</button></div>
    <div class="db">
+     ${P?`<div id="dCard"></div>
+     <details class="hcp-moredet" id="dMore" ${drawerMore?"open":""}><summary><span>More details <small>· stage, every field, calls, notes, quotes</small></span></summary><div class="hcp-mbody">
+     <div class="muted" style="font-size:12px">${esc(l.source||"Added by hand")}${l.batchId&&imports.get(l.batchId)?` · import “${esc(imports.get(l.batchId).name)}”`:""} · created ${ago(l.createdAt)}</div>`:""}
      <div class="grid2">
        <label class="field"><span>Stage</span><select id="d_stage">${STAGES.map(([i,n])=>`<option value="${i}" ${(l.stage||"new")===i?"selected":""}>${n}</option>`).join("")}</select></label>
        <label class="field"><span>Product</span><select id="d_product"><option value="">Not set</option>${Object.entries(PROD).map(([k,n])=>`<option value="${k}" ${l.product===k?"selected":""}>${n}</option>`).join("")}</select></label>
      </div>
      <div class="grid2">${f("first","First name")}${f("last","Last name")}</div>
      <div class="grid2">${f("phone","Phone","tel")}${f("email","Email","email")}</div>
-     <div class="grid3">${f("state","State")}${f("zip","ZIP")}${f("age","Age","number")}</div>
-     <div class="grid2">${f("dob","Date of birth")}${f("source","Source")}</div>
+     <div class="grid2">${f("phone2","Alt phone","tel")}${f("dob","Date of birth","text",'placeholder="MM/DD/YYYY"')}</div>
+     ${f("address","Street address")}
+     <div class="grid3">${f("city","City")}${f("state","State")}${f("zip","ZIP")}</div>
+     <div class="grid2">${f("age","Age","number")}${f("source","Source")}</div>
      <div class="grid3">${f("mortgageBalance","Mortgage bal.","number")}${f("mortgagePayment","Payment","number")}${f("lender","Lender")}</div>
      ${id&&(Object.keys(l.fields||{}).length||l.consent)?`<div class="stack"><span class="label">From the lead form</span><div class="lfform">${Object.entries(l.fields||{}).slice(0,40).map(([k,v])=>`<div><span>${esc(k.replace(/[_.]+/g," "))}</span><b>${esc(v)}</b></div>`).join("")}${l.consent?.trustedForm?`<div><span>TrustedForm</span><b>${/^https:\/\//.test(l.consent.trustedForm)?`<a href="${esc(l.consent.trustedForm)}" target="_blank" rel="noopener">View certificate</a>`:esc(l.consent.trustedForm)}</b></div>`:""}${l.consent?.jornaya?`<div><span>Jornaya LeadiD</span><b>${esc(l.consent.jornaya)}</b></div>`:""}${l.consent?.ip?`<div><span>IP address</span><b>${esc(l.consent.ip)}</b></div>`:""}${l.consent?.consentAt?`<div><span>Opted in</span><b>${esc(l.consent.consentAt)}</b></div>`:""}${l.consent?.consentText?`<div class="wide"><span>Consent language</span><b>${esc(l.consent.consentText)}</b></div>`:""}</div></div>`:""}
-     ${id?`<div class="stack"><span class="label">Notes & activity</span>
+     ${id?`<div class="stack"><span class="label">Call history</span>${leadCallsHtml(id)}</div>
+     <div class="stack"><span class="label">Notes & activity</span>
        <div class="row" style="flex-wrap:nowrap"><input id="d_note" placeholder="Add a note"><button class="btn" id="dAddNote">Add</button></div>
-       <div class="log">${(l.notes||[]).slice().reverse().map(n=>`<div><time>${new Date(n.t).toLocaleString()}</time>${esc(n.text)}</div>`).join("")||`<span class="muted">No notes yet.</span>`}</div></div>
+       <div class="log" id="dLog">${noteLogHtml(l)}</div></div>
      ${(l.quotes||[]).length?`<div class="stack"><span class="label">Quotes</span><div class="log">${l.quotes.slice().reverse().map(q=>`<div class="qrow"><time>${new Date(q.t).toLocaleDateString()} · ${esc(PROD[q.product]||q.product)}</time><b class="num">${money(q.monthly,2)}/mo</b> · ${esc(q.summary)}<span class="qshare"><button class="btn sm" type="button" data-qshare="${esc(q.t)}">Share</button></span></div>`).join("")}</div><p class="hint" style="margin:6px 0 0;font-size:12.5px;color:var(--muted)">Share copies a private link. Texting it is optional and uses 1 SMS only if you send it.</p></div>`:""}
      ${id?appSheetHtml(l):""}`:""}
+     ${P?`</div></details>`:""}
    </div>
    <div class="df">${id?`<button class="btn danger" id="dDel">Delete lead</button>`:"<span></span>"}<div class="row"><button class="btn" id="dCancel">Cancel</button><button class="btn primary" id="dSave">${id?"Save changes":"Add lead"}</button></div></div>`;
   if(id)showDock(id);
-  $("#drawer").hidden=false; $("#scrim").hidden=false; $("#d_first").focus();
+  $("#drawer").hidden=false; $("#scrim").hidden=false; if(!P)$("#d_first").focus();
   $("#dClose").onclick=$("#dCancel").onclick=closeDrawer;
+  if(P){
+    const more=$("#dMore"); more.ontoggle=()=>{drawerMore=more.open};
+    const sync=patch=>{for(const k of ["dob","age","state","zip","address","city","mortgageBalance","mortgagePayment","lender"])if(k in patch&&$("#d_"+k))$("#d_"+k).value=patch[k]??"";if(patch.notes&&$("#dLog"))$("#dLog").innerHTML=noteLogHtml({notes:patch.notes})};
+    P.mount($("#dCard"),id,{noteBox:true,onSaved:sync,onAction:(a,x)=>{
+      if(a==="call"||a==="call2"){closeDrawer();startLeadCall(a==="call2"?{...x,phone:x.phone2}:x)}
+      else if(a==="text")textLead(id);
+      else if(a==="quote")quoteLead(id);
+      else if(a==="script")scriptLead(id);
+    }});
+    $$("[data-drec]").forEach(b=>b.onclick=()=>playDeskRec(calls.get(b.dataset.drec),b));
+  }
   $("#dSave").onclick=async()=>{
     const v=k=>$("#d_"+k).value.trim(); const cur=id?leads.get(id):{};
-    const rec={...cur,first:v("first"),last:v("last"),phone:normPhone(v("phone")),email:v("email"),state:v("state").toUpperCase(),zip:v("zip"),age:v("age")?Number(v("age")):"",dob:v("dob"),source:v("source"),mortgageBalance:v("mortgageBalance")?Number(v("mortgageBalance")):"",mortgagePayment:v("mortgagePayment")?Number(v("mortgagePayment")):"",lender:v("lender"),stage:$("#d_stage").value,product:$("#d_product").value};
+    const bd=window.hpProfile?.dobText(v("dob"))||"", age=bd?window.hpProfile.dobAge(bd):null;
+    const rec={...cur,first:v("first"),last:v("last"),phone:normPhone(v("phone")),phone2:normPhone(v("phone2")),email:v("email"),address:v("address"),city:v("city"),state:v("state").toUpperCase(),zip:v("zip"),age:age??(v("age")?Number(v("age")):""),dob:bd||v("dob"),source:v("source"),mortgageBalance:v("mortgageBalance")?Number(v("mortgageBalance")):"",mortgagePayment:v("mortgagePayment")?Number(v("mortgagePayment")):"",lender:v("lender"),stage:$("#d_stage").value,product:$("#d_product").value};
+    if(rec.product)rec.pipeline=rec.product;
     if(!rec.first&&!rec.last&&!rec.phone){toast("Add at least a name or phone number.");return}
     if(id&&cur.stage!==rec.stage)rec.notes=addNoteObj(cur,`Moved to ${stageName(rec.stage)}`);
     if(!id){rec.notes=[];rec.callCount=0;if(!rec.source)rec.source="Added by hand"}
@@ -316,7 +705,7 @@ function openDrawer(id){
   if(id){
     $("#dAddNote").onclick=async()=>{const t=$("#d_note").value.trim();if(!t)return;try{await patchLead(id,{notes:addNoteObj(leads.get(id),t)});openDrawer(id)}catch(e){toast("Couldn't add note")}};
     $("#d_note").onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();$("#dAddNote").click()}};
-    $("#dDel").onclick=()=>{const b=$("#dDel");if(b.dataset.armed){removeLead(id).then(()=>{toast("Lead deleted");closeDrawer()})}else{b.dataset.armed="1";b.textContent="Click again to delete"}};
+    $("#dDel").onclick=()=>askDeleteLead(id);
     $$("[data-qshare]").forEach(b=>b.onclick=()=>offerShare(id,+b.dataset.qshare));
     if($("#aSave"))$("#aSave").onclick=async()=>{
       const cur=leads.get(id); if(!cur)return;
@@ -330,6 +719,11 @@ function openDrawer(id){
   }
 }
 function closeDrawer(){$("#drawer").hidden=true;$("#scrim").hidden=true;drawerId=null}
+// the client card's Quote / Script / Text: the quoter filled from the lead (birthday included), the pipeline's script, the dialer's text box
+function quoteLead(id){if(!leads.get(id))return;if(drawerId)closeDrawer();ensureQuote().then(()=>{go("quoter");const sel=$("#qLead");if(!sel)return;leadOptions(sel);sel.value=id;sel.dispatchEvent(new Event("change"));
+  const l=leads.get(id),sx=String(l?.sex||l?.gender||l?.fields?.Gender||l?.fields?.Sex||"");if(/^[fm]/i.test(sx)){Q.sex=/^f/i.test(sx)?"F":"M";saveQ();renderQuoter()}}).catch(e=>toast(e.message))} // the quoter page can't draw until its rate tables are in
+function scriptLead(id){if(!leads.get(id))return;if(drawerId)closeDrawer();dCurId=id;go("scripts")}
+async function textLead(id){if(drawerId)closeDrawer();try{const d=await ensureDialer();d.openProfile(id);setTimeout(()=>document.querySelector('#hpdProfile [data-pfc="sms"]')?.click(),60)}catch(e){toast(e.message||"The dialer couldn't load.")}}
 $("#scrim").onclick=()=>{if($("#hpShare")&&!$("#hpShare").hidden){hideShare();return}closeDrawer()};
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("#hpShare")&&!$("#hpShare").hidden){hideShare();return}if(!$("#drawer").hidden)closeDrawer()});
 
@@ -350,13 +744,13 @@ function callWriteup(id){
 const SCRIPTS={
   FE:l=>`Hey ${esc(l.first||"…")}? This is [your name] giving you a call, we spoke right around a month or so ago, I was helping you out with your life insurance and sent a packet out to you at the ${esc(l.address||"[address]")} address, should of been a bigggg white packet, did you ever get a chance to look at that?`,
   MP:l=>`Hi ${esc(l.first||"…")}, this is [your name]. I'm following up on the mortgage protection form you sent back${l.lender?` about your loan with ${esc(l.lender)}`:""}. It's the coverage that pays off or keeps up the house payment if something happens to you. Did I catch you at an okay time to go over it for a few minutes?`,
-  IUL:l=>`Hi ${esc(l.first||"…")}, this is [your name]. You'd asked about building tax-advantaged savings that also carries life insurance. I'd like to learn a little about your goals and then show you how an indexed universal life policy could fit. Do you have a few minutes now?`,
+  IUL:l=>`Hey ${esc(l.first||"[Name]")}? Hey , yea hey  this is Anthony, im trying to send you your portfolio on the IUL illustration you were looking in to, Just wanted to clarify with you here real quick was it for the cash value growth or the protection side of it.`,
   "":l=>`Hi, is this ${esc(l.first||"…")}? This is [your name] following up on the information you requested about life insurance. Do you have a couple of minutes?`};
 function dialerUpsell(){const v=$("#v-dialer");if(!v)return false;let n=$("#dUpsell");const need=window.hpUser?.access&&!window.hpUser.access.dialer;
   if(!need){if(n)n.remove();return false}
   if(!n){n=document.createElement("div");n.id="dUpsell";n.className="notice";n.style.margin="0 0 14px";n.innerHTML=`<b>The dialer is part of the Pro plan.</b> You're on Starter, so calling is turned off. <button type="button" class="btn sm primary" style="margin-left:8px">Upgrade in Billing</button>`;n.querySelector("button").onclick=()=>window.hpTeam?.openBilling();v.querySelector(".head")?.after(n)}
   return true}
-function renderDialer(){dialerUpsell();
+function renderDialer(){dialerUpsell();fillListSelects();
   const q=dialQueue(); $("#dqCount").textContent=`${q.length} to call`;
   if(!q.find(l=>l.id===dCurId)) dCurId=q[0]?.id||null;
   $("#queue").innerHTML=q.slice(0,300).map(l=>`<button data-id="${esc(l.id)}" aria-current="${l.id===dCurId}"><span>${esc(fullName(l))}</span><span class="muted num">${l.callCount?l.callCount+"×":""}${l.callbackAt?` · ${new Date(l.callbackAt).toLocaleDateString(undefined,{month:"short",day:"numeric"})}`:""}</span></button>`).join("")||`<div class="empty-col">No leads in this queue${$("#dqStage").value?" for "+stageName($("#dqStage").value):""}.</div>`;
@@ -382,7 +776,7 @@ function renderDialer(){dialerUpsell();
   $("#dcCopy").onclick=async()=>{try{await navigator.clipboard.writeText(fmtPhone(l.phone));toast("Number copied")}catch{const s=getSelection(),r=document.createRange();r.selectNodeContents($(".bigphone"));s.removeAllRanges();s.addRange(r);toast("Number selected, press Ctrl/Cmd+C")}};
   $("#dcOpen").onclick=()=>openDrawer(l.id);
   $("#dcStart").onclick=async()=>{if(window.hpDialer?.ready){if(window.hpDialer.busy){toast("Finish the current call first");return}window.hpDialer.dialLead(l);return}if(callT0&&callLead===l.id){callStop();renderDialer();return}callT0=Date.now();callLead=l.id;window.dispatchEvent(new Event("hp:callstart"));try{await navigator.clipboard.writeText(normPhone(l.phone))}catch{}toast("Timer started · number copied");tickCall();renderDialer()};
-  $$("[data-dz]").forEach(b=>b.onclick=()=>dispo(l,b.dataset.dz));
+  $$("#dCur [data-dz]").forEach(b=>b.onclick=()=>dispo(l,b.dataset.dz)); // only this panel's buttons: the call log popup and the call dock use data-dz too
   saveSess(); window.dispatchEvent(new Event("hp:leadchange"));
 }
 async function dispo(l,kind){
@@ -396,20 +790,23 @@ async function dispo(l,kind){
   const at=new Date($("#cbAt")?.value||"").getTime();
   const dur=callLead===l.id&&callT0?Date.now()-callT0:0; callStop();
   const hpm=callWriteup(l.id); window.hpDialer?.onDispo(l.id,lab,note);
-  logCall({leadId:l.id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:"",...hpm});
+    logCall({leadId:l.id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:"",...hpm,hpSid:hpm.hpSid||window.hpDialer?.meta?.(l.id)?.hpSid,recordingUrl:hpm.recordingUrl,recordingSid:hpm.recordingSid});
   const q=dialQueue(); const idx=q.findIndex(x=>x.id===l.id); const nextId=q[idx+1]?.id||null;
   try{await patchLead(l.id,patch);dCurId=nextId;
     if((kind==="apptgo"||kind==="cbgo")&&!isNaN(at))await putAppt({leadId:l.id,leadName:fullName(l),title:fullName(l),at,dur:30,type:kind==="cbgo"?"Callback":"Phone call",done:false,createdAt:Date.now()});
     if(kind==="sold"){celebrate(`Sold! ${fullName(l)} is on the books.`);awardXP(100,"policy sold")}else if(kind==="apptgo"||kind==="appt"){celebrate(`Appointment set with ${fullName(l)}`);awardXP(30,"appointment set")}else{toast(`${fullName(l)}: ${lab}`);awardXP(5,"call logged")}renderDialer()}catch(e){toast("Couldn't log the call: "+e.message)}
 }
 $("#dqStage").onchange=()=>{ls.set("hp.dqStage",$("#dqStage").value);dCurId=null;renderDialer()};$("#dqProduct").onchange=()=>{dCurId=null;renderDialer()};
+$("#dqList")?.addEventListener("change",()=>setActiveList($("#dqList").value));
 $("#wavvCsv")?.addEventListener("click",()=>{const q=dialQueue();if(!q.length){toast("Queue is empty");return}
   offerFile(`queue-${$("#dqStage").value}-${new Date().toISOString().slice(0,10)}.csv`,toCSV(["First Name","Last Name","Phone","Email","State","Notes"],q.map(l=>[l.first||"",l.last||"",normPhone(l.phone),l.email||"",l.state||"",[PROD[l.product],l.source].filter(Boolean).join(" · ")])))});
 
 /* ---------- Highpoint Dialer hooks ---------- */
-window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLead,renderDialer,openDrawer,ensureDialer,startLeadCall,openPhoto,liveQuote,
+window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLead,removeLead,askDeleteLead,renderDialer,openDrawer,quoteLead,scriptLead,textLead,playDeskRec,ensureDialer,ensureQuote,ensureFex,ensureScreenData,startLeadCall,openPhoto,liveQuote,scoreboard,money,
   currentId:()=>dCurId,setCurrent(id){dCurId=id;if(view==="dialer")renderDialer()},
-  get calls(){return calls},get appts(){return appts},putAppt,addNoteObj,stageName,STAGES,PROD,go,
+  get calls(){return calls},get appts(){return appts},get lists(){return lists},get imports(){return imports},
+  filteredLeads,setActiveList,listBatchId,inList,isPickedList:isPicked,listCount,leadPipeline,putAppt,addNoteObj,stageName,STAGES,PROD,go,
+  get activeListId(){return activeListId},
   async dispoDirect(id,kind,o={}){const l=leads.get(id);if(!l)return;const note=o.note||"";
     const lab={na:"No answer",vm:"Left voicemail",bad:"Bad number",cb:"Callback scheduled",appt:"Appointment set",sold:"Sold",ni:"Not interested",dnc:"Do not call"}[kind];
     const patch={callCount:(l.callCount||0)+1,lastCallAt:Date.now(),lastDisposition:lab,notes:addNoteObj(l,`Call: ${lab}${o.at?" for "+new Date(o.at).toLocaleString():""}${note?" — "+note:""}`)};
@@ -418,17 +815,17 @@ window.hpDesk={leads,dialQueue,fullName,normPhone,fmtPhone,toast,patchLead,putLe
     sess.d++;if(["cb","appt","ni","sold"].includes(kind))sess.c++;if(kind==="appt")sess.a++;saveSess();
     const dur=callLead===id&&callT0?Date.now()-callT0:0;callStop();
     const hpm=callWriteup(id);window.hpDialer?.onDispo(id,lab,note);
-    logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:"",...hpm});
+    logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur,note,transcript:"",summary:"",...hpm,hpSid:hpm.hpSid||window.hpDialer?.meta?.(id)?.hpSid,recordingUrl:hpm.recordingUrl,recordingSid:hpm.recordingSid});
     await patchLead(id,patch);
     if((kind==="appt"||kind==="cb")&&o.at)await putAppt({leadId:id,leadName:fullName(l),title:fullName(l),at:o.at,dur:30,type:kind==="cb"?"Callback":"Phone call",done:false,createdAt:Date.now()});
     if(kind==="sold"){celebrate(`Sold! ${fullName(l)} is on the books.`);awardXP(100,"policy sold")}else if(kind==="appt"){celebrate(`Appointment set with ${fullName(l)}`);awardXP(30,"appointment set")}else awardXP(5,"call logged");
     if(view==="dialer"&&dTab==="dial")renderDialer();return lab},
-  callStart(id){if(callT0)return;callT0=Date.now();callLead=id;window.dispatchEvent(new Event("hp:callstart"));tickCall();if(view==="dialer"&&dTab==="dial")renderDialer()},
+  callStart(id){if(!id)return;if(!callT0){callT0=Date.now();callLead=id;tickCall()}else callLead=id;window.dispatchEvent(new Event("hp:callstart"));if(view==="dialer"&&dTab==="dial")renderDialer()},
   callStop(){callStop();if(view==="dialer"&&dTab==="dial")renderDialer()},
-  async autoLog(id,lab,meta={}){const l=leads.get(id);if(!l)return;const patch={callCount:(l.callCount||0)+1,lastCallAt:Date.now(),lastDisposition:lab,notes:addNoteObj(l,`Call: ${lab} (Highpoint Dialer)`)};
+  async autoLog(id,lab,meta={}){const l=leads.get(id);if(!l)return;const patch={callCount:(l.callCount||0)+1,lastCallAt:Date.now(),lastDisposition:lab,notes:addNoteObj(l,`Call: ${lab}${meta.note?" — "+meta.note:""} (Highpoint Dialer)`)};
     if(lab==="Bad number"||lab==="Do not call")patch.stage="lost";sess.d++;saveSess();
-    logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur:0,note:"",transcript:"",summary:"",...callWriteup(id),...meta});
-    try{await patchLead(id,patch)}catch{}if(view==="dialer"&&dTab==="dial")renderDialer()}};
+    const hpm=callWriteup(id);logCall({leadId:id,name:fullName(l),phone:normPhone(l.phone),product:l.product||"",at:Date.now(),outcome:lab,dur:0,note:"",transcript:"",summary:"",...hpm,...meta,hpSid:meta.hpSid||hpm.hpSid,recordingUrl:meta.recordingUrl||hpm.recordingUrl,recordingSid:meta.recordingSid||hpm.recordingSid});
+    try{await patchLead(id,patch)}catch{}window.hpDialer?.onDispo(id,lab,meta.note||"");if(view==="dialer"&&dTab==="dial")renderDialer()}};
 
 /* ---------- quoting engines (illustrative) ---------- */
 function interp(xs,ys,x){if(x<=xs[0])return ys[0];for(let i=1;i<xs.length;i++)if(x<=xs[i]){const t=(x-xs[i-1])/(xs[i]-xs[i-1]);return ys[i-1]+t*(ys[i]-ys[i-1])}const n=xs.length-1;return ys[n]+(x-xs[n])*(ys[n]-ys[n-1])/(xs[n]-xs[n-1])}
@@ -539,7 +936,7 @@ function showShare(r){
   $("#hpShareCopy").onclick=()=>copyText(r.url);
   $("#hpShareX").onclick=hideShare;
   if($("#hpShareEmail"))$("#hpShareEmail").onclick=async()=>{try{await deskApi("/api/quote/send",{token:r.token,via:"email"});toast("Quote emailed");hideShare()}catch(e){toast(e.message)}};
-  if($("#hpShareSms"))$("#hpShareSms").onclick=async()=>{const b=$("#hpShareSms");if(!b.dataset.armed){b.dataset.armed="1";b.textContent="Tap again to send 1 text";$("#hpShareNote").textContent="This uses your Twilio/Telnyx rate. Copy the link if you don't want to pay for a text.";return}try{b.disabled=true;await deskApi("/api/quote/send",{token:r.token,via:"sms"});toast("Quote texted (1 SMS)");hideShare()}catch(e){b.disabled=false;toast(e.message)}};
+  if($("#hpShareSms"))$("#hpShareSms").onclick=async()=>{const b=$("#hpShareSms");if(!b.dataset.armed){b.dataset.armed="1";b.textContent="Tap again to send 1 text";$("#hpShareNote").textContent="This uses your Telnyx rate. Copy the link if you don't want to pay for a text.";return}try{b.disabled=true;await deskApi("/api/quote/send",{token:r.token,via:"sms"});toast("Quote texted (1 SMS)");hideShare()}catch(e){b.disabled=false;toast(e.message)}};
 }
 const PAY_APP=[["checking","Checking draft"],["savings","Savings draft"],["ssc","Direct Express / SSC"],["other","Other"]];
 function appVals(l){
@@ -700,7 +1097,7 @@ for(const k of["TERM","IUL"])Q[k].amt=Math.max(50000,Math.round((+Q[k].amt||2500
 ["dob"].forEach(k=>{if(!Q.FE[k])Q.FE[k]={m:"",d:"",y:""}});
 const FAV=new Set(ls.get("hp.favs",[])); const CARR=ls.get("hp.carriers",{}); let feCmp=new Set(), feOpen=new Set(), fePending=null;
 const yrsSince=t=>(Date.now()-t)/(365.25*864e5);
-function feAge(){const {m,d,y}=Q.FE.dob;if(!(m&&d&&y&&String(y).length===4))return null;const b=new Date(+y,+m-1,+d);if(isNaN(b))return null;const n=new Date();let a=n.getFullYear()-b.getFullYear();if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate()))a--;return a>0&&a<120?a:null}
+function feAge(){const {m,d,y}=Q.FE.dob;if(!(m&&d&&y&&String(y).length===4))return null;if(window.HP_QFACTS)return window.HP_QFACTS.dobAge(Q.FE.dob);const b=new Date(+y,+m-1,+d);if(isNaN(b))return null;const n=new Date();let a=n.getFullYear()-b.getFullYear();if(n<new Date(n.getFullYear(),b.getMonth(),b.getDate()))a--;return a>0&&a<120?a:null}
 function feBMI(){const h=(+Q.FE.ft||0)*12+(+Q.FE.inch||0),w=+Q.FE.lb||0;return h>=48&&w>=70?Math.round(w/(h*h)*703*10)/10:null}
 function feUW(){const reasons=[];let t=0;
   for(const c of Q.FE.conds){const C=COND[c.k];if(!C)continue;const y=c.at?yrsSince(c.at):0;const rule=C.r.find(r=>y<r[0])||C.r[C.r.length-1];
@@ -894,7 +1291,7 @@ $("#qCarriers").onclick=openCarriers;
 if($("#wavvCopy"))$("#wavvCopy").onclick=()=>copyText("ANT");
 
 function renderQuoter(){
-  leadOptions($("#qLead")); const T=Q.tab, cfg=T==="FE"?feCfg():QCFG[T], st=Q[T], K=cfg.amtKey||"amt", B=!!cfg.budget;
+  leadOptions($("#qLead")); if(!window.HP_RATES)return; const T=Q.tab, cfg=T==="FE"?feCfg():QCFG[T], st=Q[T], K=cfg.amtKey||"amt", B=!!cfg.budget;
   $$("#qTabs button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.q===T));
   $$("[data-only]").forEach(e=>e.hidden=e.dataset.only!==T);
   $$("[data-hide]").forEach(e=>e.hidden=e.dataset.hide===T);
@@ -936,8 +1333,11 @@ function renderQuoter(){
   countUp($("#qLeadWith"));$("#qDisc").textContent=T==="FE"?`Transamerica level quotes use Transamerica's FE Express rate chart (${window.HP_RATES?.taFex?.asOf||""}): exact monthly bank-draft premiums, $42 policy fee included. The risk class still comes from Transamerica's own health questions. American Amicable Senior Choice uses its rate chart, which matches 2026 published prices to the cent. Mutual of Omaha Living Promise uses its rate chart (form UC8167, Texas): it matches 2026 published prices for women and for men 55–75, may run up to about 6% low for men 45, 50 and 80, and its graded prices are estimated from 2026 samples. Aetna, Aetna Accendo, Foresters, Corebridge (SimpliNow Legacy Max and guaranteed issue), American Home Life (Patriot and GuideStar) and Fidelity Life use real Insurance Toolkits quotes for every age, sex and nicotine answer (October 2026, Texas, bank draft, clean health), to the cent at the face amounts Toolkits sells them. Plans we have no quotes for (Aetna and Corebridge Standard or graded, Ethos, Royal Neighbors) are "market-checked" estimates. Confirm before presenting.`:T==="TERM"?`Ethos prices come from Ethos's own online estimator (Texas, October 2026): its lowest price is used for Preferred plus and its highest for Standard, with Preferred and Standard plus in between. Other term carriers are rough estimates scaled from the Ethos curve. Tobacco prices are rougher. Run the carrier's own quote before presenting.`:`Estimates from Highpoint's rate model using typical market curves and relative pricing for each carrier. They are not carrier rates. Run the carrier's own quote before presenting. Monthly bank-draft premiums; policy fees included.`;
 }
 $$("#qTabs button").forEach(b=>b.onclick=()=>{Q.tab=b.dataset.q;Q.sort=null;saveQ();renderQuoter()});
-[["#qAge","age",v=>Math.min(90,Math.max(18,+v||18))],["#qSex","sex"],["#qTob","tob"],["#qState","state"],["#qClass","cls"]].forEach(([s,k,f])=>$(s).addEventListener("change",()=>{Q[k]=f?f($(s).value):$(s).value;saveQ();renderQuoter()}));
-$("#qLead").addEventListener("change",()=>{const l=leads.get($("#qLead").value);if(!l)return;if(l.age)Q.age=+l.age;if(l.state&&STATES.includes(l.state))Q.state=l.state;if(l.product==="MP")Q.tab="TERM";else if(l.product==="FE"||l.product==="IUL")Q.tab=l.product;if(Q.tab==="TERM"&&l.mortgageBalance)Q.TERM.amt=Math.round(l.mortgageBalance/5000)*5000;saveQ();renderQuoter()});
+[["#qAge","age",v=>Math.min(90,Math.max(18,+v||18))],["#qSex","sex"],["#qTob","tob"],["#qState","state"],["#qClass","cls"]].forEach(([s,k,f])=>$(s).addEventListener("change",()=>{Q[k]=f?f($(s).value):$(s).value;if(k==="age"&&feAge()!==Q.age)Q.FE.dob={m:"",d:"",y:""};saveQ();renderQuoter()}));
+$("#qLead").addEventListener("change",()=>{const l=leads.get($("#qLead").value);if(!l)return;if(l.age)Q.age=+l.age;
+  const dm=String(l.dob||"").match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)||String(l.dob||"").match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(dm){const p=dm[1].length===4?{m:dm[2].padStart(2,"0"),d:dm[3].padStart(2,"0"),y:dm[1]}:{m:dm[1].padStart(2,"0"),d:dm[2].padStart(2,"0"),y:dm[3]};const was=Q.FE.dob;Q.FE.dob=p;const a=feAge();if(a)Q.age=a;else Q.FE.dob=was}
+  if(feAge()&&feAge()!==Q.age)Q.FE.dob={m:"",d:"",y:""};if(l.state&&STATES.includes(l.state))Q.state=l.state;if(l.product==="MP")Q.tab="TERM";else if(l.product==="FE"||l.product==="IUL")Q.tab=l.product;if(Q.tab==="TERM"&&l.mortgageBalance)Q.TERM.amt=Math.round(l.mortgageBalance/5000)*5000;saveQ();renderQuoter()});
 /* quoter API for the pop-out quoter (public/hp-pop.js): same state (Q) and engines as this page */
 window.hpQuoter={
   get Q(){return Q},COND,MEDS,NIC,TIERS,TIER_CLS,STATES,
@@ -969,6 +1369,7 @@ function renderIul(){
   leadOptions($("#ilLead"));
   const p=ilParams(); const c=p.c;
   $("#ilTitle").textContent=`${c.n} IUL`;
+  if($("#ilCaps")) $("#ilCaps").innerHTML=window.HP_IUL_RATES?iulCapsHTML():`<p class="muted" style="margin:0">Loading published IUL caps…</p>`;
   $("#ilCarriers").innerHTML=IUL_CARRIERS.filter(x=>!x.prot).map(x=>`<button type="button" data-c="${x.k}" aria-pressed="${x.k===IL.carrier}">${esc(x.n)}</button>`).join("");
   $("#ilProt").innerHTML=IUL_CARRIERS.filter(x=>x.prot).map(x=>`<button type="button" class="chip2" data-c="${x.k}" aria-pressed="${x.k===IL.carrier}">${esc(x.n)}</button>`).join("");
   $$("#ilCarriers [data-c],#ilProt [data-c]").forEach(b=>b.onclick=()=>{IL.carrier=b.dataset.c;saveIL();renderIul()});
@@ -1047,20 +1448,33 @@ const TOOLS=[
     const c=IUL_CARRIERS[0],risk=tob?1.55:1,annual=(Number(i.monthly)||300)*12,face=Math.round(annual/ilTarget(age,sex,risk,"balanced",c)*1000/1000)*1000;const r=ilProject({age,sex,risk,face,annual,payTo:Number(i.pay_to_age)||100,rate:Number(i.rate)||5.5,dbo:"A",c,inc:null});const at=a=>Math.round(r.rows.find(x=>x.age===a)?.cv||0);return{deathBenefit:face,cashValueAt65:at(65),at75:at(75),at85:at(85),lapseAge:r.lapse}}}
 ];
 function aiContext(){const by=STAGES.map(([i,n])=>`${n}: ${[...leads.values()].filter(l=>(l.stage||"new")===i).length}`).join(", ");
-  const recent=[...leads.values()].sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,30)
-    .map(l=>`${fullName(l)} · ${stageName(l.stage)} · ${PROD[l.product]||"no product"} · age ${l.age||"?"} · ${l.state||""}`).join("\n");
+  const cur=leads.get(dCurId||drawerId);
+  let leadLine="No client is open. Use search_leads if they ask about someone in the book.";
+  let quoteLine="";
+  if(cur){
+    leadLine=`Current client: ${fullName(cur)} · ${stageName(cur.stage)} · ${PROD[cur.product]||"no product"} · age ${cur.age||"?"} · ${cur.state||""}. Use search_leads if they ask about someone else.`;
+    try{
+      const r=liveQuote({lead:cur,product:cur.product==="MP"||cur.product==="IUL"?cur.product:"FE",pitch:false});
+      if(r?.ok){
+        const top=r.carriers?.[0];
+        const opts=(r.options||[]).map(o=>`${o.label} ${money(o.face)} ${money(o.monthly,2)}/mo`).join("; ");
+        quoteLine=`Quote & compare (do not invent other premiums): ${r.plan||""}${top?` · ${top.n} ${top.monthly!=null?money(top.monthly,2)+"/mo":""} (${top.src})`:""}${opts?" · "+opts:""}. ${r.note||""}`;
+      }else if(r?.ask) quoteLine=`Quote & compare is waiting on: ${(r.missing||[]).join(", ")}. ${r.ask}`;
+    }catch{}
+  }
   return `You are the built-in assistant in Highpoint Agent Desk. Today is ${new Date().toDateString()}. The book has ${leads.size} leads (${by}).
-Recent clients — use these names, do not invent others:
-${recent||"(none)"}
-When writing client-facing texts: no guarantees of approval or returns, no pretending to be a government program, and include "Reply STOP to opt out." Keep answers short and practical. For underwriting, use the Highpoint FE UW model in your system prompt and remind the agent to confirm in the carrier's current guide.`}
+${leadLine}
+${quoteLine}
+When writing client-facing texts: no guarantees of approval or returns, no pretending to be a government program, and include "Reply STOP to opt out." Keep answers short and practical. For underwriting, use the Highpoint FE UW model in your system prompt and remind the agent to confirm in the carrier's current guide. Never invent a monthly premium; use the Quote & compare numbers above or the quote tool.`}
 async function ask(text){
   if(aiBusy)return; text=text.trim(); if(!text)return;
   if(!sample){try{sample=await window.claude?.use?.("sample")}catch{}}
   addMsg("me",text); $("#aiIn").value="";
   if(!sample){addMsg("sys","The assistant isn't available right now. Sign in and try again.");return}
   const turns=[...aiTurns,{role:"user",content:text}];
+  const cur=leads.get(dCurId||drawerId);
   const out=addMsg("ai","Thinking…"); aiBusy=new AbortController(); $("#aiSend").textContent="Stop";
-  try{const res=await sample(turns,{system:aiContext(),onText:({text})=>{out.textContent=text;$("#msgs").scrollTop=1e9},signal:aiBusy.signal,tools:TOOLS,cache:false});
+  try{const res=await sample(turns,{system:aiContext(),onText:({text})=>{out.textContent=text;$("#msgs").scrollTop=1e9},signal:aiBusy.signal,tools:TOOLS,cache:false,product:cur?.product||cur?.pipeline});
     out.textContent=res.text; aiTurns=[...turns,{role:"assistant",content:res.text}];
     if(aiTurns.length>24)aiTurns=[aiTurns[0],aiTurns[1],...aiTurns.slice(-20)];
   }catch(e){
@@ -1231,7 +1645,6 @@ const SCRIPT_LIB={
   obj:[["Isn't this just like investing in the market?","No. The cash value isn't invested in the market. It earns interest based on an index, with a cap on the upside and a floor, often 0%, so a down year doesn't lose credited value. Fees and charges still apply."],["I already have a 401(k).","Keep it. This is a different bucket: it's life insurance first, and the cash value can be accessed through policy loans that are generally not taxed when the policy is set up and kept correctly."],["It sounds expensive.","It works best with a consistent amount you won't miss. Let's find the number that fits and I'll show you the carrier illustration for exactly that."]],
   close:"The illustration at {premium} a month gives you {face} of protection and builds cash value toward your retirement goal. Shall we start the application so the carrier can confirm your rate?"}
 };
-let scTab="FE";
 window.HP_SCRIPTS=SCRIPT_LIB;
 /* a script made of stages (the built-in FEX one, or one an agent imported) */
 function stagesView(F,headHtml){
@@ -1258,16 +1671,33 @@ function renderMine(){
   $("#msNew").onclick=()=>M.openImport();
 }
 if(window.hpMyScripts)window.hpMyScripts.onChange(()=>{ if(view==="scripts"&&scTab==="MINE")renderMine() });
+function playbook(tab){return tab==="FE"?window.HP_FEX:tab==="MP"?window.HP_MP:tab==="IUL"?window.HP_IUL:null}
+function scriptFill(t,l){
+  const name=l?.first||"";
+  let s=String(t||"");
+  if(name) s=s.replace(/\[Name\]/g,name).replace(/\{name\}/g,name);
+  return s;
+}
+function iulCapsHTML(){
+  const R=window.HP_IUL_RATES; if(!R)return"";
+  return `<div class="panel wide il-caps"><h3>IUL carrier compare</h3><p class="muted" style="margin:0 0 8px">${esc(R.note)} As of ${esc(R.asOf)}.</p>
+    <div class="tablewrap"><table><thead><tr><th>Carrier</th><th>Product</th><th>Participation</th><th>Cap</th><th>Floor</th><th>Indexes</th><th>As of</th></tr></thead><tbody>
+    ${R.rows.map(r=>`<tr><td><b>${esc(r.n)}</b><br><span class="${r.checked?"chk":"ask"}">${r.checked?"Market-checked":"Confirm in illustration"}</span></td><td>${esc(r.product)}</td><td>${esc(r.par)}</td><td>${esc(r.cap)}</td><td>${esc(r.floor)}</td><td>${esc(r.indexes)}${r.extra?`<div class="muted">${esc(r.extra)}</div>`:""}</td><td class="muted">${esc(r.asOf)}<br><span title="${esc(r.src)}">${esc(r.src)}</span></td></tr>`).join("")}
+    </tbody></table></div></div>`;
+}
 function renderScripts(){
   if(scTab==="MINE"){ renderMine(); return }
-  if(scTab==="FE"&&window.HP_FEX){
-    $$("#scTabs .tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.sc===scTab));
-    const F=HP_FEX, hl=t=>esc(t).replace(/\{([\w ]+)\}/g,'<b style="color:var(--accent-2)">[$1]</b>');
-    $("#scBody").innerHTML=`<div class="panel wide fex-head"><h3>${esc(F.title)}</h3><p class="muted" style="margin:0">Blue lines are read aloud. Grey notes are for you. Open a stage to read it, or copy the whole stage.</p></div>`+F.stages.map((st,i)=>`<details class="panel wide fex-stage"${i===0?" open":""}><summary><span>${esc(st.title)}</span><button class="btn copy" type="button" data-stage="${i}">Copy stage</button></summary>${st.items.map(it=>it.k==="h"?`<h4 class="fex-h">${esc(it.x)}</h4>`:it.k==="note"?`<p class="fex-note">${esc(it.x)}</p>`:`<p class="fex-say${it.k==="obj"?" obj":""}">${it.k==="obj"?esc(it.x):hl(it.x)}</p>`).join("")}</details>`).join("");
-    $$("#scBody [data-stage]").forEach(b=>b.onclick=async e=>{e.preventDefault();e.stopPropagation();const st=F.stages[+b.dataset.stage];const t=st.items.filter(i=>i.k!=="note").map(i=>i.x).join("\n\n");try{await navigator.clipboard.writeText(t);toast("Stage copied")}catch{toast("Select the text to copy it")}});
+  $$("#scTabs .tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.sc===scTab));
+  const F=playbook(scTab);
+  if(F){
+    const cur=leads.get(dCurId||drawerId);
+    const hl=t=>esc(scriptFill(t,cur)).replace(/\{([\w ]+)\}/g,'<b style="color:var(--accent-2)">[$1]</b>').replace(/\[(Carrier(?: Name)?|Face Amount|amount|date|diabetes)\]/g,'<b style="color:var(--accent-2)">[$1]</b>');
+    $("#scBody").innerHTML=`<div class="panel wide fex-head"><h3>${esc(F.title)}</h3><p class="muted" style="margin:0">Blue lines are read aloud. Grey notes are for you. Open a stage to read it, or copy the whole stage.${cur?` Filled for <b>${esc(fullName(cur))}</b>.`:""}</p></div>`
+      +(scTab==="IUL"?iulCapsHTML():"")
+      +F.stages.map((st,i)=>`<details class="panel wide fex-stage"${i===0?" open":""}><summary><span>${esc(st.title)}</span><button class="btn copy" type="button" data-stage="${i}">Copy stage</button></summary>${st.items.map(it=>it.k==="h"?`<h4 class="fex-h">${esc(it.x)}</h4>`:it.k==="note"?`<p class="fex-note">${esc(it.x)}</p>`:`<p class="fex-say${it.k==="obj"?" obj":""}">${it.k==="obj"?esc(it.x):hl(it.x)}</p>`).join("")}</details>`).join("");
+    $$("#scBody [data-stage]").forEach(b=>b.onclick=async e=>{e.preventDefault();e.stopPropagation();const st=F.stages[+b.dataset.stage];const t=st.items.filter(i=>i.k!=="note").map(i=>scriptFill(i.x,cur)).join("\n\n");try{await navigator.clipboard.writeText(t);toast("Stage copied")}catch{toast("Select the text to copy it")}});
     return;
   }
-  $$("#scTabs .tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.sc===scTab));
   const s=SCRIPT_LIB[scTab]; const hl=t=>esc(t).replace(/\{(\w+)\}/g,'<b style="color:var(--accent-2)">[$1]</b>');
   $("#scBody").innerHTML=`
    <div class="panel"><h3>Opener</h3><p style="margin:0">${hl(s.open)}</p><button class="btn copy" data-copy="open">Copy</button></div>
@@ -1363,30 +1793,28 @@ $$("#trTabs .tab").forEach(b=>b.onclick=()=>{trTab=b.dataset.tr;renderTraining()
 /* ---------- motion ---------- */
 const RM=matchMedia("(prefers-reduced-motion: reduce)").matches;
 function stagger(sec){if(!sec)return;[...sec.children].forEach((c,i)=>{c.style.setProperty("--i",Math.min(i,10));c.style.animation="none";void c.offsetWidth;c.style.animation=""})}
-/* the distant jets: a decorative canvas, so it runs at 30fps, caps its pixel density, clears only the
-   strip it drew last frame, and goes to sleep (one timer, no drawing) while the sky is empty or the desk is hidden */
-(function sky(){if(RM)return;const cv=$("#sky"),x=cv.getContext("2d");let W,H,D=1,last=0,dirty=null;
-  const size=()=>{D=Math.min(1.5,devicePixelRatio||1);W=cv.width=Math.round(innerWidth*D);H=cv.height=Math.round(innerHeight*D);cv.style.width=innerWidth+"px";cv.style.height=innerHeight+"px";dirty=null};
-  size();addEventListener("resize",size);
-  const spawn=()=>{const close=Math.random()<.34;return{x:-80*D,y:H*(.22+Math.random()*.42),a:-(.16+Math.random()*.18),v:(close?3.8:2.2+Math.random()*1.2)*D,trail:[],s:close?1.9:1}};
-  let jets=[{x:W*.05,y:H*.6,a:-.24,v:2.6*D,trail:[],s:1}];
+/* Distant jets: one 1x canvas, ~15fps, no loop while the sky is empty, hidden, or gated. */
+(function sky(){if(RM)return;const cv=$("#sky");if(!cv)return;const x=cv.getContext("2d");let W=0,H=0,last=0,dirty=null,raf=0,wait=0,jets=[];
   const asleep=()=>document.hidden||document.documentElement.classList.contains("gated");
+  const size=()=>{W=cv.width=Math.max(1,innerWidth);H=cv.height=Math.max(1,Math.min(innerHeight,560));cv.style.width=innerWidth+"px";cv.style.height=H+"px";dirty=null};
+  const spawn=()=>{if(!W)size();const close=Math.random()<.34;return{x:-80,y:H*(.22+Math.random()*.42),a:-(.16+Math.random()*.18),v:close?3.8:2.2+Math.random()*1.2,trail:[],s:close?1.9:1}};
   const frame=(now)=>{
-    if(asleep()){setTimeout(()=>requestAnimationFrame(frame),600);return}
-    const el=now-last;if(el<30){requestAnimationFrame(frame);return}
+    raf=0;if(asleep()||!jets.length){if(dirty&&W){x.clearRect(0,0,W,H);dirty=null}jets=[];return}
+    const el=now-last;if(el<64){raf=requestAnimationFrame(frame);return}
     const k=Math.min(3,el/16.67)||1;last=now;
     if(dirty){x.clearRect(dirty[0],dirty[1],dirty[2]-dirty[0],dirty[3]-dirty[1]);dirty=null}
-    if(!jets.length){if(Math.random()<.006*k)jets.push(spawn());else{setTimeout(()=>requestAnimationFrame(frame),250);return}}
-    else if(Math.random()<.006*k&&jets.length<3)jets.push(spawn());
-    const keep=Math.round(220/k);let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+    const keep=Math.round(140/k);let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
     for(const j of jets){const sc=j.s||1;j.x+=Math.cos(j.a)*j.v*k;j.y+=Math.sin(j.a)*j.v*k;j.a-=.0004*k;j.trail.push([j.x,j.y]);while(j.trail.length>keep)j.trail.shift();
-      for(let i=1;i<j.trail.length;i++){x.globalAlpha=(i/j.trail.length)*(.32+sc*.12);x.strokeStyle="rgba(255,255,255,.85)";x.lineWidth=(1+i/j.trail.length*1.6)*D*Math.min(1.5,sc);x.beginPath();x.moveTo(j.trail[i-1][0],j.trail[i-1][1]+2*D);x.lineTo(j.trail[i][0],j.trail[i][1]+2*D);x.stroke()}
-      x.save();x.globalAlpha=.96;x.translate(j.x,j.y);x.rotate(j.a);if(JET_IMG.complete)x.drawImage(JET_IMG,-30*D*sc,-11*D*sc,60*D*sc,22*D*sc);x.restore();
+      for(let i=1;i<j.trail.length;i++){x.globalAlpha=(i/j.trail.length)*(.32+sc*.12);x.strokeStyle="rgba(255,255,255,.85)";x.lineWidth=(1+i/j.trail.length*1.6)*Math.min(1.5,sc);x.beginPath();x.moveTo(j.trail[i-1][0],j.trail[i-1][1]+2);x.lineTo(j.trail[i][0],j.trail[i][1]+2);x.stroke()}
+      x.save();x.globalAlpha=.96;x.translate(j.x,j.y);x.rotate(j.a);if(JET_IMG.complete)x.drawImage(JET_IMG,-30*sc,-11*sc,60*sc,22*sc);x.restore();
       for(const p of j.trail){if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}}
-    x.globalAlpha=1;const m=90*D;dirty=[Math.max(0,x0-m),Math.max(0,y0-m),Math.min(W,x1+m),Math.min(H,y1+m)];
-    jets=jets.filter(j=>j.x<W+120*D&&j.y>-100*D);
-    requestAnimationFrame(frame)};
-  requestAnimationFrame(frame)})();
+    x.globalAlpha=1;const m=90;dirty=[Math.max(0,x0-m),Math.max(0,y0-m),Math.min(W,x1+m),Math.min(H,y1+m)];
+    jets=jets.filter(j=>j.x<W+120&&j.y>-100);
+    if(jets.length)raf=requestAnimationFrame(frame);
+  };
+  const kick=()=>{if(asleep()||raf||wait)return;wait=setTimeout(()=>{wait=0;if(asleep())return;if(!jets.length&&Math.random()<.18){jets.push(spawn());raf=requestAnimationFrame(frame)}kick()},14000)};
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)kick()});
+  kick()})();
 function celebrate(label){if(RM)return;const cv=$("#burst"),x=cv.getContext("2d");const d=devicePixelRatio;cv.width=innerWidth*d;cv.height=innerHeight*d;cv.style.width=innerWidth+"px";cv.style.height=innerHeight+"px";
   const cols=["#FF2E88","#FF9E3D","#FFFFFF","#FF4FA3","#FFC27E"];const P=Array.from({length:140},(_,i)=>({x:innerWidth*d/2,y:innerHeight*d*.42,vx:(Math.random()-.5)*16*d,vy:(-Math.random()*14-4)*d,r:(Math.random()*5+3)*d,c:cols[i%cols.length],a:Math.random()*6.28,va:(Math.random()-.5)*.3,bill:i%9===0}));
   let f=0;const step=()=>{f++;x.clearRect(0,0,cv.width,cv.height);for(const p of P){p.vy+=.35*d;p.vx*=.99;p.x+=p.vx;p.y+=p.vy;p.a+=p.va;x.save();x.translate(p.x,p.y);x.rotate(p.a);x.globalAlpha=Math.max(0,1-f/110);
@@ -1564,7 +1992,7 @@ function floatScript(tab){if(tab==="MINE"){const m=window.hpMyScripts?.get(scMin
   const hl=t=>esc(t).replace(/\{(\w+)\}/g,'<b style="color:var(--sky)">[$1]</b>');
   b.innerHTML=`<div><span class="label">Opener</span><p style="margin:4px 0 0;line-height:1.6">${hl(s.open)}</p></div><div><span class="label">Fact finder</span><ul style="margin:4px 0 0;padding-left:18px;line-height:1.6">${s.facts.map(f=>`<li>${esc(f)}</li>`).join("")}</ul></div><div><span class="label">Objections</span>${s.obj.map(([q,a])=>`<p style="margin:6px 0 0"><b>"${esc(q)}"</b><br><span class="muted">${esc(a)}</span></p>`).join("")}</div><div><span class="label">Close</span><p style="margin:4px 0 0;line-height:1.6">${hl(s.close)}</p></div>`}
 $("#scFloat").onclick=()=>floatScript(scTab);
-$("#dScript").onclick=()=>{const l=leads.get(dCurId);floatScript(l?.product==="MP"?"MP":l?.product==="IUL"?"IUL":"FE")};
+$("#dScript").onclick=()=>{const l=leads.get(dCurId);const p=leadPipeline(l);floatScript(p==="MP"||p==="IUL"?p:"FE")};
 renderRank();
 
 /* ===================== MODERN LAYER: living jet, segments, LED startup ===================== */
@@ -1728,12 +2156,25 @@ let dTab="dial";
 $$("#dTabs button").forEach(b=>b.onclick=()=>{dTab=b.dataset.dt;$$("#dTabs button").forEach(x=>x.setAttribute("aria-pressed",x===b));$("#dPane").hidden=dTab!=="dial";$("#hPane").hidden=dTab!=="hist";if(dTab==="hist")renderHist()});
 function histRows(){const q=$("#hQ").value.trim().toLowerCase(),qd=digits(q),o=$("#hOut").value,r=+$("#hRange").value;const from=r?(r===1?new Date(new Date().toDateString()).getTime():Date.now()-r*864e5):0;
   return [...calls.values()].filter(c=>c.at>=from&&(!o||c.outcome===o)&&(!q||[c.name,c.note,c.transcript,c.summary].join(" ").toLowerCase().includes(q)||(qd.length>=3&&String(c.phone).includes(qd)))).sort((a,b)=>b.at-a.at)}
+function callRecSid(c){return c?.hpSid||c?.recordingSid||""}
+function callHasRec(c){return !!(callRecSid(c)||c?.recordingUrl)}
+function playDeskRec(c,host){
+  if(!c||!callHasRec(c)){toast("No recording on this call yet");return}
+  const sid=callRecSid(c), url=String(c.recordingUrl||"");
+  const au=document.createElement("audio");au.controls=true;au.autoplay=true;au.style.width="min(240px,100%)";au.style.height="32px";
+  au.setAttribute("data-hp-rec",sid||"fixture");
+  if(/^demo-recording:|^demo-/.test(url)||url.startsWith("/fixtures/")||String(sid||"").startsWith("CA_preview")||String(sid||"").startsWith("CA_sim_")){
+    au.src=url.startsWith("/fixtures/")?url:"/fixtures/sample-ring.wav";
+  }else au.src=sid?"/api/dialer/calls/recording?sid="+encodeURIComponent(sid):url;
+  host.replaceWith(au);
+}
 function renderHist(){
   const outs=[...new Set([...calls.values()].map(c=>c.outcome))].sort();const cur=$("#hOut").value;$("#hOut").innerHTML=`<option value="">All outcomes</option>`+outs.map(o=>`<option ${o===cur?"selected":""}>${esc(o)}</option>`).join("");
   const rows=histRows();const talk=rows.reduce((a,c)=>a+(c.dur||0),0);const conv=rows.filter(c=>!["No answer","Left voicemail","Bad number"].includes(c.outcome)).length;
   $("#hStats").innerHTML=`<div><span class="num">${rows.length}</span><span class="muted">Calls</span></div><div><span class="num">${conv}</span><span class="muted">Conversations</span></div><div><span class="num">${fmtDur(talk)}</span><span class="muted">Talk time</span></div><div><span class="num">${rows.filter(c=>c.outcome==="Appointment set").length}</span><span class="muted">Appointments</span></div>`;
-  $("#hRows").innerHTML=rows.slice(0,400).map(c=>`<tr data-call="${esc(c.id)}" tabindex="0"><td><b>${esc(c.name)}</b><br><span class="muted num">${esc(fmtPhone(c.phone))}</span></td><td class="muted">${new Date(c.at).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</td><td><span class="opill ${/Appointment/.test(c.outcome)?"good":/Not interested|Bad/.test(c.outcome)?"bad":""}">${esc(c.outcome)}</span>${c.note?`<br><span class="muted" style="font-size:12px">${esc(c.note.slice(0,60))}</span>`:""}</td><td class="num">${c.dur?fmtDur(c.dur):"—"}</td><td>${c.transcript?`<span class="opill good">✓ ${c.summary?"Summarized":"Added"}</span>`:'<span class="muted">Add</span>'}</td><td>›</td></tr>`).join("")||`<tr><td colspan="6" class="muted" style="text-align:center;padding:28px;white-space:normal">No calls here yet. Every outcome you log in the dialer shows up in this list with its time, duration and notes.</td></tr>`;
+  $("#hRows").innerHTML=rows.slice(0,400).map(c=>`<tr data-call="${esc(c.id)}" tabindex="0"><td><b>${esc(c.name)}</b><br><span class="muted num">${esc(fmtPhone(c.phone))}</span></td><td class="muted">${new Date(c.at).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</td><td><span class="opill ${/Appointment/.test(c.outcome)?"good":/Not interested|Bad/.test(c.outcome)?"bad":""}">${esc(c.outcome)}</span>${c.note?`<br><span class="muted" style="font-size:12px">${esc(c.note.slice(0,60))}</span>`:""}${callHasRec(c)?`<br><button type="button" class="btn sm hist-play" data-rec="${esc(c.id)}">Play</button>`:""}</td><td class="num">${c.dur?fmtDur(c.dur):"—"}</td><td>${c.transcript?`<span class="opill good">✓ ${c.summary?"Summarized":"Added"}</span>`:'<span class="muted">Add</span>'}</td><td>›</td></tr>`).join("")||`<tr><td colspan="6" class="muted" style="text-align:center;padding:28px;white-space:normal">No calls here yet. Every outcome you log in the dialer shows up in this list with its time, duration and notes.</td></tr>`;
   $$("#hRows [data-call]").forEach(r=>{r.onclick=()=>renderCallWin(r.dataset.call);r.onkeydown=e=>{if(e.key==="Enter")renderCallWin(r.dataset.call)}});
+  $$("#hRows .hist-play").forEach(b=>b.onclick=e=>{e.stopPropagation();playDeskRec(calls.get(b.dataset.rec),b)});
 }
 ["#hQ","#hOut","#hRange"].forEach(s=>$(s).addEventListener("input",renderHist));
 $("#hCsv").onclick=()=>{const rows=histRows();if(!rows.length){toast("No calls to export");return}offerFile(`call-log-${new Date().toISOString().slice(0,10)}.csv`,toCSV(["Contact","Phone","Time","Outcome","Duration (sec)","Note","Summary","Transcript"],rows.map(c=>[c.name,c.phone,new Date(c.at).toLocaleString(),c.outcome,Math.round((c.dur||0)/1000),c.note||"",c.summary||"",c.transcript||""])))};
@@ -1741,12 +2182,13 @@ let openCallId=null;
 function renderCallWin(id,soft){const c=calls.get(id);if(!c)return;openCallId=id;
   const b=openWin("call",{title:"Call",sub:c.name,w:520,h:700,onClose:()=>openCallId=null});
   if(soft&&b.contains(document.activeElement))return;
-  b.innerHTML=`<div class="ci-row"><span>When</span><span>${new Date(c.at).toLocaleString()}</span></div><div class="ci-row"><span>Outcome</span><span class="opill">${esc(c.outcome)}</span></div><div class="ci-row"><span>Duration</span><span class="num">${c.dur?fmtDur(c.dur):"Not timed"}</span></div>${c.note?`<div class="ci-row"><span>Note</span><span>${esc(c.note)}</span></div>`:""}${c.wavvId?`<div class="ci-row"><span>Source</span><span>WAVV${c.direction==="inbound"?" · inbound":""}${c.recorded?` · <a href="/api/wavv/recording?id=${encodeURIComponent(c.wavvId)}" target="_blank" rel="noopener">Play recording</a>`:""}</span></div>`:""}
+  b.innerHTML=`<div class="ci-row"><span>When</span><span>${new Date(c.at).toLocaleString()}</span></div><div class="ci-row"><span>Outcome</span><span class="opill">${esc(c.outcome)}</span></div><div class="ci-row"><span>Duration</span><span class="num">${c.dur?fmtDur(c.dur):"Not timed"}</span></div>${c.note?`<div class="ci-row"><span>Note</span><span>${esc(c.note)}</span></div>`:""}${callHasRec(c)?`<div class="ci-row"><span>Recording</span><span id="ctRec">${c.recordingUrl?`<span class="muted" style="font-size:12px;word-break:break-all">${esc(String(c.recordingUrl).slice(0,120))}</span><br>`:""}<button type="button" class="btn sm" id="ctPlay">Play recording</button></span></div>`:""}${c.wavvId?`<div class="ci-row"><span>Source</span><span>WAVV${c.direction==="inbound"?" · inbound":""}${c.recorded?` · <a href="/api/wavv/recording?id=${encodeURIComponent(c.wavvId)}" target="_blank" rel="noopener">Play recording</a>`:""}</span></div>`:""}
    <div class="stack"><span class="label">Transcript</span>
      <textarea id="ctTxt" rows="9" placeholder="Paste the call transcript here (from WAVV's call recording, your phone or a notetaker). You can also upload a .txt, .vtt or .srt file.">${esc(c.transcript||"")}</textarea>
      <div class="row"><label class="btn sm" for="ctFile" style="cursor:pointer">Upload transcript file</label><input type="file" id="ctFile" accept=".txt,.vtt,.srt,text/plain" hidden><button class="btn sm" id="ctSave">Save transcript</button><button class="btn sm primary" id="ctSum">Summarize with Highpoint Bot</button></div></div>
    <div class="stack"><span class="label">Summary</span><div class="script" id="ctOut" style="white-space:pre-wrap;min-height:60px">${c.summary?esc(c.summary):'<span class="muted">No summary yet. Add a transcript and press Summarize: you get the key points, objections, health details mentioned, the next step, and a suggested note.</span>'}</div>
    ${c.summary?`<button class="btn sm" id="ctNote">Add summary to client notes</button>`:""}</div>`;
+  if($("#ctPlay"))$("#ctPlay").onclick=e=>{e.stopPropagation();playDeskRec(c,e.currentTarget)};
   $("#ctFile").onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{let t=String(rd.result);if(/\.(vtt|srt)$/i.test(f.name))t=t.replace(/^WEBVTT.*$/m,"").replace(/^\d+\s*$/gm,"").replace(/^[\d:.,]+\s*-->\s*[\d:.,]+.*$/gm,"").replace(/\n{2,}/g,"\n").trim();$("#ctTxt").value=t;toast("Transcript loaded. Press Save transcript.")};rd.readAsText(f)};
   $("#ctSave").onclick=async()=>{await patchCall(id,{transcript:$("#ctTxt").value.trim()});toast("Transcript saved")};
   if($("#ctNote"))$("#ctNote").onclick=async()=>{const l=leads.get(c.leadId);if(!l){toast("This client is no longer in your CRM");return}await patchLead(l.id,{notes:addNoteObj(l,"Call summary: "+c.summary.slice(0,900))});toast("Added to "+fullName(l)+"'s notes")};
@@ -1960,7 +2402,7 @@ function loungeWatch(on){
   clearInterval(LG.timer);LG.timer=0;
   if(!on)return;
   loungeLoad(true);
-  LG.timer=setInterval(()=>loungeLoad(false),2500);
+  LG.timer=setInterval(()=>{if(!document.hidden)loungeLoad(false)},12000);
 }
 async function loungeLoad(full){
   const host=$("#loungeHost");if(!host)return;

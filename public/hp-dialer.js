@@ -352,13 +352,46 @@
     if (sid) livePoll();
   }
   function phoneCard() { dock(); }
-  function startPhoneSession() {
-    const ids = campaignQueue().map((l) => l.id);
-    if (!ids.length) { toast("Nobody to call in this list right now"); return; }
-    S.ps = { ids, i: -1 }; phoneNext();
+  function deskAsk({ title, body, ok, cancel, onOk }) {
+    document.getElementById("hpdAsk")?.remove();
+    const m = document.createElement("div"); m.className = "hpd hph-modal hpd-ask"; m.id = "hpdAsk";
+    m.innerHTML = `<div class="hph-mbox hpd-askbox" role="dialog" aria-modal="true" aria-labelledby="hpdAskT"><div class="hph-mtop"><h2 id="hpdAskT">${esc(title)}</h2></div><div class="hpd-askbody">${body}</div><div class="hph-mfoot"><button type="button" class="btn" id="hpdAskNo">${esc(cancel || "Cancel")}</button><button type="button" class="btn primary" id="hpdAskYes">${esc(ok || "OK")}</button></div></div>`;
+    document.body.append(m);
+    const close = () => { m.remove(); document.removeEventListener("keydown", esc2, true); };
+    const esc2 = (e) => { if (e.key === "Escape") { e.preventDefault(); close(); } };
+    document.addEventListener("keydown", esc2, true);
+    $("#hpdAskNo", m).onclick = close;
+    $("#hpdAskYes", m).onclick = () => { close(); onOk?.(); };
+    $("#hpdAskYes", m).focus();
   }
+  // Pressing Start never dials by itself: you confirm the session first, and nothing rings until you do.
+  function startPhoneSession() {
+    const ids = campaignQueue().map((l) => l.id), n = ids.length;
+    if (!n) { toast("Nobody to call in this list right now"); return; }
+    deskAsk({
+      title: "Start calling?",
+      body: `<p>You're about to start a session of <b>${n}</b> lead${n === 1 ? "" : "s"} from <b>${esc(listName())}</b>.</p><p class="hpd-sm">The first lead won't ring until you press Start session.</p>`,
+      ok: "Start session",
+      onOk: () => { if (S.ps || S.call || S.power) return; S.ps = { ids, i: -1, talked: new Set(), paused: false, hold: null }; phoneNext(); renderHome(); },
+    });
+  }
+  // After a call someone answered and you logged, a session doesn't dial on by itself: Resume, Pause or Stop.
+  function sessGo(go) {
+    const P = S.ps || S.power; if (!P) return;
+    if (go) { P.hold = null; P.paused = false; P.holdLabel = ""; if (S.ps) { dock(); renderHome(); phoneNext(); } else { renderPhone(); renderFloat(S.lastTiles); nextBatch(); } }
+    else { P.paused = true; renderPhone(); dock(); renderHome(); toast("Paused. Press Resume dialing when you're ready."); }
+  }
+  function holdAfter(leadId, label) {
+    const P = S.ps || S.power; if (!P) return;
+    P.hold = leadId; P.holdLabel = label || "";
+    if (S.power) P.paused = true; // power dialing waits for Resume
+    renderPhone(); dock(); renderHome();
+  }
+  const nextRowHTML = (P) => `<div class="hpd-next"><p class="hpd-sm" role="status"><b>${P.holdLabel ? "Logged: " + esc(P.holdLabel) : "Call ended"}</b> · ${P.paused ? "Dialing is paused." : "The next lead won't dial until you choose."}</p><div class="hpd-next-row" role="group" aria-label="What next"><button type="button" class="btn primary" data-next="go">Resume dialing</button><button type="button" class="btn" data-next="pause" ${P.paused ? "disabled" : ""}>${P.paused ? "Paused" : "Pause dialing"}</button><button type="button" class="btn hpd-hang" data-next="stop">Stop dialing</button></div></div>`;
   function phoneNext() {
     const P = S.ps; if (!P) return;
+    if (P.paused && !P.hold && !S.call) { dock(); return; }
+    P.hold = null;
     if (multiOn()) { if (S.call) { try { S.call.disconnect(); } catch {} return; } multiCancel(false); multiBatch(); return; } // on a call: hang up, the wrap-up moves on
     window.hpDesk.callStop();
     const D = window.hpDesk;
@@ -376,7 +409,7 @@
     if (!B.winner) { S.ps.batch = null; }
   }
   function multiDraw(B) {
-    tiles(B.legs.map((l) => ({ leadId: l.lead.id, name: l.name, to: l.to, s: l === B.winner ? "live" : l.done ? "done" : "ringing", label: l === B.winner ? "Connected" : l.released ? "Stopped" : l.done ? "No answer" : l.ringing ? "Ringing" : "Calling" })));
+    tiles(B.legs.map((l) => ({ leadId: l.lead.id, name: l.name, to: l.to, s: l === B.winner ? "live" : l.done ? "done" : "ringing", label: l === B.winner ? "Connected" : l.released ? "Stopped" : l.vm ? "Voicemail" : l.done ? "No answer" : l.ringing ? "Ringing" : "Calling" })));
   }
   async function multiBatch() {
     const P = S.ps; if (!P || P.busy) return;
@@ -397,20 +430,23 @@
     }
     if (!picks.length) { phoneEnd(true); return; }
     P.busy = true; renderHome();
-    const pass = await Promise.all(picks.map((l) => preCheck(l)));
+    const recs = await Promise.all(picks.map((l) => openRecord(l, true)));
     P.busy = false;
     if (S.ps !== P) return;
-    const ok = picks.filter((_, i) => pass[i]);
+    const ok = picks.filter((_, i) => recs[i].ok), started = new Map(picks.map((l, i) => [l.id, recs[i]]));
     if (!ok.length) { setTimeout(multiBatch, 300); return; }
     const B = P.batch = { legs: [], winner: null };
     ok.forEach((lead, k) => {
-      const leg = { lead, name: D.fullName(lead), to: d10(lead.phone), done: false, ringing: false, released: false, t0: Date.now() };
+      const rec = started.get(lead.id) || {};
+      const leg = { lead, name: D.fullName(lead), to: d10(lead.phone), sid: rec.sid || "", done: false, ringing: false, released: false, t0: Date.now() };
       B.legs.push(leg);
       try {
-        const call = S.device.connectLeg({ To: leg.to, LeadId: lead.id, LeadName: leg.name, LeadState: lead.state || "", CallerId: S.prefs.defaultCallerId || "", RemoteEl: "hpdRemote" + k });
+        const call = S.device.connectLeg({ To: leg.to, LeadId: lead.id, LeadName: leg.name, LeadState: lead.state || "", CallerId: rec.callerId || S.prefs.defaultCallerId || "", RemoteEl: "hpdRemote" + k });
         leg.call = call;
         call.on("ringing", () => { leg.ringing = true; if (P.batch === B) multiDraw(B); });
-        call.on("accept", () => multiAnswered(P, B, leg));
+        // The browser leg is parked for voicemail detection, so its "accept" doesn't mean the lead picked up: the server says
+        // when a person answers (agent bridged) and when a mailbox does (leg dropped, logged No answer).
+        call.on("accept", () => { leg.sdkLive = Date.now(); if (!leg.sid) multiAnswered(P, B, leg); else multiWatch(P, B, leg); });
         const gone = () => multiGone(P, B, leg);
         call.on("disconnect", gone); call.on("cancel", gone); call.on("reject", gone); call.on("error", gone);
       } catch (e) { leg.done = true; leg.failed = true; B.err = e.message || "Couldn't place a call"; }
@@ -418,7 +454,27 @@
     if (B.legs.every((l) => l.failed)) { P.batch = null; toast(B.err); phoneEnd(); return; } // nothing could be dialed (no number, phone not connected): stop instead of burning through the list
     multiDraw(B);
     B.timer = setTimeout(() => multiTimeout(P, B), Math.min(60, Math.max(8, +S.sound.ringSec || 25)) * 1000); // nobody picks up in time: hang up, log No answer, next
-    if (B.legs.every((l) => l.done)) { clearTimeout(B.timer); B.legs.forEach((l) => { if (!l.failed) window.hpDesk.autoLog(l.lead.id, "No answer", {}); }); setTimeout(multiBatch, 500); }
+    if (B.legs.every((l) => l.done)) { clearTimeout(B.timer); B.legs.forEach((l) => { if (!l.failed) multiLog(l); }); setTimeout(multiBatch, 500); }
+  }
+  async function multiWatch(P, B, leg) {
+    clearTimeout(leg.wt);
+    const stale = () => leg.done || leg.released || B.winner || S.ps !== P || P.batch !== B;
+    if (stale()) return;
+    const { st } = await leadStatus(leg.sid, leg.sdkLive);
+    if (stale()) return;
+    if (st === "connected") return multiAnswered(P, B, leg);
+    if (st === "ringing" && !leg.ringing) { leg.ringing = true; multiDraw(B); }
+    if (st === "voicemail" && !leg.vm) { leg.vm = true; multiDraw(B); }
+    leg.wt = setTimeout(() => multiWatch(P, B, leg), 600);
+  }
+  // An unanswered leg logs itself with the reason (Rang out, Voicemail detected, Busy...)
+  function multiLog(l) {
+    if (S.provider !== "telnyx" || !l.sid) { window.hpDesk.autoLog(l.lead.id, "No answer", {}); return; }
+    endedWhy(l.sid, false).then((o) => {
+      if (!firstLog(l.sid)) return;
+      const note2 = l.timedOut && o.note === "Agent hung up while ringing" ? "Rang out" : o.note;
+      window.hpDesk.autoLog(l.lead.id, o.label, { hpSid: l.sid, note: note2 });
+    });
   }
   function multiTimeout(P, B) {
     if (S.ps !== P || P.batch !== B || B.winner) return;
@@ -426,22 +482,22 @@
   }
   function multiAnswered(P, B, leg) {
     if (S.ps !== P || P.batch !== B || B.winner || leg.released) { leg.released = true; try { leg.call.disconnect(); } catch {} return; } // a second person picking up is dropped at once
-    clearTimeout(B.timer); B.winner = leg; B.winnerAt = Date.now();
-    B.legs.forEach((l) => { if (l === leg) return; if (!l.released) { l.released = true; window.hpDesk.autoLog(l.lead.id, "No answer", {}); } l.done = true; try { l.call.disconnect(); } catch {} }); // the others stop ringing and are logged "No answer"; we move on
+    clearTimeout(B.timer); clearTimeout(leg.wt); B.winner = leg; B.winnerAt = Date.now();
+    B.legs.forEach((l) => { if (l === leg) return; clearTimeout(l.wt); if (!l.released) { l.released = true; window.hpDesk.autoLog(l.lead.id, "No answer", { ...(l.sid ? { hpSid: l.sid } : {}), note: "Another lead answered first" }); firstLog(l.sid); } l.done = true; try { l.call.disconnect(); } catch {} }); // the others stop ringing and are logged "No answer"; we move on
     const a = document.getElementById("hpdRemote" + B.legs.indexOf(leg)); if (a) { a.muted = false; a.play?.().catch(() => {}); }
     const lead = leg.lead;
-    S.call = leg.call; S.callLead = lead.id; S.phoneLead = lead.id; S.callSid = leg.call.sid; S.sidByLead.set(lead.id, S.callSid); S.txByLead.set(lead.id, []);
+    S.call = leg.call; S.callLead = lead.id; S.phoneLead = lead.id; S.callSid = leg.sid || leg.call.sid; S.callTalked = true; S.justLogged = null; (S.ps.talked = S.ps.talked || new Set()).add(lead.id); S.sidByLead.set(lead.id, S.callSid); S.txByLead.set(lead.id, []);
     window.hpDesk.callStart(lead.id);
     multiDraw(B); renderPhone(); renderHome();
     setChip("live", "On call"); livePoll(); PF.liveAt = Date.now(); beep();
   }
   function multiGone(P, B, leg) {
-    if (leg.done) return; leg.done = true;
+    if (leg.done) return; leg.done = true; clearTimeout(leg.wt);
     if (B.winner === leg) { endCall(); return; }
     if (leg.released || S.ps !== P || P.batch !== B) return;
     multiDraw(B);
     if (!B.winner && B.legs.every((l) => l.done)) {
-      B.legs.forEach((l) => { if (!l.failed) window.hpDesk.autoLog(l.lead.id, "No answer", {}); });
+      B.legs.forEach((l) => { if (!l.failed && !l.released) multiLog(l); });
       clearTimeout(B.timer); P.batch = null; setTimeout(multiBatch, 500);
     }
   }
@@ -551,6 +607,54 @@
       toast(r.why || "This number can't be called right now"); return false;
     } catch (e) { toast("Couldn't check this number, so the call didn't go through" + (e.message ? ": " + e.message : "")); return false; }
   }
+  // Opens the call record on the server before Telnyx rings (Do Not Call, hours, caller ID). Voicemail detection and the
+  // call log both hang off that record. Demo mode only runs the checks.
+  async function openRecord(lead, ps) {
+    if (S.demo) return (await preCheck(lead)) ? { ok: true } : { ok: false };
+    try {
+      const r = await api("/calls/start", { method: "POST", body: { to: d10(lead.phone), leadId: lead.id, leadName: window.hpDesk.fullName(lead), leadState: lead.state || "", prefer: S.prefs.defaultCallerId || "", ps: !!ps } });
+      if (!r.ok) toast(r.why || "This number can't be called right now");
+      return r;
+    } catch (e) { toast("Couldn't start the call" + (e.message ? ": " + e.message : "")); return { ok: false }; }
+  }
+  // What the lead's phone is doing, from the server. With voicemail detection the browser leg is parked at Telnyx and looks
+  // answered at once, so only the server knows: ringing / voicemail / connected (a person, agent bridged) / ended.
+  async function leadStatus(sid, sdkLiveAt) {
+    let c = null;
+    try { c = (await api("/calls/live?sid=" + encodeURIComponent(sid))).call; } catch {}
+    const st = c?.leadState || "", up = sdkLiveAt ? Date.now() - sdkLiveAt : 0;
+    if (st === "connected") return { st, c };
+    // a call without detection (no parking, or the server never heard of it): the leg's answer is the lead's
+    if (up && ((c?.ccid && !c.amd) || (!c?.ccid && up > 5000))) return { st: "connected", c };
+    return { st: st || "dialing", c };
+  }
+  // How an unanswered call ended, in words for the lead's history ("Rang out", "Voicemail detected", "Busy", ...)
+  async function endedWhy(sid, cancelled) {
+    let c = null;
+    if (sid && !S.demo) for (let i = 0; i < 5; i++) {
+      try { c = (await api("/calls/live?sid=" + encodeURIComponent(sid))).call; } catch {}
+      if (cancelled || !c || c.outcome?.final !== false) break;
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    if (c?.outcome?.kind === "voicemail") return c.outcome;
+    if (cancelled) return { label: "No answer", note: "Agent hung up while ringing" };
+    return c?.outcome?.kind && c.outcome.kind !== "answered" ? c.outcome : { label: "No answer", note: "Rang out" };
+  }
+  const loggedSids = new Set();
+  function firstLog(sid) {
+    if (!sid) return true;
+    if (loggedSids.has(sid) || [...(window.hpDesk?.calls?.values?.() || [])].some((c) => c.hpSid === sid)) return false;
+    loggedSids.add(sid); return true;
+  }
+  // A call nobody answered logs itself (No answer + why) and the session moves on: the agent never has to log those.
+  async function logUnanswered(leadId, sid, cancelled) {
+    const o = await endedWhy(sid, cancelled);
+    if (!firstLog(sid)) return o;
+    const l = window.hpDesk?.leads.get(leadId);
+    toast(`${l ? window.hpDesk.fullName(l) + " · " : ""}${o.note} · logged ${o.label}`);
+    window.hpDesk?.autoLog?.(leadId, o.label, { ...(sid ? { hpSid: sid } : {}), note: o.note });
+    return o;
+  }
   async function dialLead(lead, fromSession) {
     if (window.hpTeam?.can?.("dialer") === false) { window.hpTeam.upgrade("dialer"); return; } // the plan doesn't include the dialer
     if (S.via === "phone") { if (!S.ps) phoneCall(lead); return; }
@@ -559,32 +663,66 @@
     if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Get a number in the <b>Number groups</b> tab (about $1 a month), or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast(S.ready ? "Phone is still connecting…" : "The dialer isn't set up yet"); return; }
     if (!(await micCheck())) return false;
-    if (!(await preCheck(lead))) return false;
+    const tel = S.provider === "telnyx" && !S.demo;
+    const started = tel ? await openRecord(lead, !!S.ps) : { ok: await preCheck(lead) };
+    if (!started.ok) return false;
     note("");
-    const params = { To: d10(lead.phone), LeadId: lead.id, LeadName: window.hpDesk.fullName(lead), LeadState: lead.state || "", CallerId: S.prefs.defaultCallerId || "" };
+    const params = { To: d10(lead.phone), LeadId: lead.id, LeadName: window.hpDesk.fullName(lead), LeadState: lead.state || "", CallerId: started.callerId || S.prefs.defaultCallerId || "" };
     try {
       const call = await S.device.connect({ params });
-      S.call = call; S.callLead = lead.id; S.callSid = null; S.txByLead.set(lead.id, []);
-      renderPhone(); tiles([{ leadId: lead.id, name: params.LeadName, to: params.To, s: "ringing", label: "Calling" }]);
-      call.on("ringing", () => tiles([{ leadId: lead.id, name: params.LeadName, to: params.To, s: "ringing", label: "Ringing" }]));
-      call.on("accept", () => {
-        S.callSid = call.parameters?.CallSid || call.sid; S.sidByLead.set(lead.id, S.callSid);
+      S.call = call; S.callLead = lead.id; S.callSid = started.sid || null; S.txByLead.set(lead.id, []); S.callTalked = false; S.cancelled = false; S.callPhase = "dialing"; S.sdkLive = 0;
+      if (S.callSid) S.sidByLead.set(lead.id, S.callSid);
+      const tile = (s, label) => tiles([{ leadId: lead.id, name: params.LeadName, to: params.To, s, label }]);
+      renderPhone(); tile("ringing", "Calling");
+      // The status follows the lead, not this browser leg (which voicemail detection parks at Telnyx): the server says when
+      // their phone rings and when you're bridged to a person.
+      const ringing = () => { if (S.call !== call || S.callTalked || S.callPhase === "ringing") return; S.callPhase = "ringing"; tile("ringing", "Ringing"); setChip("ready", "Ringing"); };
+      const connected = () => {
+        if (S.call !== call || S.callTalked) return;
+        S.callPhase = "connected"; clearTimeout(S.watchTimer);
+        S.callSid = S.callSid || call.parameters?.CallSid || call.sid; S.sidByLead.set(lead.id, S.callSid);
+        S.callTalked = true; S.justLogged = null; if (S.ps) (S.ps.talked = S.ps.talked || new Set()).add(lead.id); ding();
         window.hpDesk.callStart(lead.id);
-        tiles([{ leadId: lead.id, name: params.LeadName, to: params.To, s: "live", label: "Connected" }]);
+        tile("live", "Connected");
         setChip("live", "On call"); livePoll(); PF.liveAt = Date.now(); if (PF.id === lead.id) renderProfile();
-      });
+        renderPhone();
+      };
+      const watch = async () => {
+        clearTimeout(S.watchTimer);
+        if (S.call !== call || S.callTalked || S.demo || !S.callSid) return;
+        const { st } = await leadStatus(S.callSid, S.sdkLive);
+        if (S.call !== call || S.callTalked) return;
+        if (st === "connected") return connected();
+        if (st === "ringing") ringing();
+        if (st === "voicemail") tile("ringing", "Voicemail detected");
+        S.watchTimer = setTimeout(watch, 600);
+      };
+      call.on("ringing", ringing);
+      call.on("accept", () => { S.sdkLive = Date.now(); if (S.demo || !S.callSid) connected(); else watch(); });
       const end = () => { endCall(); };
       call.on("disconnect", end); call.on("cancel", end); call.on("reject", end);
       call.on("error", (e) => { note(esc(e.message), "warn"); end(); });
-    } catch (e) { toast(e.message); S.call = null; renderPhone(); }
+    } catch (e) { toast(e.message); S.call = null; renderPhone(); return false; }
   }
   function endCall() {
-    const leadId = S.callLead;
+    if (S.hanging) return;
+    S.hanging = true;
+    const leadId = S.callLead, talked = !!S.callTalked, sid = S.callSid || (leadId && S.sidByLead.get(leadId)), cancelled = !!S.cancelled;
+    S.cancelled = false; S.callPhase = null; clearTimeout(S.watchTimer);
     if ($("#hpkpPop")) setTimeout(() => { const p = $("#hpkpPop"); if (p) { S.padTones = ""; p.innerHTML = padHTML(); wirePad(p, () => padPop(false)); } }, 0);
-    S.call = null; S.muted = false; clearTimeout(S.liveTimer);
+    S.call = null; S.callTalked = false; S.muted = false; clearTimeout(S.liveTimer);
     window.hpDesk.callStop();
     renderPhone(); renderFloat(); if (PF.id) renderProfile();
-    if (leadId && S.callSid) { pullLive(S.callSid, leadId, true); startWrap(leadId); }
+    if (leadId && sid) pullLive(sid, leadId, true);
+    const already = S.justLogged === leadId; S.justLogged = null;
+    if (leadId && !already) {
+      if (talked || S.provider !== "telnyx" || S.demo) { if (sid) startWrap(leadId); } // a person answered: log the result (or it's marked Contacted)
+      else logUnanswered(leadId, sid, cancelled).then(() => { // rang out, busy, voicemail, hung up while ringing: logs itself and moves on
+        if (S.ps?.multi && S.phoneLead === leadId && !S.call) { S.phoneLead = null; S.callLead = null; if (S.sound.autoNext !== false) setTimeout(phoneNext, 400); else dock(); }
+        else if (S.ps && S.phoneLead === leadId && !S.call) setTimeout(phoneNext, 400);
+      });
+    }
+    setTimeout(() => { S.hanging = false; }, 900);
   }
   function hangup() {
     if (S.call) { S.call.disconnect(); return; }
@@ -657,7 +795,17 @@
   }
 
   /* ================= power dialing ================= */
-  async function startPower() {
+  function startPower() {
+    if (S.power || S.call) return;
+    const n = campaignQueue().length;
+    deskAsk({
+      title: "Start calling?",
+      body: `<p>You're about to start dialing <b>${n}</b> lead${n === 1 ? "" : "s"} from <b>${esc(listName())}</b>.</p><p class="hpd-sm">Nothing rings until you press Start session.</p>`,
+      ok: "Start session",
+      onOk: () => startPowerGo(),
+    });
+  }
+  async function startPowerGo() {
     if (window.hpTeam?.can?.("dialer") === false) { window.hpTeam.upgrade("dialer"); return; }
     if (!S.demo && !S.numbers.length) { note(`<b>No phone number yet, so the browser line can't call.</b> Get a number in the <b>Number groups</b> tab (about $1 a month), or switch <b>Call with</b> to <b>My phone</b> to call from your own phone now.`, "warn"); toast("Add a number first, or switch to My phone"); return; }
     if (!S.device) { toast("Phone is still connecting…"); return; }
@@ -757,9 +905,9 @@
       if (left <= 0) {
         clearWrap();
         window.hpDesk?.autoLog?.(leadId, "Contacted", {});
-        if (S.ps?.multi && S.phoneLead === leadId && !S.call) { S.phoneLead = null; S.callLead = null; if (S.sound.autoNext !== false) setTimeout(phoneNext, 400); else { toast("Wrap-up finished. Press Skip to dial the next lead."); dock(); } return; }
+        if (S.ps && S.phoneLead === leadId && !S.call) { holdAfter(leadId, "Contacted"); return; }
         const P = S.power;
-        if (P && P.waitingDispo === leadId) { P.waitingDispo = null; setTimeout(nextBatch, 400); }
+        if (P && P.waitingDispo === leadId) { P.waitingDispo = null; holdAfter(leadId, "Contacted"); }
         return;
       }
       note(`<b>Call ended.</b> Log the result (${left}s) or we'll mark Contacted${S.power ? " and keep going" : ""}${S.settings.record ? " · recording and transcript attach automatically" : ""}.`, "");
@@ -779,17 +927,17 @@
   function onDispo(leadId, label, note2) {
     const sid = S.sidByLead.get(leadId);
     if (sid) api("/calls/dispo", { method: "POST", body: { sid, disposition: label, note: note2 || "", leadId } }).catch(() => {});
-    clearWrap();
+    clearWrap(); S.justLogged = leadId;
     const P = S.power;
     if (P && P.waitingDispo === leadId) {
       P.waitingDispo = null;
-      if (P.connected) hangup(); // agent logged while still talking → end that lead and move on
-      setTimeout(nextBatch, 600);
+      if (P.connected) hangup(); // agent logged while still talking → end that lead
+      holdAfter(leadId, label); // ...and wait for Resume / Pause / Stop instead of dialing on by itself
     }
     if (S.call && S.callLead === leadId) S.call.disconnect();
     if ((S.via === "phone" || S.ps) && S.phoneLead === leadId) {
       window.hpDesk.callStop();
-      if (S.ps) setTimeout(phoneNext, 700); else { S.phoneLead = null; S.callLead = null; phoneCard(); }
+      if (S.ps) { if (S.ps.talked?.has(leadId) || (S.via === "phone" && !/^(No answer|Left voicemail|Busy|Bad number)$/.test(label || ""))) holdAfter(leadId, label); else setTimeout(phoneNext, 700); } else { S.phoneLead = null; S.callLead = null; phoneCard(); }
     }
     setTimeout(() => { if (PF.id) renderProfile(); }, 300);
   }
@@ -1356,7 +1504,7 @@
         ${f("hsRamp", "Warm-up days for new numbers", s.rampDays, 'type="number" min="0" max="30"')}
       </div>
       ${c("hsRec", "Record calls (both sides)", s.record)}
-      <p class="hpd-sm" style="margin:6px 0">Recording notice: when a call is recorded, the lead hears "This call may be recorded" first. This is always on.</p>
+      <p class="hpd-sm" style="margin:6px 0">Recording: calls are still recorded and saved for playback. No "this call may be recorded" announcement is played to the lead.</p>
       ${c("hsTx", "Live transcription", s.transcribe)}
       <label class="hpd-f" style="display:block;margin:6px 0"><span class="hpd-sm">Transcription accuracy</span><select id="hsTxE" style="width:100%;margin-top:4px">${[["auto", "Best (Deepgram Nova-3 with insurance words; falls back automatically)"], ["google", "Google phone-call model"], ["basic", "Basic (Google standard)"]].map(([v, n]) => `<option value="${v}" ${(s.transcribeEngine || "auto") === v ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       ${c("hsLp", "Local presence (match caller ID to the lead's area code)", s.localPresence)}
@@ -1535,7 +1683,7 @@
   const mmss = (ms) => { const t = Math.max(0, Math.floor(ms / 1000)); return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`; };
   function dockLead() {
     const D = window.hpDesk, P = S.power;
-    const id = S.callLead || S.phoneLead || P?.connectedLead || (S.lastTiles || []).find((t) => t.s === "live")?.leadId || (S.lastTiles || [])[0]?.leadId;
+    const id = (S.ps || P)?.hold || S.callLead || S.phoneLead || P?.connectedLead || (S.lastTiles || []).find((t) => t.s === "live")?.leadId || (S.lastTiles || [])[0]?.leadId;
     return id ? D.leads.get(id) : null;
   }
   const addrOf = (l) => [l.address, [l.city, [l.state, l.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join(", ");
@@ -1608,7 +1756,7 @@
   }
   function consoleLegs() {
     const D = window.hpDesk, B = S.ps?.batch;
-    if (B && !B.winner) return B.legs.map((l) => ({ lead: l.lead, name: l.name, to: l.to, st: l.done ? "done" : l.ringing ? "ring" : "dial", label: l.done ? "No answer" : l.ringing ? "Ringing" : "Dialing", t0: l.t0, released: l.released }));
+    if (B && !B.winner) return B.legs.map((l) => ({ lead: l.lead, name: l.name, to: l.to, st: l.done ? "done" : l.ringing ? "ring" : "dial", label: l.vm ? "Voicemail" : l.done ? "No answer" : l.ringing ? "Ringing" : "Dialing", t0: l.t0, released: l.released }));
     return (S.lastTiles || []).map((t) => ({ lead: t.leadId ? D.leads.get(t.leadId) : null, name: t.name, to: t.to, st: t.s === "live" ? "live" : t.s === "done" ? "done" : "ring", label: t.label || "Ringing", t0: S.ringAt || Date.now() }));
   }
   function dock() {
@@ -1628,9 +1776,9 @@
       f = document.createElement("div"); f.id = "hpdDock"; f.className = "hpd hpdk"; f.setAttribute("role", "region"); f.setAttribute("aria-label", "Call controls"); document.body.append(f); wireDock(f);
       const pos = lsGet("hpd.dockPos", null); if (pos) { f.style.left = Math.max(4, Math.min(pos[0], innerWidth - 340)) + "px"; f.style.top = Math.max(4, Math.min(pos[1], innerHeight - 160)) + "px"; f.style.right = "auto"; f.style.bottom = "auto"; }
     }
-    const l = dockLead(), live = tiles.some((t) => t.s === "live") || (S.call && S.callSid);
+    const l = dockLead(), live = tiles.some((t) => t.s === "live") || (S.call && S.callSid && S.callTalked);
     const legsNow = consoleLegs(), ringingNow = !live && !S.phoneLead && legsNow.some((x) => x.st === "ring" || x.st === "dial");
-    ringSync(ringingNow && !!(S.ps?.batch || S.power)); // a plain click-to-call already plays the carrier's own ringback
+    ringSync(ringingNow && !!(S.ps?.batch || S.power || (S.call && !S.callTalked))); // calls are parked for voicemail detection, so the carrier's ringback doesn't reach you: this is the ring you hear
     if (live && !S.dockLiveAt) S.dockLiveAt = Date.now(); if (!live) S.dockLiveAt = 0;
     const cell = S.via === "phone";
     const state = cell ? (S.phoneLead ? "On your phone" : "Ready") : live ? "Connected" : ringingNow ? (legsNow.length > 1 ? `Ringing ${legsNow.length} lines` : "Ringing") : P ? (P.paused ? "Paused" : `Dialing ${P.lines || 1} line${(P.lines || 1) > 1 ? "s" : ""}`) : S.call ? "Ringing" : S.ps ? "Ready for next" : "Ready";
@@ -1654,11 +1802,12 @@
         <span class="hpdk-state" data-tone="${tone}"><i></i>${esc(state)}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>
         ${prog ? `<span class="hpdk-prog" title="${prog}">${prog}</span>` : ""}
         ${multi ? `<span class="hpdk-blines">${tiles.map((t) => `<button type="button" class="hpdk-bline" data-s="${esc(t.s)}" data-lead="${esc(t.leadId || "")}" title="${esc(t.label)}"><i></i>${esc(t.name || fmt(t.to))}</button>`).join("")}</span>` : ""}
-        ${two ? `<span class="hpdk-bnote" title="${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Say &quot;this call may be recorded&quot; if the notice is off.">${esc(String(l.state).toUpperCase())} · two-party consent</span>` : ""}
+        ${two ? `<span class="hpdk-bnote" title="${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Tell the lead the call is recorded.">${esc(String(l.state).toUpperCase())} · two-party consent</span>` : ""}
         <span class="hpdk-sp"></span>
         ${cell ? "" : `<button type="button" class="hpdk-bb ${S.muted ? "on" : ""}" id="hpdkMute" ${onCall ? "" : "disabled"} title="${S.muted ? "Unmute" : "Mute"} (Alt+M)">${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button>
         <button type="button" class="hpdk-bb ${S.dockPad ? "on" : ""}" id="hpdkPadBtn" ${onCall ? "" : "disabled"} title="Keypad">${I.pad}<span>Keypad</span></button>
         <button type="button" class="hpdk-bb" id="hpdkVm" ${onCall ? "" : "disabled"} title="Drop your voicemail (Alt+V)">${I.vm}<span>Drop VM</span></button>`}
+        ${(S.ps || P)?.hold ? `<button type="button" class="hpdk-bb on" data-next="go" title="Dial the next lead">${I.play}<span>Resume dialing</span></button>${(S.ps || P).paused ? "" : `<button type="button" class="hpdk-bb" data-next="pause">${I.pause}<span>Pause</span></button>`}` : ""}
         ${S.ps ? `<button type="button" class="hpdk-bb" id="hpdkSkip" title="Skip to the next lead">${I.skip}<span>Skip</span></button>` : P ? `<button type="button" class="hpdk-bb ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? I.play : I.pause}<span>${P.paused ? "Resume" : "Pause"}</span></button>` : ""}
         ${onCall && !cell ? `<button type="button" class="hpdk-bend" id="hpdkHang" title="End call (Alt+H)">${I.phone}<span>End call</span></button>` : cell && l && !S.phoneLead ? `<button type="button" class="hpdk-bcall" id="hpdkTel">${I.phone}<span>Call on my phone</span></button>` : ""}
         ${S.ps || P ? `<button type="button" class="hpdk-link" id="hpdkStop">End session</button>` : !onCall && S.phoneLead ? `<button type="button" class="hpdk-link" id="hpdkDone">Close</button>` : ""}
@@ -1698,15 +1847,15 @@
             <span class="hpdl-bar"><u style="animation-delay:-${((Date.now() - g.t0) / 1000).toFixed(1)}s"></u></span></button>`;
         };
         f.innerHTML = `<div class="hpdl-h"><span class="hpdl-bell" aria-hidden="true">${I.phone}</span><b>${n > 1 ? `Ringing ${n} lines` : "Ringing…"}</b><span>${n > 1 ? "First to pick up comes to you" : ""}</span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${S.ps ? `<button type="button" class="hpdl-b" id="hpdkSkip">Skip${n > 1 ? " these" : ""}</button>` : P ? `<button type="button" class="hpdl-b ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? "Resume" : "Pause"}</button>` : ""}${stopBtn}${minB}</div><div class="hpdl-g" data-n="${n}">${legs.map(card).join("")}</div>`;
-      } else if (!onCall && l && (S.phoneLead || S.callLead || P?.waitingDispo)) {
-        // the call is over: just the result buttons, kept slim
-        const noteV = S.dockNoteFor === l.id ? S.dockNote || "" : "";
+      } else if (!onCall && l && (S.phoneLead || S.callLead || P?.waitingDispo || (S.ps || P)?.hold)) {
+        // the call is over: just the result buttons, kept slim. Once it's logged in a session: Resume / Pause / Stop.
+        const noteV = S.dockNoteFor === l.id ? S.dockNote || "" : "", holdNow = (S.ps || P)?.hold === l.id;
         S.consoleLead = l.id;
         f.innerHTML = `<div class="hpdl-h"><span class="hpdk-state" data-tone="idle"><i></i>Call ended</span><b>${esc(D.fullName(l))}</b><span class="num hpdl-prog">${esc(fmt(l.phone))}</span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span><button type="button" class="hpdl-b" id="hpdkOpen">Info</button>${S.ps ? `<button type="button" class="hpdl-b" id="hpdkSkip">Skip</button>` : P ? `<button type="button" class="hpdl-b ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? "Resume" : "Pause"}</button>` : ""}${stopBtn}${minB}</div>
-          <div class="hpdl-end"><textarea id="hpdlNote" rows="1" placeholder="Note for this call (optional)">${esc(noteV)}</textarea>
+          <div class="hpdl-end">${holdNow ? nextRowHTML(S.ps || P) : `<textarea id="hpdlNote" rows="1" placeholder="Note for this call (optional)">${esc(noteV)}</textarea>
             <div class="hpdk-dz">${DZ.map(([k, t]) => `<button type="button" class="hpdk-chip k-${k}" data-dz="${k}" ${S.dockPend === k ? 'aria-pressed="true"' : ""}>${t}</button>`).join("")}</div>
             ${S.dockPend ? `<div class="hpdl-when"><span>${S.dockPend === "appt" ? "Appointment" : "Call back"} time</span><input type="datetime-local" id="hpdlAt" value="${esc(S.dockAt || "")}"><button type="button" class="hpdl-b on" id="hpdlSave">Save</button></div>` : ""}
-            ${!S.call && !P ? `<button type="button" class="hpdl-b" id="hpdkRedial">Call again</button>` : ""}</div>`;
+            ${!S.call && !P ? `<button type="button" class="hpdl-b" id="hpdkRedial">Call again</button>` : ""}`}</div>`;
         window.hpCopilot?.refresh?.();
       } else {
         const keepScroll = $("#hpdlCopilot .hpc-body", f)?.scrollTop || 0;
@@ -1717,7 +1866,7 @@
         <div class="hpdl-live">
           <div class="hpdl-who hpdl-c" data-s="live" data-lead="${esc(l?.id || "")}" title="Click for client info"><span class="hpdk-av" data-tone="${tone}">${esc(ini)}</span><b class="hpdl-nm">${l ? esc(D.fullName(l)) : "—"}</b><span class="hpdl-ph num">${l ? esc(fmt(l.phone)) : ""}</span>
             ${l ? `<span class="hpdl-meta">${esc(l.state || "")}${clock ? ` · ${esc(clock.txt)} local` : ""}${l.age ? ` · Age ${esc(l.age)}` : ""}${l.product ? ` · ${esc(l.product)}` : ""}</span>${idLine(l) ? `<span class="hpdl-id">${idLine(l)}</span>` : ""}<span class="hpdl-hist">${hist} · <em class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</em></span>` : ""}
-            ${two ? `<span class="hpdl-warn">${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Say "this call may be recorded" if the notice is off.</span>` : ""}
+            ${two ? `<span class="hpdl-warn">${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Tell the lead the call is recorded.</span>` : ""}
             ${window.hpPop ? window.hpPop.dockRow() : ""}</div>
           <div class="hpdl-mid">
             <div class="hpdk-ctl" ${onCall ? "" : "hidden"}>${cell ? "" : `<button type="button" class="hpdk-rb ${S.muted ? "on" : ""}" id="hpdkMute" ${onCall ? "" : "disabled"}>${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button>
@@ -1725,7 +1874,7 @@
               <button type="button" class="hpdk-rb" id="hpdkVm" ${onCall ? "" : "disabled"}>${I.vm}<span>Drop VM</span></button>`}</div>
             ${S.dockPad && onCall && !cell ? `<div class="hpdk-pad">${["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((k) => `<button type="button" data-k="${k}">${k}</button>`).join("")}</div>` : ""}
             ${onCall && !cell ? `<button type="button" class="hpdk-end" id="hpdkHang">${I.phone}<span>End call</span></button>` : cell && l ? `<button type="button" class="hpdk-call" id="hpdkTel">${I.phone}<span>Call on my phone</span></button>` : l && !S.call && !P ? `<button type="button" class="hpdk-call" id="hpdkRedial">${I.phone}<span>Call again</span></button>` : ""}
-            ${onCall ? "" : `<div class="hpdk-dz-h">Log the call${S.ps || P ? " · next lead dials after" : ""}</div>
+            ${onCall ? "" : (S.ps || P)?.hold === l?.id ? nextRowHTML(S.ps || P) : `<div class="hpdk-dz-h">Log the call${S.ps || P ? " · next lead dials after" : ""}</div>
             <textarea id="hpdlNote" rows="2" placeholder="Note for this call (optional)">${esc(noteV)}</textarea>
             <div class="hpdk-dz">${DZ.map(([k, t]) => `<button type="button" class="hpdk-chip k-${k}" data-dz="${k}" ${S.dockPend === k ? 'aria-pressed="true"' : ""} ${l ? "" : "disabled"}>${t}</button>`).join("")}</div>
             ${S.dockPend ? `<div class="hpdl-when"><span>${S.dockPend === "appt" ? "Appointment" : "Call back"} time</span><input type="datetime-local" id="hpdlAt" value="${esc(S.dockAt || "")}"><button type="button" class="hpdl-b on" id="hpdlSave">Save</button></div>` : ""}`}
@@ -1744,6 +1893,7 @@
         S.dockNote = ""; S.dockNoteFor = ""; S.dockAt = ""; S.dockPend = null; toast(`${window.hpDesk.fullName(ld)}: ${lab}`); dock();
       };
       $("#hpdlNote", f)?.addEventListener("input", (e) => { S.dockNote = e.target.value; S.dockNoteFor = l?.id || ""; });
+      $$("[data-next]", f).forEach((b) => (b.onclick = () => (b.dataset.next === "go" ? sessGo(true) : b.dataset.next === "pause" ? sessGo(false) : (S.ps ? phoneEnd() : stopPower()))));
       $("#hpdlAt", f)?.addEventListener("input", (e) => { S.dockAt = e.target.value; });
       $("#hpdlSave", f)?.addEventListener("click", () => { if (l && S.dockAt) doDispo(l, S.dockPend); else toast("Pick a date and time first"); });
       $$(".hpdk-chip", f).forEach((b) => (b.onclick = () => {
@@ -2106,6 +2256,7 @@
   function sourceLeads(src = S.src) {
     const all = [...(window.hpDesk?.leads.values() || [])];
     if (src.startsWith("c:")) { const c = S.camps.find((x) => x.id === src.slice(2)); const set = new Set(c?.ids || []); return all.filter((l) => set.has(l.id)); }
+    if (src.startsWith("l:")) { const D = window.hpDesk, id = src.slice(2); return D?.lists?.get(id) && D.inList ? all.filter((l) => D.inList(id, l)) : []; } // a hand-picked list or an import's smart list
     if (src.startsWith("s:")) return all.filter((l) => (l.source || "No campaign") === src.slice(2));
     if (src.startsWith("p:")) return all.filter((l) => (l.stage || "new") === src.slice(2)); // a pipeline column
     return all;
@@ -2120,8 +2271,9 @@
   }
   const PIPE = { new: "New", contacted: "Contacted", appointment: "Appointment", application: "Application", sold: "Sold", lost: "Not interested" };
   const pipeName = (id) => (window.hpDesk?.stageName ? window.hpDesk.stageName(id) : PIPE[id]) || id;
-  const srcName = (src = S.src) => src === "all" ? "All my leads" : src.startsWith("c:") ? (S.camps.find((c) => c.id === src.slice(2))?.name || "Campaign") : src.startsWith("p:") ? "Pipeline: " + pipeName(src.slice(2)) : src.slice(2);
+  const srcName = (src = S.src) => src === "all" ? "All my leads" : src.startsWith("c:") ? (S.camps.find((c) => c.id === src.slice(2))?.name || "Campaign") : src.startsWith("p:") ? "Pipeline: " + pipeName(src.slice(2)) : src.startsWith("l:") ? (window.hpDesk?.lists?.get(src.slice(2))?.name || "List") : src.slice(2);
   const filterName = (f = S.filter) => (FILTERS.find((x) => x[0] === f) || FILTERS[0])[1];
+  const myLists = () => [...(window.hpDesk?.lists?.values() || [])].filter((x) => window.hpDesk.isPickedList?.(x)).sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
   const listName = () => `${srcName()} · ${filterName()}`;
   const listLeads = (k) => applyFilter(sourceLeads(), k); // kept for older callers
   function setSrc(v) { S.src = v; lsSet("hpd.src", v); }
@@ -2305,6 +2457,7 @@
     const estMin = (x) => Math.round(tx ? (x.talkSec || 0) / 60 + (x.answered || 0) * 0.5 : ((x.talkSec || 0) + (x.dials || 0) * 25) / 60);
     const costOf = (x) => tx ? estMin(x) * 0.007 + (S.settings.transcribe === false ? 0 : ((x.talkSec || 0) / 60) * 0.017) : estMin(x) * 0.018;
     const cost = (x) => "$" + costOf(x).toFixed(2);
+    const board = D.scoreboard?.() || null, moneyOf = (n) => (D.money ? D.money(n, 0) : "$" + Math.round(n).toLocaleString());
     const soldToday = [...D.leads.values()].filter((l) => l.stage === "sold" && (l.updatedAt || 0) >= new Date().setHours(0, 0, 0, 0)).length;
     const outside = applyFilter(sourceLeads(), S.filter === "ready" ? "everyone" : S.filter).filter((l) => !leadClock(l).ok).length;
     const base = sourceLeads(); const fCount = Object.fromEntries(FILTERS.map(([k]) => [k, applyFilter(base, k).length]));
@@ -2340,7 +2493,7 @@
       <div class="hph-ready">
         <div><h3>${S.power ? (S.power.paused ? "Paused" : "Dialing") : "Ready to dial"}</h3><p class="hpd-sm">${q.length.toLocaleString()} lead${q.length === 1 ? "" : "s"} · ${lines} line${lines > 1 ? "s" : ""} · no time limit · calls as long as needed${outside ? ` · ${outside} outside calling hours${S.demo ? " (preview dials them anyway)" : ""}` : ""}</p></div>
         <div class="hph-ctl">
-          <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}<optgroup label="Pipeline">${["new", "contacted", "appointment", "application"].map((id) => `<option value="p:${id}" ${S.src === "p:" + id ? "selected" : ""}>${esc(pipeName(id))} (${[...D.leads.values()].filter((l) => (l.stage || "new") === id && dialable(l)).length})</option>`).join("")}</optgroup>${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
+          <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}<optgroup label="Pipeline">${["new", "contacted", "appointment", "application"].map((id) => `<option value="p:${id}" ${S.src === "p:" + id ? "selected" : ""}>${esc(pipeName(id))} (${[...D.leads.values()].filter((l) => (l.stage || "new") === id && dialable(l)).length})</option>`).join("")}</optgroup>${myLists().length ? `<optgroup label="My lists">${myLists().map((x) => `<option value="l:${esc(x.id)}" ${S.src === "l:" + x.id ? "selected" : ""}>${esc(x.name)} (${D.listCount ? D.listCount(x) : 0})</option>`).join("")}</optgroup>` : ""}${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
           <label class="hph-sel"><span>Who to call</span><select id="hphFilter" ${S.power ? "disabled" : ""}>${FILTERS.map(([k, n]) => `<option value="${k}" ${S.filter === k ? "selected" : ""}>${n} (${fCount[k]})</option>`).join("")}</select></label>
           ${oneLine ? `<p class="hpd-sm" style="margin:0;align-self:center">Your phone is one line at a time.</p>` : `<div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power || S.ps ? "disabled" : ""}>${n}</button>`).join("")}</div>`}
           ${psFlow ? (S.ps ? `<button type="button" class="btn" id="hphPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hphPsEnd">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphPsGo" ${q.length ? "" : "disabled"}>${I.phone} Start calling</button>`) : S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
@@ -2354,7 +2507,8 @@
           <div style="--c:#FFB547"><b class="num">${t.appts || 0}</b><span>Appointments</span></div>
           <div style="--c:#FF9E3D"><b class="num">${soldToday}</b><span>Sold</span></div>
           <div style="--c:#FF4FA3"><b class="num">${pct(t.answered || 0, t.dials || 0)}%</b><span>Answered</span></div>
-        </div></div>
+        </div>
+        ${board ? `<div class="hph-score" aria-label="Scoreboard"><div><span class="label">Sold this month</span><b class="num gold">${board.soldM}</b></div><div><span class="label">AP this month</span><b class="num gold">${moneyOf(board.apM)}</b></div><div><span class="label">Sold (your book)</span><b class="num">${board.sold}</b></div><div><span class="label">Submitted AP</span><b class="num">${moneyOf(board.submittedAp)}</b></div></div>` : ""}</div>
       <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Campaigns</h3><button type="button" class="hpf-link" id="hphAll">New campaign</button></div>
         ${S.camps.length ? S.camps.map((c) => { const s = campStats(c); return `<div class="hph-camp ${S.src === "c:" + c.id ? "on" : ""}"><button type="button" class="hph-campname" data-usec="${esc(c.id)}"><b>${esc(c.name)} · ${c.ids.length.toLocaleString()} leads</b><span class="${c.paused ? "p" : "a"}">${c.paused ? "Paused" : "Active"}</span></button><div class="hpd-meter"><i style="width:${pct(s.dialed, c.ids.length)}%"></i></div><span class="hph-cs"><em style="color:#8FB8FF">${s.dialed} of ${c.ids.length} dialed</em><em style="color:#3BD38B">${s.convo} conversations</em><em style="color:#B58CFF">${dur(s.talk)} talk</em></span><button type="button" class="hph-ic" data-cpause="${esc(c.id)}" aria-label="${c.paused ? "Resume" : "Pause"} campaign" title="${c.paused ? "Resume" : "Pause"}">${c.paused ? I.play : I.pause}</button><button type="button" class="hph-ic" data-cdel="${esc(c.id)}" aria-label="Delete campaign" title="Delete campaign (leads stay)">✕</button></div>`; }).join("") : `<p class="hpd-sm" style="margin:0">No campaigns yet. Press <b>Campaigns</b> to pick who to call and save them as a campaign.</p>`}
       </div>
@@ -2680,7 +2834,7 @@
     else toast(`Calling list set to ${pipeName(stage)}.`);
     return n;
   }
-  window.hpDialer = { dialPipeline, get consoleLead() { return S.consoleLead || null; }, recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, queue: () => campaignQueue(), sendSms: (to, body, leadId) => api("/sms/send", { method: "POST", body: { to, body, leadId } }), refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
+  window.hpDialer = { get talking() { return !!(S.call && S.callTalked); }, useList: ({ src, filter } = {}) => { if (S.ps || S.power) return false; if (src) setSrc(src); if (filter) setFilter(filter); if ($("#hpdHome") && !$("#hpdHome").hidden) renderHome(); renderPhone(); return true; }, get session() { const P = S.ps; return P ? { at: P.i, total: P.ids.length, lead: P.ids[P.i] || null, paused: !!P.paused, hold: P.hold || null, onCall: !!S.call } : null; }, dialPipeline, get consoleLead() { return S.consoleLead || null; }, recordConsent, get callSid() { return S.callSid || null; }, get liveLead() { return S.call ? S.callLead : (S.power?.connected ? S.power.connectedLead : null); }, get settings() { return S.settings || {}; }, get profileId() { return PF.id; }, openProfile: (id) => openProfile(id), get ready() { return S.via === "phone" || (!!S.device && (S.ready || S.demo)); }, dialLead, onDispo, meta, queue: () => campaignQueue(), sendSms: (to, body, leadId) => api("/sms/send", { method: "POST", body: { to, body, leadId } }), refresh: () => renderPhone(), get busy() { return !!(S.call || S.power || (S.via === "phone" && S.phoneLead && !S.ps)); } };
   window.addEventListener("hp:leadchange", () => { if (!S.call && !S.power) renderActions(); if (!$("#hpdHome")?.hidden) renderHome(); });
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();

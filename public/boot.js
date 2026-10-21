@@ -116,11 +116,52 @@
   setInterval(() => { if (visible() && ME) call("/api/room/presence", { method: "POST", body: { status: "Online", at: Date.now() } }).catch(() => {}); }, 60000);
 
   /* ---------- Highpoint Bot ---------- */
+  function stripThinkLive(s) {
+    return String(s || "").replace(/<(?:think|thought|reasoning)>[\s\S]*?<\/(?:think|thought|reasoning)>/gi, "").replace(/<(?:think|thought|reasoning)>[\s\S]*$/i, "").trim();
+  }
+  async function readAi(r, onText) {
+    const ct = r.headers.get("content-type") || "";
+    if (!/text\/event-stream|ndjson/i.test(ct)) {
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw Object.assign(new Error(j.error || "Assistant unavailable"), { code: j.code || (r.status === 429 ? "rate_limited" : "error") });
+      const text = String(j.text || "");
+      onText?.(text);
+      return text;
+    }
+    if (!r.ok || !r.body) {
+      const j = await r.json().catch(() => ({}));
+      throw Object.assign(new Error(j.error || "Assistant unavailable"), { code: j.code || (r.status === 429 ? "rate_limited" : "error") });
+    }
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = "", text = "";
+    const take = (piece) => {
+      const next = String(piece || "");
+      if (!next) return;
+      text = text && next.startsWith(text) ? next : text + next;
+      onText?.(stripThinkLive(text));
+    };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop() || "";
+      for (const line of lines) {
+        const raw = line.replace(/^data:\s*/, "").trim();
+        if (!raw || raw === "[DONE]") continue;
+        try {
+          const j = JSON.parse(raw);
+          take(j.response || j.message?.content || j.choices?.[0]?.delta?.content || "");
+        } catch { if (raw && raw[0] !== "{") take(raw); }
+      }
+    }
+    return stripThinkLive(text);
+  }
   async function sample(turns, opts = {}) {
     const tools = Array.isArray(opts.tools) ? opts.tools : [];
     const toolHint = tools.length
       ? `\n\nYou can use tools. To call one, reply with JSON only in this shape: {"tool":"<name>","args":{...}}. Available tools:\n`
-        + tools.map((t) => `- ${t.name}: ${t.description} args=${JSON.stringify(t.inputSchema || {})}`).join("\n")
+        + tools.map((t) => `- ${t.name}: ${t.description}`).join("\n")
         + `\nAfter you have the results you need, answer the agent in plain language. Do not mention the JSON format.`
       : "";
     const system = [opts.system, toolHint].filter(Boolean).join("\n");
@@ -138,17 +179,16 @@
     };
     try {
       for (let i = 0; i < 5; i++) {
-        const r = await fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: msgs, system, mode: opts.mode }), signal: opts.signal });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw Object.assign(new Error(j.error || "Assistant unavailable"), { code: j.code || (r.status === 429 ? "rate_limited" : "error") });
-        const call = parseTool(j.text);
-        if (!call) { opts.onText?.({ text: j.text }); return { text: j.text }; }
+        const r = await fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify({ messages: msgs, system, mode: opts.mode, product: opts.product, stream: true }), signal: opts.signal });
+        const text = await readAi(r, (t) => opts.onText?.({ text: t }));
+        const call = parseTool(text);
+        if (!call) return { text };
         const tool = tools.find((t) => t.name === call.name);
         opts.onText?.({ text: `Using ${call.name}…` });
         let result;
         try { result = await tool.execute(call.args || {}, { signal: opts.signal }); }
         catch (err) { result = { error: err.message || String(err) }; }
-        msgs = [...msgs, { role: "assistant", content: String(j.text || "") }, { role: "user", content: `Tool ${call.name} result:\n${JSON.stringify(result).slice(0, 12000)}` }];
+        msgs = [...msgs, { role: "assistant", content: String(text || "") }, { role: "user", content: `Tool ${call.name} result:\n${JSON.stringify(result).slice(0, 8000)}` }];
       }
       throw Object.assign(new Error("The assistant used too many tools on that question. Ask again more specifically."), { code: "error" });
     } catch (e) { if (e.name === "AbortError") throw Object.assign(new Error("Stopped"), { code: "cancelled", text: "" }); throw e; }
@@ -399,8 +439,8 @@ ${HERO}
     setDeskAvailable(true);
     account(u);
     call("/api/room/presence", { method: "POST", body: { status: "Online", at: Date.now() } }).catch(() => {});
-    // characters load right after sign-in (not on the sign-in screen), then the desk, in order
-    for (const src of ["/hp-avatar.js", "/hp-rates.js", "/hp-est.js", "/hp-grid.js", "/hp-drugs.js", "/hp-fex-script.js", "/hp-myscripts.js", "/desk-app.js", "/hp-pwa.js", "/hp-monitor.js", "/hp-pop.js"]) { if (src === "/hp-avatar.js" && window.hpAvatar) continue; const s = document.createElement("script"); s.src = src; s.async = false; document.body.append(s); }
+    // characters load right after sign-in (not on the sign-in screen), then the desk. Quote tables, FEX and Whisper wait until those pages run.
+    for (const src of ["/hp-avatar.js", "/hp-quote-facts.js", "/hp-lists.js", "/hp-myscripts.js", "/desk-app.js", "/hp-pwa.js", "/hp-monitor.js", "/hp-pop.js"]) { if (src === "/hp-avatar.js" && window.hpAvatar) continue; const s = document.createElement("script"); s.src = src; s.async = false; document.body.append(s); }
   }
 
   async function boot() {

@@ -40,11 +40,102 @@ export async function docsRoute(req, parts) {
     if (col === "leads" || col === "appts") { try { const fu = await import("./lib/followups.mjs"); if (col === "leads") await fu.onLeadSaved(user, id, prev, next); else await fu.onApptSaved(user, id, next); } catch (e) { console.error("follow-ups", e); } }
     return json({ ok: true });
   }
+  if (req.method === "POST" && col === "leads" && id === "bulk-delete") return bulkDeleteLeads(req, user);
+  if (req.method === "POST" && col === "lists" && id === "members") return listMembers(req, user);
   if (req.method === "DELETE") {
+    if (col === "leads") { await dropLeads(scope, [id]); return json({ ok: true }); }
     await D1().prepare("DELETE FROM docs WHERE scope=?1 AND col=?2 AND id=?3").bind(scope, col, id).run();
     await bump(scope, col); return json({ ok: true });
   }
   return json({ error: "Method not allowed" }, 405);
+}
+
+// Deletes leads and their call logs. D1 allows 100 bound values per query, so ids go 50 at a time.
+const DROP_CHUNK = 50, BULK_MAX = 5000;
+async function dropLeads(scope, ids) {
+  let leads = 0, calls = 0;
+  for (let i = 0; i < ids.length; i += DROP_CHUNK) {
+    const part = ids.slice(i, i + DROP_CHUNK), marks = part.map((_, j) => "?" + (j + 2)).join(",");
+    const [a, c] = await D1().batch([
+      D1().prepare(`DELETE FROM docs WHERE scope=?1 AND col='leads' AND id IN (${marks})`).bind(scope, ...part),
+      D1().prepare(`DELETE FROM docs WHERE scope=?1 AND col='calls' AND json_extract(data,'$.leadId') IN (${marks})`).bind(scope, ...part),
+    ]);
+    leads += a?.meta?.changes || 0; calls += c?.meta?.changes || 0;
+  }
+  await bump(scope, "leads"); await bump(scope, "calls");
+  await pruneLists(scope, ids);
+  return { leads, calls };
+}
+
+// Hand-picked lists ("My lists") keep lead ids, so deleted leads are taken out of them.
+async function pruneLists(scope, ids) {
+  if (!ids.length) return;
+  const gone = new Set(ids);
+  const r = await D1().prepare("SELECT id, data FROM docs WHERE scope=?1 AND col='lists' AND json_extract(data,'$.kind')='picked'").bind(scope).all();
+  const now = Date.now(), stmts = [];
+  for (const row of r.results || []) {
+    const d = JSON.parse(row.data), before = Array.isArray(d.ids) ? d.ids : [];
+    const kept = before.filter((x) => !gone.has(x));
+    if (kept.length !== before.length) stmts.push(D1().prepare("UPDATE docs SET data=?3, updated=?4 WHERE scope=?1 AND col='lists' AND id=?2").bind(scope, row.id, JSON.stringify({ ...d, ids: kept, updatedAt: now }), now));
+  }
+  if (stmts.length) { await D1().batch(stmts); await bump(scope, "lists"); }
+}
+
+// POST /api/docs/lists/members  {listId | name, add?:[ids], remove?:[ids]}: adds or removes leads on a hand-picked list
+// in one write (a new list is created when only a name is given).
+const LIST_MAX = 10000;
+async function listMembers(req, user) {
+  const b = await req.json().catch(() => ({}));
+  const clean = (a) => (Array.isArray(a) ? [...new Set(a.filter((x) => typeof x === "string" && x && x.length <= 120))] : []);
+  const add = clean(b?.add), remove = new Set(clean(b?.remove));
+  const name = typeof b?.name === "string" ? b.name.trim().slice(0, 60) : "";
+  let listId = typeof b?.listId === "string" && b.listId.length <= 120 ? b.listId : "";
+  if (add.length > LIST_MAX || remove.size > LIST_MAX) return json({ error: `A list holds up to ${LIST_MAX.toLocaleString()} leads.` }, 413);
+  let cur = null;
+  if (listId) {
+    const r = await D1().prepare("SELECT data FROM docs WHERE scope=?1 AND col='lists' AND id=?2").bind(user.id, listId).first();
+    if (!r) return json({ error: "That list is gone. Pick another one." }, 404);
+    cur = JSON.parse(r.data);
+    if (cur.kind !== "picked") return json({ error: "Imports fill themselves. Add leads to one of My lists instead." }, 400);
+  } else {
+    if (!name) return json({ error: "Name the new list." }, 400);
+    listId = "pl" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    cur = { name, kind: "picked", ids: [], createdAt: Date.now() };
+  }
+  const ids = Array.isArray(cur.ids) ? cur.ids.filter((x) => !remove.has(x)) : [];
+  const removed = (cur.ids?.length || 0) - ids.length, have = new Set(ids);
+  let added = 0, already = 0, overCap = 0;
+  for (const id of add) {
+    if (have.has(id)) { already++; continue; }
+    if (ids.length >= LIST_MAX) { overCap++; continue; }
+    ids.push(id); have.add(id); added++;
+  }
+  const now = Date.now();
+  await D1().prepare("INSERT OR REPLACE INTO docs (scope, col, id, data, updated) VALUES (?1, 'lists', ?2, ?3, ?4)").bind(user.id, listId, JSON.stringify({ ...cur, ids, updatedAt: now }), now).run();
+  await bump(user.id, "lists");
+  return json({ ok: true, id: listId, name: cur.name, added, already, removed, overCap, total: ids.length });
+}
+
+// POST /api/docs/leads/bulk-delete  {ids:[...]} deletes those leads; {batchId} deletes a whole import and its smart list
+async function bulkDeleteLeads(req, user) {
+  const b = await req.json().catch(() => ({}));
+  const batchId = typeof b?.batchId === "string" && b.batchId.length <= 120 ? b.batchId : "";
+  let ids = Array.isArray(b?.ids) ? [...new Set(b.ids.filter((x) => typeof x === "string" && x && x.length <= 120))] : [];
+  if (!ids.length && !batchId) return json({ error: "Pick at least one lead to delete." }, 400);
+  if (ids.length > BULK_MAX) return json({ error: `You can delete up to ${BULK_MAX.toLocaleString()} leads at a time.` }, 413);
+  if (batchId) {
+    const r = await D1().prepare("SELECT id FROM docs WHERE scope=?1 AND col='leads' AND json_extract(data,'$.batchId')=?2").bind(user.id, batchId).all();
+    ids = [...new Set([...ids, ...(r.results || []).map((x) => x.id)])];
+  }
+  const out = await dropLeads(user.id, ids);
+  if (batchId) {
+    await D1().batch([
+      D1().prepare("DELETE FROM docs WHERE scope=?1 AND col='imports' AND id=?2").bind(user.id, batchId),
+      D1().prepare("DELETE FROM docs WHERE scope=?1 AND col='lists' AND json_extract(data,'$.filter.batchId')=?2").bind(user.id, batchId),
+    ]);
+    await bump(user.id, "imports"); await bump(user.id, "lists");
+  }
+  return json({ ok: true, deleted: out.leads, calls: out.calls });
 }
 
 // One request to check many collections: GET /api/docs/_sync?c=leads:3,appts:0
@@ -72,6 +163,15 @@ export async function docsBatch(req) {
     : D1().prepare("INSERT OR REPLACE INTO docs (scope, col, id, data, updated) VALUES (?1, ?2, ?3, ?4, ?5)").bind(user.id, col, String(it.id), JSON.stringify(it.data), Date.now()));
   if (stmts.length) await D1().batch(stmts);
   await bump(user.id, col);
+  if (col === "leads") {
+    const gone = items.slice(0, 500).filter((it) => it.delete).map((it) => String(it.id));
+    if (gone.length) {
+      const marks = gone.map((_, i) => "?" + (i + 2)).join(",");
+      await D1().prepare(`DELETE FROM docs WHERE scope=?1 AND col='calls' AND json_extract(data,'$.leadId') IN (${marks})`).bind(user.id, ...gone).run();
+      await bump(user.id, "calls");
+      await pruneLists(user.id, gone);
+    }
+  }
   return json({ ok: true, count: stmts.length });
 }
 

@@ -32,3 +32,32 @@ export async function updSess(agent, s, fn) { return updateJ("power", sessKey(ag
 
 export const isMachine = (a) => /^machine|^fax/.test(a || "");
 export { patchCallBySid };
+/* ---------- how a browser call ended, for the desk's log ----------
+   Only a call a person answered gets the agent's "Log this call" popup. Everything else logs itself:
+   voicemail keeps the note detection wrote, the rest are No answer with the reason. final=false means Telnyx
+   hasn't said why yet (the desk asks again shortly). */
+export function callOutcome(c) {
+  if (!c) return null;
+  const done = (kind, note, label = "No answer") => ({ kind, label, note, final: true });
+  if (c.machine || isMachine(c.amd)) return done("voicemail", c.note || "Voicemail detected", c.disposition || "No answer");
+  if (c.human || c.answeredAt) return { kind: "answered", final: true };
+  if (c.agentCancel) return done("cancel", "Agent hung up while ringing");
+  const cause = String(c.cause || "").toLowerCase(), sip = +c.sipCause || 0;
+  if (/busy/.test(cause) || sip === 486 || sip === 600) return done("busy", "Busy");
+  if (c.status === "failed" || c.amd === "dial-failed" || /not_found|unallocated|invalid|failure|congestion|unavailable|incompatible/.test(cause) || [403, 404, 410, 484, 488, 502, 503, 603].includes(sip)) return done("failed", "Call failed");
+  if (cause || c.final) return done("no-answer", "Rang out");
+  return { kind: "pending", label: "No answer", note: "Rang out", final: false };
+}
+
+/* What the desk shows for the lead while a browser call is up: dialing → ringing → connected, or voicemail / ended.
+   With voicemail detection the agent's own leg is parked (it looks answered at once), so this follows the lead:
+   their phone ringing and the ~2 s check after they pick up are both "ringing"; "connected" is the agent bridged
+   to a person. Calls without detection are connected when Telnyx says the lead answered. */
+export function leadState(c) {
+  if (!c) return "";
+  if (c.machine || isMachine(c.amd)) return "voicemail";
+  if (c.answeredAt && (!c.amd || c.bridgedAt)) return c.final ? "ended" : "connected";
+  if (c.final || c.endedAt || c.cause || c.agentCancel || c.status === "failed" || c.amd === "dial-failed") return "ended";
+  if (c.ringingAt || (c.amd && c.amd !== "pending") || (!c.amd && c.ccid)) return "ringing";
+  return "dialing";
+}

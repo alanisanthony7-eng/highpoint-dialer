@@ -7,12 +7,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node test/cf-sim.mjs && node test/billing.mjs && node test/numbers.mjs && node test/quote-grid.mjs && node test/auth.mjs && node test/knowledge.mjs && node test/ai-bot.mjs && node test/lounge.mjs && node test/scrub.mjs && node test/followups.mjs && node test/leadpost.mjs && node test/booking.mjs && node test/quoteshare.mjs && node test/push.mjs && node test/monitor.mjs",
+    "test": "node test/cf-sim.mjs && node test/billing.mjs && node test/numbers.mjs && node test/quote-grid.mjs && node test/auth.mjs && node test/knowledge.mjs && node test/ai-bot.mjs && node test/lounge.mjs && node test/scrub.mjs && node test/followups.mjs && node test/leadpost.mjs && node test/booking.mjs && node test/quoteshare.mjs && node test/push.mjs && node test/monitor.mjs && node test/pipeline.mjs && node test/quote-facts.mjs && node test/paging.mjs && node test/lists.mjs && node test/amd.mjs",
     "test:smoke": "node test/smoke-browser.mjs",
     "test:themes": "node test/smoke-browser.mjs --shots",
     "test:all": "npm test && npm run test:smoke",
     "local": "node test/serve.mjs",
-    "local:demo": "node test/serve.mjs --seed"
+    "local:demo": "node test/serve.mjs --seed",
+    "test:dialer": "node test/dialer-multi.mjs"
   },
   "devDependencies": {
     "playwright": "^1.64.1"

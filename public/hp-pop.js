@@ -15,7 +15,7 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-  const D = () => window.hpDesk, DL = () => window.hpDialer, QT = () => window.hpQuoter, CO = () => window.hpCopilot;
+  const D = () => window.hpDesk, DL = () => window.hpDialer, QT = () => window.hpQuoter, CO = () => window.hpCopilot, QX = () => window.HP_QFACTS;
   const toast = (m) => (D()?.toast || console.log)(m);
   const usd = (n, d = 0) => (n == null || !isFinite(n) ? "—" : "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
   const isPhone = () => matchMedia("(max-width: 640px)").matches;
@@ -207,6 +207,8 @@
   function open(k, opts = {}) {
     if (!KINDS[k]) return null;
     if (window.hpTeam?.can?.(NEEDS[k]) === false) { if (!opts.restore) window.hpTeam.upgrade(NEEDS[k]); return null; } // not in this plan
+    if (k === "quote") D()?.ensureQuote?.()?.then?.(() => paint(k, true));
+    if (k === "script") D()?.ensureFex?.()?.then?.(() => paint(k, true));
     const fl = floating(k);
     let w = W.get(k);
     if (w && w.docked === fl) { drop(k); w = null; } // it's moving between the panel and a window
@@ -317,7 +319,8 @@
   const ctxId = () => liveId() || DL()?.profileId || null;
   const session = (id) => { try { return CO()?.session(id) || null; } catch { return null; } };
   const heardF = (id) => { if (!id) return {}; const from = window.hpCopilot?.fields?.(id); if (from && Object.keys(from).length) return from; const s = session(id); return s && s.leadId === id && s.consent === "agreed" && s.ex ? s.ex.F : {}; };
-  const prodOf = (l) => (["FE", "MP", "IUL"].includes(l?.product) ? l.product : "FE");
+  const prodOf = (l) => { const p = l?.pipeline || l?.product; return ["FE", "MP", "IUL"].includes(p) ? p : "FE"; };
+  const playbook = (tab) => tab === "FE" ? window.HP_FEX : tab === "MP" ? window.HP_MP : tab === "IUL" ? window.HP_IUL : null;
   const clock = () => { const s = Math.max(0, Math.round((Date.now() - CALL.t0) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
   /* ================= script ================= */
@@ -370,6 +373,12 @@
     return f;
   }
   function fillText(t, f) {
+    const name = f.name?.v || f.first?.v || "";
+    if (name) t = String(t).replace(/\[Name\]/g, name);
+    if (f.carrier?.v) t = String(t).replace(/\[Carrier(?: Name)?\]/g, f.carrier.v);
+    if (f.face?.v) t = String(t).replace(/\[Face Amount\]/g, f.face.v);
+    if (f.premium?.v) t = String(t).replace(/\$\[amount\]/g, f.premium.v).replace(/\[amount\]/g, f.premium.v);
+    if (f.start_date?.v) t = String(t).replace(/\[date\]/g, f.start_date.v);
     return esc(t).replace(/\{([^}]+)\}/g, (m, raw) => {
       const k = raw.trim().toLowerCase();
       if (SENSITIVE.test(k)) return `<span class="hpp-gap lock" title="Never read real account numbers aloud. The client reads them from their own checkbook or banking app.">${esc(raw)}</span>`;
@@ -413,13 +422,13 @@
       if (st.tab && String(st.tab).startsWith("U:") && !mineOf(st.tab)) { st.tab = null; st.sig = ""; }
       const mineDef = !st.tab && MS()?.forProduct(prodOf(l));
       const tab = st.tab || (mineDef ? "U:" + mineDef.id : prodOf(l)), live = !!l && CALL.live && liveId() === l.id;
-      const mine = mineOf(tab), STG = mine ? mine.stages : tab === "FE" && window.HP_FEX ? window.HP_FEX.stages : null;
+      const mine = mineOf(tab), book = mine ? { stages: mine.stages } : playbook(tab), STG = book ? book.stages : null;
       const tsig = (MS()?.list() || []).map((x) => x.id + x.name).join("|");
       if (st.tsig !== tsig) { st.tsig = tsig; const tb = $('[data-r="tabs"]', w.body); if (tb) tb.innerHTML = tabsHtml(); }
       w.el.style.setProperty("--fs", String(st.fs));
       $$("[data-tab]", w.body).forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tab === tab)));
       $(".hpp-sub", w.el).textContent = l ? fullName(l) : "";
-      const useFex = !!STG && !!window.HP_FEX_TRACK;
+      const useFex = !!book && !!window.HP_FEX_TRACK;
       $('[data-r="for"]', w.body).innerHTML = l ? "" : `No client open. Blanks stay as <span class="hpp-gap">placeholders</span>.`;
       $('[data-r="follow"]', w.body).innerHTML = useFex && l ? `<button type="button" class="hpp-chk" data-follow aria-pressed="${st.follow}" title="Highlights the line you just read and the next one, from the live transcript">Follow</button>` : "";
       // objection and wording alerts from the copilot
@@ -436,13 +445,13 @@
       const sig = tab + "|" + (mine?.updatedAt || "") + "|" + (l?.id || "") + "|" + JSON.stringify(f) + "|" + heardSig;
       if (sig !== st.sig) {
         st.sig = sig; const keep = sc.scrollTop;
-        sc.innerHTML = useFex ? fexHTML(f, st, STG) : libHTML(tab, f, l);
+        sc.innerHTML = useFex ? fexHTML(f, st, book) : libHTML(tab, f, l);
         sc.scrollTop = keep; st.lastAt = null;
       }
       // where the call is in the script
       const prog = $('[data-r="prog"]', w.body);
       if (useFex) {
-        const S = STG;
+        const S = book.stages;
         const track = st.follow && live && CALL.txLead === l.id && ses?.consent !== "declined" && CALL.lines.length ? window.HP_FEX_TRACK.track(CALL.lines, S) : null;
         const now = track ? (track.next ? track.next.stage : track.stage) : -1;
         prog.innerHTML = `<div class="hpp-segs" style="grid-template-columns:repeat(${S.length},1fr)">${S.map((s, i) => `<button type="button" data-seg="${i}" class="${track && i < now ? "done" : i === now ? "now" : ""}" title="${esc(s.title)}" aria-label="Go to ${esc(s.title)}"></button>`).join("")}</div>
@@ -461,9 +470,9 @@
     },
   };
   function objKey(text) { return Object.keys(OBJ_RE).find((k) => OBJ_RE[k].test(text)) || ""; }
-  function fexHTML(f, st, stages) {
+  function fexHTML(f, st, book) {
     let gi = 0;
-    return stages.map((s, si) => {
+    return (book || window.HP_FEX).stages.map((s, si) => {
       const open = st.openSt.has(si), says = s.items.filter((x) => x.k === "say").length;
       const body = s.items.map((it) => it.k === "h" ? `<h4 class="hpp-h4">${esc(it.x)}</h4>` : it.k === "note" ? `<p class="hpp-note">${esc(it.x)}</p>` : it.k === "obj" ? `<p class="hpp-obj" data-obj-k="${objKey(it.x)}">${esc(it.x)}</p>` : `<p class="hpp-say" data-say="${gi++}">${fillText(it.x, f)}</p>`).join("");
       return `<section class="hpp-st${open ? " open" : ""}" data-st="${si}"><button type="button" class="hpp-st-h" data-st-h="${si}" aria-expanded="${open}"><span class="n">${si + 1}</span><span class="t">${esc(s.title)}</span><em>${says} lines</em></button><div class="hpp-st-b">${body}</div></section>`;
@@ -491,16 +500,38 @@
   }
   const sexOf = (l) => { const v = String(l?.sex || l?.gender || l?.fields?.Gender || l?.fields?.Sex || ""); return /^f/i.test(v) ? "F" : /^m/i.test(v) ? "M" : ""; };
   const dobParts = (s) => { const t = String(s || ""); let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return { m: m[2].padStart(2, "0"), d: m[3].padStart(2, "0"), y: m[1] }; m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); return m ? { m: m[1].padStart(2, "0"), d: m[2].padStart(2, "0"), y: m[3] } : null; };
-  const ageOf = (l) => { if (+l?.age) return +l.age; const p = dobParts(l?.dob); if (!p) return null; const b = new Date(+p.y, +p.m - 1, +p.d), n = new Date(); let a = n.getFullYear() - b.getFullYear(); if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--; return a > 0 && a < 120 ? a : null; };
+  const ageOf = (l) => { const p = dobParts(l?.dob), a = p ? QX()?.dobAge(p) : null; return a || (+l?.age ? +l.age : null); }; // the birthday wins over a stored age that may be out of date
+  // which quoter field each call fact fills: a field you change by hand is yours, and the call stops filling it
+  const GROUP = { age: "age", dob: "age", tob: "tob", hw: "hw", cov: "amt", bud: "amt", bal: "amt", iulb: "amt", sex: "sex", state: "state", term: "term", goal: "focus" };
+  const groupOf = (key) => GROUP[String(key || "").split("=")[0]] || "";
+  // the most IUL coverage the cheapest carrier gives for a monthly amount (priced by the quoter's own engine)
+  function iulFace(q, bud) {
+    const r = q.result(), cheapest = (a) => Math.min(...r.rows.map((x) => x.at(a)).filter((p) => p != null));
+    let lo = Math.ceil(r.min / r.step), hi = Math.floor(r.max / r.step);
+    if (!(cheapest(lo * r.step) <= bud)) return null;
+    while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (cheapest(mid * r.step) <= bud) lo = mid; else hi = mid - 1; }
+    return lo * r.step;
+  }
 
   /* What the client said (or what's on file), turned into quoter changes. Each change remembers how to undo itself. */
   function items(F) {
     const q = QT(), Q = q.Q, out = [], add = (key, label, apply) => out.push({ key, label, apply });
     const v = (k) => F[k]?.value, ln = (k) => F[k]?.line ?? -1;
-    if (v("age") != null && +v("age") >= 18 && +v("age") <= 99) add("age=" + v("age"), `Age ${v("age")}`, () => { const was = { age: Q.age, dob: { ...Q.FE.dob } }; Q.age = +v("age"); if (q.age() !== Q.age) Q.FE.dob = { m: "", d: "", y: "" }; return () => { Q.age = was.age; Q.FE.dob = was.dob; }; });
-    const dp = dobParts(v("dob"));
-    if (dp) add("dob=" + v("dob"), `Born ${v("dob")}`, () => { const was = { age: Q.age, dob: { ...Q.FE.dob } }; Q.FE.dob = dp; Q.age = q.age() || Q.age; return () => { Q.age = was.age; Q.FE.dob = was.dob; }; });
-    if (v("tobacco")) { const yes = /^yes/i.test(v("tobacco")); add("tob=" + yes, yes ? "Uses tobacco" : "No tobacco", () => { const was = { tob: Q.tob, nic: Q.FE.nic }; Q.tob = yes ? "1" : "0"; Q.FE.nic = yes ? (q.NIC[Q.FE.nic]?.[1] ? Q.FE.nic : "cig") : "none"; return () => { Q.tob = was.tob; Q.FE.nic = was.nic; }; }); }
+    // a birthday beats a stated age (it's exact); either way the age is age last birthday
+    const dp = dobParts(v("dob")), dobA = dp ? QX()?.dobAge(dp) : null;
+    if (dobA >= 18 && dobA <= 90) add("dob=" + v("dob"), `Born ${v("dob")} (age ${dobA})`, () => { const was = { age: Q.age, dob: { ...Q.FE.dob } }; Q.FE.dob = dp; Q.age = dobA; return () => { Q.age = was.age; Q.FE.dob = was.dob; }; });
+    else if (v("age") != null && +v("age") >= 18 && +v("age") <= 90) add("age=" + v("age"), `Age ${v("age")}`, () => { const was = { age: Q.age, dob: { ...Q.FE.dob } }; Q.age = +v("age"); if (q.age() !== Q.age) Q.FE.dob = { m: "", d: "", y: "" }; return () => { Q.age = was.age; Q.FE.dob = was.dob; }; });
+    if (v("sex")) { const sx = /^f/i.test(v("sex")) ? "F" : "M"; add("sex=" + sx, sx === "F" ? "Female" : "Male", () => { const was = Q.sex; Q.sex = sx; return () => { Q.sex = was; }; }); }
+    const stv = up(v("state"));
+    if (q.STATES.includes(stv)) add("state=" + stv, (STATE_NAMES[stv] || stv) + (v("zip") ? ` (ZIP ${v("zip")})` : ""), () => { const was = Q.state; Q.state = stv; return () => { Q.state = was; }; });
+    if (v("tobacco")) {
+      const tv = String(v("tobacco")), yes = /^yes/i.test(tv), nk = QX()?.nicOf(tv) || (yes ? "cig" : "none"), why = (tv.match(/\((.+)\)/) || [])[1];
+      add("tob=" + tv, yes ? `Tobacco${why ? ` (${why})` : ""}` : `No tobacco${why ? ` (${why})` : ""}`, () => {
+        const was = { tob: Q.tob, nic: Q.FE.nic }; Q.tob = yes ? "1" : "0";
+        Q.FE.nic = yes ? (why && nk !== "cig" ? nk : q.NIC[Q.FE.nic]?.[1] ? Q.FE.nic : "cig") : nk === "mj" ? "mj" : "none";
+        return () => { Q.tob = was.tob; Q.FE.nic = was.nic; };
+      });
+    }
     if (v("health") && v("health") !== "None reported") {
       const parts = String(v("health")).split(/;\s*/), dia = parts.some((p) => /diabet/i.test(p));
       for (const p of parts) {
@@ -528,6 +559,11 @@
     if (bud && Q.tab === "FE") add("bud=" + bud, `${usd(bud)}/mo budget`, () => { const was = { mode: Q.FE.mode, budget: Q.FE.budget }; Q.FE.budget = Math.min(500, Math.max(50, Math.floor(bud / 50) * 50)); if (ln("budget") > ln("coverage")) Q.FE.mode = "budget"; return () => Object.assign(Q.FE, was); });
     const bal = +v("mortgageBalance");
     if (bal > 0 && Q.tab === "TERM") add("bal=" + bal, `Mortgage ${usd(bal)}`, () => { const was = Q.TERM.amt; Q.TERM.amt = Math.max(50000, Math.ceil(bal / 5000) * 5000); return () => { Q.TERM.amt = was; }; });
+    const yl = parseInt(v("yearsLeft"), 10);
+    if (yl > 0 && Q.tab === "TERM" && QX()) { const t = QX().termFor(yl); add("term=" + t, `${t}-year term (${yl} years left)`, () => { const was = Q.TERM.term; Q.TERM.term = t; return () => { Q.TERM.term = was; }; }); }
+    const fo = QX()?.focusOf(v("goal") || "");
+    if (fo && Q.tab === "IUL") add("goal=" + fo, `IUL for ${{ protection: "protection", balanced: "protection and income", cash: "cash value" }[fo]}`, () => { const was = Q.IUL.focus; Q.IUL.focus = fo; return () => { Q.IUL.focus = was; }; });
+    if (bud && Q.tab === "IUL" && !cov) { const face = iulFace(q, bud); if (face) add(`iulb=${bud}@${face}`, `${usd(bud)}/mo → ${usd(face)} IUL`, () => { const was = Q.IUL.amt; Q.IUL.amt = face; return () => { Q.IUL.amt = was; }; }); }
     return out;
   }
   /* ---------- health heard on the call ----------
@@ -709,8 +745,14 @@
     const tx = lines.slice(-40).map((x) => `${x.who === "Agent" ? "Agent" : "Client"}: ${x.text}`).join("\n").slice(-6000);
     const system = "You pull underwriting facts for a final expense life insurance quote out of a call transcript. Use only what the CLIENT says about THEMSELVES. Skip anything they deny, anything about family members, and anything the agent says that the client didn't confirm. Reply with JSON only.";
     const prompt = `Condition keys you may use:\n${keys}\n\nReturn {"conditions":[{"key":"<one of the keys>","years_ago":<years since diagnosed or last treated, a number, or null if not said>,"quote":"<the client's words>"}],"medications":["<each drug the client takes now, spelled correctly>"]}. Use empty arrays if nothing. Pick the most specific key (insulin -> dmi; cancer being treated now -> cancerNow). Leave out drugs they stopped taking.\n\nTranscript:\n"""${tx}"""`;
-    fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ system, messages: [{ role: "user", content: prompt }] }) })
-      .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+    const ask = async () => {
+      if (window.hpLocalAi?.here?.() && window.hpLocalAi?.chat) {
+        try { const text = await window.hpLocalAi.chat(system, [{ role: "user", content: prompt }]); if (text) return { ok: true, j: { text } }; } catch {}
+      }
+      const r = await fetch("/api/ai", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify({ system, messages: [{ role: "user", content: prompt }], mode: "copilot" }) });
+      return { ok: r.ok, j: await r.json().catch(() => ({})) };
+    };
+    ask()
       .then(({ ok, j }) => {
         if (AIH.lead !== id) return;
         if (!ok) { AIH.status = ["unavailable", "bad_key", "no_credit", "plan", "billing"].includes(j.code) ? "off" : "err"; return; }
@@ -737,8 +779,11 @@
 
   /* The quoter follows the client you're on (the call, else the open profile) while the quote or script pop-out is up,
      so the script's prices are always this client's. Each client's quote is put away and brought back as you switch. */
-  const QF = { lead: null, manual: false, auto: lsGet("hp.pop.auto", true), done: {}, chips: {}, src: {}, ctx: {}, pending: [] };
-  const following = () => W.has("quote") || W.has("script");
+  const QF = { lead: null, manual: false, auto: lsGet("hp.pop.auto", true), done: {}, chips: {}, src: {}, ctx: {}, pending: [], hand: {}, held: {} }; // hand: fields you changed yourself; held: what the call said for them
+  // on a call the client agreed to record, the quoter fills itself even with the pop-outs closed (the main Quote & compare page shares it)
+  const callLead = () => (CALL.live ? liveId() || CALL.leadId : null);
+  const liveOK = () => { const id = callLead(); return !!id && session(id)?.consent === "agreed"; };
+  const following = () => W.has("quote") || W.has("script") || liveOK();
   const QUOTE = {
     build(w) {
       const st = w.st; st.more = false;
@@ -754,19 +799,20 @@
         const t = e.target.closest("button"); if (!t || !w.body.contains(t)) return;
         const d = t.dataset, q = QT(); if (!q) return;
         if (d.qtab) { Q().tab = d.qtab; Q().sort = null; done(); }
-        else if (d.sex) { Q().sex = d.sex; done(); }
-        else if (d.tob) { Q().tob = d.tob; Q().FE.nic = d.tob === "1" ? (q.NIC[Q().FE.nic]?.[1] ? Q().FE.nic : "cig") : "none"; done(); }
-        else if (d.mode) { Q().FE.mode = d.mode; done(); }
-        else if (d.step) { const r = q.result(), cur = Q()[r.T][r.K]; Q()[r.T][r.K] = Math.max(r.min, Math.min(r.max, cur + +d.step * r.step)); done(); }
-        else if (d.amt) { const r = q.result(); Q()[r.T][r.K] = +d.amt; done(); }
-        else if (d.plan) q.setPlan(d.plan);
+        else if (d.sex) { markHand("sex"); Q().sex = d.sex; done(); }
+        else if (d.tob) { markHand("tob"); Q().tob = d.tob; Q().FE.nic = d.tob === "1" ? (q.NIC[Q().FE.nic]?.[1] ? Q().FE.nic : "cig") : "none"; done(); }
+        else if (d.mode) { markHand("amt"); Q().FE.mode = d.mode; done(); }
+        else if (d.step) { markHand("amt"); const r = q.result(), cur = Q()[r.T][r.K]; Q()[r.T][r.K] = Math.max(r.min, Math.min(r.max, cur + +d.step * r.step)); done(); }
+        else if (d.amt) { markHand("amt"); const r = q.result(); Q()[r.T][r.K] = +d.amt; done(); }
+        else if (d.plan) { markHand(planGroup()); q.setPlan(d.plan); }
+        else if (d.held) { useHeld(d.held); QUOTE.update(w); }
         else if (d.rmC != null) { const c = Q().FE.conds[+d.rmC]; if (c) { Q().FE.conds.splice(+d.rmC, 1); forget("cond=" + c.k); } done(); }
         else if (d.rmM != null) { const m = Q().FE.meds[+d.rmM]; if (m) { Q().FE.meds.splice(+d.rmM, 1); forget("med=" + m); } done(); }
         else if (d.pick) { pickHealth(d.pick); done(); const a = $('[data-f="add"]', w.body); if (a) { a.value = ""; a.focus(); } const sg = $(".hpp-sug", w.body); if (sg) sg.hidden = true; }
         else if (d.useK) { const it = QF.pending.find((p) => p.key === d.useK); if (it) { applyItems([it], "call"); QUOTE.update(w); } }
-        else if (d.undo != null) { const c = (QF.chips[QF.lead] || [])[+d.undo]; if (c && !c.undone) { c.undo(); c.undone = true; done(); } }
-        else if (d.use != null) { const it = QF.pending[+d.use]; if (it) applyItems([it], "call"); }
-        else if (d.useAll != null) applyItems(QF.pending, "call");
+        else if (d.undo != null) { undoChip(+d.undo); QUOTE.update(w); }
+        else if (d.use != null) { const it = QF.pending[+d.use]; if (it) applyItems([it], "call", true); }
+        else if (d.useAll != null) applyItems(QF.pending, "call", true);
         else if (d.q === "auto") { QF.auto = !QF.auto; lsSet("hp.pop.auto", QF.auto); if (QF.auto) fromCall(); QUOTE.update(w); }
         else if (d.q === "bind") { bind(ctxId(), true); }
         else if (d.q === "unbind") { if (QF.lead) QF.ctx[QF.lead] = snapQ(); QF.lead = null; QF.manual = true; QUOTE.update(w); paint("script"); }
@@ -778,19 +824,20 @@
       });
       w.body.addEventListener("change", (e) => {
         const t = e.target, f = t.dataset.f, q = QT(); if (!q) return;
-        if (f === "age") { const a = Math.min(90, Math.max(18, Math.round(+t.value) || Q().age)); Q().age = a; if (q.age() !== a) Q().FE.dob = { m: "", d: "", y: "" }; done(); }
-        else if (f === "state") { Q().state = t.value; done(); }
+        if (f === "age") { markHand("age"); const a = Math.min(90, Math.max(18, Math.round(+t.value) || Q().age)); Q().age = a; if (q.age() !== a) Q().FE.dob = { m: "", d: "", y: "" }; done(); }
+        else if (f === "dob") dobInput(w, e, true);
+        else if (f === "state") { markHand("state"); Q().state = t.value; done(); }
         else if (f === "cls") { Q().cls = t.value; done(); }
-        else if (f === "amt") { const r = q.result(), n = money(t.value); if (n) { Q()[r.T][r.K] = Math.max(r.min, Math.min(r.max, r.B ? Math.floor(n / r.step) * r.step : Math.round(n / r.step) * r.step)); } done(); }
+        else if (f === "amt") { markHand("amt"); const r = q.result(), n = money(t.value); if (n) { Q()[r.T][r.K] = Math.max(r.min, Math.min(r.max, r.B ? Math.floor(n / r.step) * r.step : Math.round(n / r.step) * r.step)); } done(); }
         else if (t.dataset.when != null) { const c = Q().FE.conds[+t.dataset.when]; if (c) { if (t.value) c.at = Date.now() - +t.value * YR; else delete c.at; done(); } }
       });
       const add = () => $('[data-f="add"]', w.body);
-      w.body.addEventListener("input", (e) => { if (e.target.dataset.f === "add") suggest(w); });
+      w.body.addEventListener("input", (e) => { if (e.target.dataset.f === "add") suggest(w); else if (e.target.dataset.f === "dob") dobInput(w, e); });
       w.body.addEventListener("keydown", (e) => {
         if (e.target.dataset.f === "add" && e.key === "Enter") { e.preventDefault(); const b = $(".hpp-sug [data-pick]", w.body); if (b) b.click(); }
         if (e.target.dataset.f === "add" && e.key === "Escape") { add().value = ""; $(".hpp-sug", w.body).hidden = true; }
         if (e.target.dataset.f === "amt" && e.key === "Enter") e.target.blur();
-        if (e.target.dataset.f === "age" && e.key === "Enter") e.target.blur();
+        if ((e.target.dataset.f === "age" || e.target.dataset.f === "dob") && e.key === "Enter") e.target.blur();
       });
       w.body.addEventListener("pointerdown", (e) => { if (e.target.closest(".hpp-sug button")) e.preventDefault(); });
       w.body.addEventListener("focusout", (e) => { if (e.target.dataset?.f === "add") setTimeout(() => { const s = $(".hpp-sug", w.body); if (s) s.hidden = true; }, 150); });
@@ -814,13 +861,13 @@
       $('[data-r="form"]', w.body).hidden = !fopen;
       // the form: rebuilt when values change, unless you're typing in it
       const form = $('[data-r="form"]', w.body), doc = w.el.ownerDocument, ae = doc.activeElement, inForm = form.contains(ae);
-      const sig = JSON.stringify([r.T, r.B, r.amt, r.plan, Q.age, Q.sex, Q.tob, Q.state, Q.cls, Q.FE.conds, Q.FE.meds, Q.FE.nic]);
-      const editing = inForm && ae.matches('input[data-f="age"],input[data-f="amt"]') && ae.value !== ae.defaultValue; // never wipe what you're typing
+      const sig = JSON.stringify([r.T, r.B, r.amt, r.plan, Q.age, Q.FE.dob, Q.sex, Q.tob, Q.state, Q.cls, Q.FE.conds, Q.FE.meds, Q.FE.nic]);
+      const typing = inForm && ae.matches('input[data-f="age"],input[data-f="amt"],input[data-f="dob"]'), editing = typing && ae.value !== ae.defaultValue; // never wipe what you're typing
       if (sig !== st.fsig && !editing) {
-        const keepAdd = inForm && ae.dataset.f === "add" ? ae.value : null, keepSel = inForm && ae.matches("select") ? (ae.dataset.f ? `[data-f="${ae.dataset.f}"]` : `[data-when="${ae.dataset.when}"]`) : null;
+        const keepAdd = inForm && ae.dataset.f === "add" ? ae.value : null, keepSel = inForm && (ae.matches("select") || typing) ? (ae.dataset.f ? `[data-f="${ae.dataset.f}"]` : `[data-when="${ae.dataset.when}"]`) : null;
         st.fsig = sig; form.innerHTML = formHTML(q, r);
         if (keepAdd != null) { const a = $('[data-f="add"]', form); a.value = keepAdd; a.focus(); if (keepAdd) suggest(w); }
-        else if (keepSel) $(keepSel, form)?.focus();
+        else if (keepSel) { const k = $(keepSel, form); k?.focus(); if (k?.matches('input:not([type="number"])')) k.setSelectionRange(k.value.length, k.value.length); }
       }
       // what we heard on the call
       $('[data-r="heard"]', w.body).innerHTML = heardHTML(l, live);
@@ -861,9 +908,13 @@
   };
   function formHTML(q, r) {
     const Q = q.Q, FE = r.T === "FE", seg = (attr, cur, opts) => `<div class="hpp-seg sm">${opts.map(([v, t]) => `<button type="button" data-${attr}="${v}" aria-pressed="${String(cur) === String(v)}">${t}</button>`).join("")}</div>`;
-    const amtVal = r.B ? `${usd(r.amt)}/mo` : usd(r.amt);
+    const amtVal = r.B ? `${usd(r.amt)}/mo` : usd(r.amt), [note, bad] = dobNote(Q, r.T);
     let h = `<div class="hpp-grid">
-      <label class="hpp-fld"><span>Age</span><input type="number" inputmode="numeric" min="18" max="90" data-f="age" value="${esc(Q.age)}" aria-label="Age"></label>
+      <div class="hpp-agerow">
+        <label class="hpp-fld"><span>Birthday</span><input data-f="dob" inputmode="numeric" autocomplete="off" placeholder="MM/DD/YYYY" maxlength="10" value="${esc(dobText(Q.FE.dob))}" aria-label="Date of birth" aria-invalid="${bad}" aria-describedby="hppDobMsg"></label>
+        <label class="hpp-fld"><span>Age</span><input type="number" inputmode="numeric" min="18" max="90" data-f="age" value="${esc(Q.age)}" aria-label="Age"></label>
+        <p class="hpp-dobmsg${bad ? " bad" : ""}" id="hppDobMsg" data-r="dobmsg" role="status" ${note ? "" : "hidden"}>${esc(note)}</p>
+      </div>
       <div class="hpp-fld"><span>Sex</span>${seg("sex", Q.sex, [["M", "Male"], ["F", "Female"]])}</div>
       <div class="hpp-fld"><span>Tobacco</span>${seg("tob", FE ? (q.NIC[Q.FE.nic]?.[1] ? "1" : "0") : Q.tob, [["0", "No"], ["1", "Yes"]])}</div>
       <label class="hpp-fld"><span>State</span><select data-f="state" aria-label="State">${q.STATES.map((s) => `<option ${s === Q.state ? "selected" : ""}>${s}</option>`).join("")}</select></label></div>
@@ -873,6 +924,41 @@
       <div class="hpp-plans">${seg("plan", r.plan, r.plans)}</div>`;
     if (r.T === "TERM") h += `<label class="hpp-fld inl"><span>Health class</span><select data-f="cls">${[["0.82", "Preferred plus"], ["1", "Preferred"], ["1.22", "Standard plus"], ["1.45", "Standard"]].map(([v, t]) => `<option value="${v}" ${v === String(Q.cls) ? "selected" : ""}>${t}</option>`).join("")}</select></label>`;
     return h;
+  }
+  /* birthday: shares the main quoter's birthday (Q.FE.dob) and fills the age, age last birthday */
+  const dobText = (p) => (p?.y ? `${p.m}/${p.d}/${p.y}` : p?.d ? `${p.m}/${p.d}` : p?.m || "");
+  const AGES = { FE: [45, 85, "most final expense carriers issue ages"], TERM: [18, 75, "term carriers issue ages"], IUL: [18, 75, "IUL carriers issue ages"] };
+  function dobNote(Q, T) { // -> [message, is it an error]
+    const p = Q.FE.dob, r = p?.m && p.d && String(p.y || "").length === 4 ? QX()?.checkDob(p) : null; if (!r) return ["", false];
+    if (r.err) return [r.err === "future" ? "That date is in the future." : "That date doesn't exist. Check the month and day.", true];
+    if (r.age < 18 || r.age > 90) return [`Age ${r.age} is outside what the quoter prices (18–90).`, true];
+    const [lo, hi, who] = AGES[T] || AGES.FE;
+    return r.age < lo || r.age > hi ? [`Age ${r.age}: ${who} ${lo}–${hi}.`, false] : ["", false];
+  }
+  // typing: slashes go in for you, 1-digit months and days get their 0; leaving the box turns "58" into 1958
+  function dobInput(w, e, commit) {
+    const t = e.target, q = QT(); if (!q) return;
+    const Q = q.Q, ins = !commit && /^insert/.test(e.inputType || "");
+    const v = t.value.replace(/[.\-\s]/g, "/").replace(/[^\d/]/g, "").replace(/\/{2,}/g, "/"), cut = v.split("/");
+    let [m = "", d = "", y = ""] = cut;
+    if (cut.length === 1) { m = v.slice(0, 2); d = v.slice(2, 4); y = v.slice(4); }
+    else if (cut.length === 2 && d.length > 2) { y = d.slice(2); d = d.slice(0, 2); }
+    m = m.slice(0, 2); d = d.slice(0, 2); y = y.slice(0, 4);
+    if (ins && m.length === 1 && +m > 1 && !d) m = "0" + m;
+    if (ins && d.length === 1 && +d > 3 && !y) d = "0" + d;
+    if (commit) { if (m.length === 1 && +m) m = "0" + m; if (d.length === 1 && +d) d = "0" + d; if (y.length === 2) y = String(QX().fullYear(y)); }
+    let txt = m;
+    if (d || cut.length > 1 || (ins && m.length === 2)) txt += "/" + d;
+    if (y || cut.length > 2 || (ins && d.length === 2)) txt += "/" + y;
+    if (t.value !== txt) t.value = txt;
+    markHand("age");
+    Q.FE.dob = { m, d, y };
+    const r = m && d && y.length === 4 ? QX().checkDob(Q.FE.dob) : null;
+    if (r?.age >= 18 && r.age <= 90) { Q.age = r.age; const ai = $('[data-f="age"]', w.body); if (ai) ai.value = ai.defaultValue = String(r.age); }
+    const [note, bad] = dobNote(Q, q.result().T), msg = $('[data-r="dobmsg"]', w.body);
+    if (msg) { msg.textContent = note; msg.hidden = !note; msg.classList.toggle("bad", bad); }
+    t.setAttribute("aria-invalid", String(bad));
+    q.changed(); QUOTE.update(w);
   }
   const SHORT = { cad: "Coronary artery disease / stent", afib: "AFib / irregular heartbeat", copd: "COPD / emphysema", dmc: "Diabetes with complications", o2: "Uses oxygen", cancerNow: "Cancer (current)", cancerPast: "Cancer (past)", skin: "Skin cancer (basal/squamous)", ckd: "Kidney disease", dialysis: "Dialysis", liver: "Liver disease / cirrhosis", dementia: "Dementia / Alzheimer's", depression: "Depression / anxiety", alcohol: "Alcohol / drug treatment", hiv: "HIV / AIDS", amput: "Amputation", wheelchair: "Wheelchair / daily help", joint: "Hip or knee replacement", pending: "Pending surgery or tests", nursing: "Nursing home / hospice", hbp: "High blood pressure", chf: "Heart failure", tia: "TIA (mini-stroke)" };
   const TIER = ["Likely Preferred", "Likely Standard", "Likely Graded", "Likely Guaranteed issue", "Likely doesn't qualify"];
@@ -923,23 +1009,29 @@
   }
   function heardHTML(l, live) {
     if (!l) return "";
-    const ses = session(l.id), chips = (QF.chips[l.id] || []).filter((c) => !c.undone && !/^(?:cond|med)=/.test(c.key || ""));
+    const ses = session(l.id), chips = (QF.chips[l.id] || []).filter((c) => !c.undone && !c.replaced && !/^(?:cond|med)=/.test(c.key || ""));
     let h = "";
     if (live && ses && ses.consent === "none") h += `<p class="hpp-fine">Fills in from the call once the client agrees to recording.</p>`;
     if (ses?.consent === "declined") h += `<p class="hpp-fine">The client declined recording, so nothing from this call is used.</p>`;
-    const pend = QF.auto ? [] : QF.pending.filter((p) => !/^(?:cond|med)=/.test(p.key));
-    if (!chips.length && !pend.length && !(live && ses?.consent === "agreed")) return h;
+    const pend = QF.auto ? [] : QF.pending.filter((p) => !/^(?:cond|med)=/.test(p.key)), held = Object.entries(QF.held[l.id] || {});
+    if (!chips.length && !pend.length && !held.length && !(live && ses?.consent === "agreed")) return h;
     h += `<div class="hpp-hh"><span class="hpp-lbl">From the call</span><span class="hpp-sp"></span><button type="button" class="hpp-chk" data-q="auto" aria-pressed="${QF.auto}" title="Update the quote as the client answers">Fill in for me</button></div>`;
     h += `<div class="hpp-hchips">${chips.slice(-10).map((c) => `<span class="hpp-hc ok" title="${c.src === "file" ? "From the client's file" : "Heard on this call"}">✓ <b>${esc(c.label)}</b>${c.src === "file" ? "<i>file</i>" : ""}<button type="button" data-undo="${(QF.chips[l.id] || []).indexOf(c)}" aria-label="Undo ${esc(c.label)}" title="Undo">↶</button></span>`).join("")}
+      ${held.map(([g, it]) => `<button type="button" class="hpp-hc sug" data-held="${g}" title="You set this yourself, so the call didn't change it. Tap to use what the client said.">${esc(it.label)}<i>Use</i></button>`).join("")}
       ${pend.map((it, i) => `<button type="button" class="hpp-hc sug" data-use="${i}">${esc(it.label)}<i>Use</i></button>`).join("")}${pend.length > 1 ? `<button type="button" class="hpp-mini" data-use-all>Use all</button>` : ""}</div>`;
-    if (!chips.length && !pend.length) h += `<p class="hpp-fine">Listening for age, tobacco, coverage and budget.</p>`;
+    if (!chips.length && !pend.length && !held.length) h += `<p class="hpp-fine">Listening for birthday or age, tobacco, height and weight, state, coverage and budget.</p>`;
     return h;
   }
-  function applyItems(list, src) {
+  // force: you tapped Use, so it goes in even over a field you set yourself
+  function applyItems(list, src, force) {
     const id = QF.lead; if (!id || !list.length) return;
     const done = (QF.done[id] = QF.done[id] || []), chips = (QF.chips[id] = QF.chips[id] || []), from = (QF.src[id] = QF.src[id] || {});
+    const hand = QF.hand[id], held = (QF.held[id] = QF.held[id] || {});
     for (const it of list) {
       if (!it || done.includes(it.key)) continue;
+      const g = groupOf(it.key);
+      if (g && hand?.has(g) && !force) { held[g] = it; continue; } // you set this one: offer it, don't overwrite it
+      if (g) { hand?.delete(g); delete held[g]; for (const c of chips) if (!c.undone && groupOf(c.key) === g) c.replaced = true; }
       const how = it.src || src, f = { src: how, quote: it.quote || "" };
       done.push(it.key); from[it.key] = f;
       if (it.key.startsWith("med=")) { const ck = QT().MEDS[it.key.slice(4)]; if (ck && !from["cond=" + ck]) from["cond=" + ck] = { src: how, quote: it.quote || "", via: it.label }; }
@@ -948,6 +1040,64 @@
     QF.pending = QF.pending.filter((p) => !done.includes(p.key));
     QT().changed();
   }
+  // you changed a field yourself: the call stops filling it (what the client says shows as a suggestion instead)
+  function markHand(g) {
+    const id = QF.lead; if (!id || !g) return;
+    (QF.hand[id] = QF.hand[id] || new Set()).add(g);
+    for (const c of QF.chips[id] || []) if (!c.undone && groupOf(c.key) === g) c.replaced = true;
+  }
+  function undoChip(i) {
+    const c = (QF.chips[QF.lead] || [])[i]; if (!c || c.undone) return;
+    c.undo(); c.undone = true; QT().changed(); paint("quote");
+  }
+  function useHeld(g) {
+    const it = QF.held[QF.lead]?.[g]; if (!it) return;
+    applyItems([it], it.src || "call", true); paint("quote");
+  }
+  const planGroup = () => ({ TERM: "term", IUL: "focus" })[QT()?.Q.tab] || "";
+
+  /* the main Quote & compare page: what you change there is yours too, and what the call filled gets a "from call" tag */
+  const MAIN_HAND = { qAge: "age", feM: "age", feD: "age", feY: "age", qSex: "sex", qTob: "tob", feNic: "tob", qState: "state", feFt: "hw", feIn: "hw", feLb: "hw", qAmt: "amt", qAmtIn: "amt" };
+  function mainHand(e) {
+    if (!QF.lead) return;
+    const t = e.target; if (!t?.closest?.("#v-quoter") || t.closest("#qFromCall")) return;
+    let g = MAIN_HAND[t.id] || "";
+    if (!g && e.type === "click") {
+      const b = t.closest("button"); if (!b) return;
+      if (b.id === "feClear") { ["age", "hw", "tob"].forEach(markHand); return; }
+      g = b.closest("#feMode,#qQuick") ? "amt" : b.closest("#qPlans") ? planGroup() : "";
+    }
+    if (g) markHand(g);
+  }
+  ["input", "change", "click"].forEach((ev) => document.addEventListener(ev, mainHand, true));
+  const MAIN_EL = [["#qAge", "age"], ["#feM", "age"], ["#qSex", "sex"], ["#qTob", "tob"], ["#feNic", "tob"], ["#qState", "state"], ["#feFt", "hw"], ["#qAmtTitle", "amt"], ["#qPlans", "plan"]];
+  function marks() {
+    const view = document.getElementById("v-quoter"); if (!view) return;
+    const sel = document.getElementById("qLead"), id = !sel?.value || sel.value === QF.lead ? QF.lead : null, act = {}; // the page is quoting someone else: no tags
+    for (const c of (id && QF.chips[id]) || []) { const g = groupOf(c.key); if (g && !c.undone && !c.replaced) act[g] = c; }
+    act.plan = act[planGroup()];
+    for (const [sel, g] of MAIN_EL) {
+      const el = view.querySelector(sel), box = el && (el.closest(".field") || el.closest(".amount") || el); if (!box) continue;
+      box.classList.toggle("hpp-auto", !!act[g]);
+    }
+    const box = document.getElementById("qFromCall"); if (!box) return;
+    const l = lead(id), chips = l ? (QF.chips[l.id] || []).map((c, i) => [c, i]).filter(([c]) => !c.undone && !c.replaced) : [];
+    const held = l ? Object.entries(QF.held[l.id] || {}) : [], pend = l && !QF.auto ? QF.pending : [];
+    box.hidden = !chips.length && !held.length && !pend.length;
+    const html = box.hidden ? "" : `<span class="hpp-lbl">From the call with ${esc(l.first || fullName(l))}</span>
+      ${chips.slice(-12).map(([c, i]) => `<span class="hpp-hc ok" title="${c.src === "file" ? "From the client's file" : "Heard on this call"}">✓ <b>${esc(c.label)}</b>${c.src === "file" ? "<i>file</i>" : ""}<button type="button" data-hpp-undo="${i}" aria-label="Undo ${esc(c.label)}" title="Undo">↶</button></span>`).join("")}
+      ${held.map(([g, it]) => `<button type="button" class="hpp-hc sug" data-hpp-held="${g}" title="You set this yourself, so the call didn't change it">${esc(it.label)}<i>Use</i></button>`).join("")}
+      ${pend.map((it) => `<button type="button" class="hpp-hc sug" data-hpp-use="${esc(it.key)}">${esc(it.label)}<i>Use</i></button>`).join("")}`;
+    if (stripSig !== html) { stripSig = html; box.innerHTML = html; } // copilot updates come often: only redraw on a change, so a click isn't lost
+  }
+  let stripSig = "";
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest?.("#qFromCall button"); if (!b) return;
+    const d = b.dataset;
+    if (d.hppUndo != null) undoChip(+d.hppUndo);
+    else if (d.hppHeld) useHeld(d.hppHeld);
+    else if (d.hppUse) { const it = QF.pending.find((p) => p.key === d.hppUse); if (it) applyItems([it], "call", true); }
+  });
   // the client's answers on this call -> the quote (or suggestions, when "Fill in for me" is off)
   function fromCall() {
     if (!QF.lead || !QT()) return;
@@ -985,7 +1135,7 @@
     q.setLead(id); q.changed();
     fromCall(); aiHealth();
   }
-  const follow = () => { if (following()) { const id = ctxId(); if (id) bind(id); } };
+  const follow = () => { if (following()) { const id = ctxId() || callLead(); if (id) bind(id); } };
 
   /* ================= live call ================= */
   const LIVE = {
@@ -1078,8 +1228,8 @@
     CALL.lines = lines; CALL.partial = Array.isArray(partial) ? partial : [];
     paint("live"); paint("script");
   });
-  addEventListener("hp:copilot", () => { if (following()) { fromCall(); aiHealth(); } paint(); });
-  addEventListener("hp:quote", () => { paint("quote"); paint("script"); });
+  addEventListener("hp:copilot", () => { if (following()) { follow(); fromCall(); aiHealth(); } paint(); marks(); });
+  addEventListener("hp:quote", () => { paint("quote"); paint("script"); marks(); });
   addEventListener("hp:profile", () => { follow(); paint("script"); paint("live"); });
   setInterval(() => { if (CALL.live && W.has("live")) { const c = W.get("live").el.querySelector('[data-r="clock"]'); if (c) c.textContent = clock(); } }, 1000);
 

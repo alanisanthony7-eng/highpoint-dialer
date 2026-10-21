@@ -55,7 +55,7 @@ export default wrap(async (req, ctx) => {
       });
       later(ctx, Promise.all(siblings.map((sid) => hangup(sid, true))));
       return xml(
-        (recordNoticeFor(S, p.To) ? say("This call may be recorded.") : "") +
+        ""+
         (S.transcribe ? txStart(p.CallSid, "Lead", "Agent") : "") +
         `<Dial><Conference beep="false" startConferenceOnEnter="true" endConferenceOnExit="false">hp-${x(s)}</Conference></Dial>`
       );

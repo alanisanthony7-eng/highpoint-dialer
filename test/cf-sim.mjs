@@ -93,8 +93,8 @@ r = await call("rep", "/api/dialer/calls/analytics?days=1"); ok(r.j.total?.statu
   const me = (await call("rep", "/api/auth/me")).j.user.identity;
   // inbound recorded calls announce recording
   r = await call("tw", "/api/dialer/voice?in=1", { method: "POST", form: { To: "+13055550101", From: "+12125550009", CallSid: "CA_in1" } });
-  ok(/may be recorded/.test(String(r.j)), "inbound recorded call plays the recording notice");
-  ok(H.recordNoticeFor({ record: true }, "2125550003") === true && H.recordNoticeFor({ record: false }, "2125550003") === false, "recording notice plays whenever a call is recorded");
+  ok(!/may be recorded/.test(String(r.j)), "inbound recorded call plays no recording announcement");
+  ok(H.recordNoticeFor({ record: true }, "2125550003") === false, "no recording announcement plays, even while a call is recorded");
   // live transcript lines are stored redacted
   await H.setJ("callidx", "CA_tx1", { agent: me, id: "CA_tx1" }); await H.saveCall({ id: "CA_tx1", sid: "CA_tx1", agent: me, to: "2125550003", at: Date.now() });
   const txEv = (text) => call("tw", "/api/dialer/events?type=tx&c=CA_tx1", { method: "POST", form: { TranscriptionEvent: "transcription-content", TranscriptionData: JSON.stringify({ transcript: text }), Final: "true", Track: "outbound_track" } });
@@ -130,7 +130,7 @@ r = await call("rep", "/api/dialer/calls/analytics?days=1"); ok(r.j.total?.statu
   ok(!/<Dial/.test(String(r.j)), "a bridge link only works for its own call");
   r = await call("tw", `/api/dialer/voice?step=cell&t=${cellTok}`, { method: "POST", form: { CallSid: cellSid, From: "+13055550177" } });
   const cellTwiml = String(r.j);
-  ok(/<Dial[^>]*record="record-from-answer-dual"/.test(cellTwiml) && /\+12125550009/.test(cellTwiml) && /step=notice/.test(cellTwiml), "lead joins the recorded call, after the recording notice");
+  ok(/<Dial[^>]*record="record-from-answer-dual"/.test(cellTwiml) && /\+12125550009/.test(cellTwiml) && !/step=notice/.test(cellTwiml), "lead joins the recorded call with no recording announcement");
   ok(/Connecting you to Cell/.test(cellTwiml), "agent hears who they're connecting to");
   r = await call("tw", `/api/dialer/voice?step=cell&t=${cellTok}`, { method: "POST", form: { CallSid: cellSid, From: "+13055550177" } });
   ok(!/<Dial/.test(String(r.j)), "a bridge link works once");
