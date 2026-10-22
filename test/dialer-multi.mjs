@@ -232,6 +232,9 @@ if (SERVE) {
     check(true, "a person answering connects to you (Connected)");
     check(await page.evaluate(() => { const p = document.querySelector("#hpdProfile"), d = document.querySelector("#hpdDock"); return !!p && !p.hidden && p.innerText.includes(window.hpDesk.fullName(window.hpDesk.leads.get(window.hpDialer.liveLead))) && d.classList.contains("callbar") && !d.classList.contains("hpdl") && !d.querySelector("#hpdkWide,#hpdkMin"); }), "the client's contact card opens when they pick up; no floating console, stretch or minimize buttons");
     const who = await page.evaluate(() => window.hpDialer.liveLead);
+    // Copilot listens to the same live transcript from the moment the call connects (NY records on one party's consent)
+    await page.evaluate((id) => window.dispatchEvent(new CustomEvent("hp:tx", { detail: { leadId: id, lines: [{ who: "Lead", text: "Hello this is Maria", t: Date.now() }, { who: "Agent", text: "Hi Maria it is Anthony", t: Date.now() }], partial: [] } })), who);
+    check(await until(async () => { const c = await page.evaluate((id) => window.hpCopilot.session(id), who); return c && c.consent === "agreed" && c.lines.length === 2 && c.lines[0].who === "Lead"; }, "Copilot to read the live transcript"), "Copilot hears the live transcript as soon as the call connects (one-party state), Lead and Agent labelled");
     await until(async () => { const dd = await page.evaluate(() => [...window.hpDesk.calls.values()].map((x) => x.note)); return dd.filter((n) => n === "Another lead answered first").length >= 2; }, "the other two lines to be released and logged");
     check(true, "the lines that were still ringing are released and logged No answer");
     const before = await nDials();

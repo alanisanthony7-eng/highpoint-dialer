@@ -247,6 +247,7 @@
   const scrub = (a) => (a ? { ...a, quote: "" } : a);
   const savePending = () => lsSet("hpc.pending", CP.pending.slice(-20).map((s) => ({ ...s, lines: [], ai: s.ai === "running" ? "" : s.ai, ex: s.ex && { ...s.ex, F: Object.fromEntries(Object.entries(s.ex.F).map(([k, v]) => [k, scrub(v)])), tasks: s.ex.tasks.map(scrub), objs: s.ex.objs.map(scrub), flags: (s.ex.flags || []).map(scrub) } })));
   const lead = (id) => D()?.leads.get(id);
+  const ALL_PARTY = ["CA", "CT", "DE", "FL", "IL", "MD", "MA", "MI", "MT", "NV", "NH", "OR", "PA", "WA"]; // states where everyone on the call has to agree to recording
   const prodOf = (l) => { const p = l?.pipeline || l?.product; return CHECK[p] ? p : "FE"; };
   const playbook = (prod) => prod === "FE" ? window.HP_FEX : prod === "MP" ? window.HP_MP : prod === "IUL" ? window.HP_IUL : null;
   function onFile(l, k) {
@@ -276,7 +277,11 @@
       const id = DL()?.liveLead || D()?.currentId?.(); if (!id) return;
       if (CP.cur && CP.cur.state === "live" && CP.cur.leadId !== id) finalize(CP.cur);
       if (!CP.cur || CP.cur.leadId !== id || CP.cur.state !== "live") { CP.cur = newSession(id); CP.lastKeys = new Set(); }
-      CP.tab = "live"; schedule();
+      // Same live transcript as the call screen. In a one-party-consent state Copilot listens from the moment the call connects;
+      // in an all-party state (or when the lead's state is unknown) it still waits for "Client agreed".
+      const st = String(lead(id)?.state || "").toUpperCase();
+      if (CP.cur.consent === "none" && st && !ALL_PARTY.includes(st)) { const c = CP.cur; c.consent = "agreed"; c.from = 0; c.consentAt = Date.now(); c.state = "live"; c.auto = true; window.hpLocalAi?.prime?.(); window.hpLocalAi?.warm?.(); }
+      CP.tab = "live"; schedule(true);
     }, 50);
   });
   window.addEventListener("hp:tx", (e) => {
@@ -620,7 +625,7 @@ Never include Social Security, bank, card or account numbers. Transcript:
       <textarea class="hpc-notes" data-sms rows="3" aria-label="Follow-up text">${esc(s.smsDraft || "")}</textarea>
       <div class="hpc-acts"><button type="button" class="btn" data-act="sms-copy">Copy text</button><button type="button" class="btn primary" data-act="sms-send">Send text</button></div>
       ${(() => { const left = suggestions(s, l); return `<div class="hpc-sec">Your notes ${left.length ? `<button type="button" class="hpc-addall" data-addall>Add ${left.length} suggestion${left.length === 1 ? "" : "s"}</button>` : ""}</div><textarea class="hpc-notes" data-revnotes rows="${Math.min(10, Math.max(3, (s.notes || "").split("\n").length + 1))}" placeholder="Notes for the client's file" aria-label="Your notes">${esc(s.notes || "")}</textarea>`; })()}
-      <p class="hpc-empty">Recording consent: ${s.imported ? "the agent confirmed the disclosure on an imported call" : s.consentAt ? "the client agreed on this call at " + new Date(s.consentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "not recorded"}.</p>
+      <p class="hpc-empty">Recording consent: ${s.imported ? "the agent confirmed the disclosure on an imported call" : s.auto ? "Copilot listened from the start (a one-party recording state)" : s.consentAt ? "the client agreed on this call at " + new Date(s.consentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "not recorded"}.</p>
       ${(s.ex.flags || []).length ? `<div class="hpc-alert bad"><b>Compliance check</b><ul>${s.ex.flags.map((f) => `<li><b>${esc(f.label)}.</b> ${esc(f.tip)}${f.quote ? ` <em>"${esc(f.quote.slice(0, 160))}"</em>` : ""}</li>`).join("")}</ul>Review the wording before saving. Flags do not block anything.</div>` : ""}
       ${keys.length ? `<div class="hpc-sec">Save to client file <em>${keys.filter((k) => s.sel["f:" + k]).length}/${keys.length}</em></div><div class="hpc-fields" style="gap:0">${keys.map((k) => { const f = ex.F[k]; const was = onFile(l, k); const v = s.edits[k] ?? (FIELDS[k].num ? f.value : f.value); return `<div class="hpc-pick"><input type="checkbox" data-sel="f:${k}" ${s.sel["f:" + k] ? "checked" : ""} aria-label="Save ${esc(FIELDS[k].label)}"><span>${esc(FIELDS[k].label)}${f.conf === "med" ? " ·<br>check" : ""}</span><input type="text" data-ed="${k}" value="${esc(v)}">${was && was !== String(v) && !(FIELDS[k].num && money(v) === was) ? `<span class="was">Replaces: ${esc(was)}</span>` : ""}</div>`; }).join("")}</div>` : ""}
       ${ex.tasks.length ? `<div class="hpc-sec">Add to calendar</div><div class="hpc-list">${ex.tasks.map((t, i) => taskRow(t, i, s)).join("")}</div>` : ""}
