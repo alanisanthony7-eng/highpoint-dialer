@@ -1880,7 +1880,7 @@
         : `<div class="hpdk-dz-h">Log the call${sess0 ? " · next lead dials after" : ""}</div><textarea id="hpdlNote" rows="2" placeholder="Note for this call (optional)">${esc(noteV)}</textarea>
           <div class="hpdk-dz">${DZ.map(([k, t]) => `<button type="button" class="hpdk-chip k-${k}" data-dz="${k}" ${S.dockPend === k ? 'aria-pressed="true"' : ""}>${t}</button>`).join("")}</div>
           ${S.dockPend ? `<div class="hpdl-when"><span>${S.dockPend === "appt" ? "Appointment" : "Call back"} time</span><input type="datetime-local" id="hpdlAt" value="${esc(S.dockAt || "")}"><button type="button" class="hpdl-b on" id="hpdlSave">Save</button></div>` : ""}
-          ${!S.call && !sess0 ? `<button type="button" class="hpdl-b" id="hpdkRedial">Call again</button>` : ""}`}}
+          ${!S.call && !sess0 ? `<button type="button" class="hpdl-b" id="hpdkRedial">Call again</button>` : ""}`}
         <div class="hpc-slot hpdl-cp" id="hpdlCopilot" data-lead="${esc(l.id)}"></div>`;
       try { window.hpCopilot?.refresh?.(); } catch {}
       const doDispo = async (k) => {
