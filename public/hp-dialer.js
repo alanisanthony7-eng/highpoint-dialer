@@ -556,7 +556,7 @@
     const legs = B.legs.filter((l) => !l.failed); P.batch = null;
     let why = "";
     const sid = legs.find((l) => l.sid)?.sid;
-    if (sid) { try { const c = (await api("/calls/live?sid=" + encodeURIComponent(sid))).call; if (c?.amd === "dial-failed") why = "Telnyx couldn't place the call to the lead"; else if (c?.outcome?.kind === "failed") why = "the call failed"; else if (c?.cause) why = String(c.cause).replace(/_/g, " "); } catch {} }
+    if (sid) { try { const c = (await api("/calls/live?sid=" + encodeURIComponent(sid))).call; if (c?.amd === "dial-failed") why = "Telnyx couldn't place the call to the lead"; else if (c?.outcome?.kind === "failed") why = "the call failed"; else if (String(c?.sipCause) === "403") why = "Telnyx refused it, usually because your account is at its limit for calls at once. Ask Telnyx support to raise it"; else if (c?.cause) why = String(c.cause).replace(/_/g, " "); } catch {} }
     if (S.ps !== P) return;
     (P.back = P.back || []).unshift(...legs.map((l) => l.lead.id));
     pauseWhy(P, `Calls are dropping before they ring${why ? " (" + why + ")" : ""}. Nothing was logged. Check your number and phone line, then press Resume.`, legs[0]?.lead.id);
