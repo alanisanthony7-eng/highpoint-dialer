@@ -41,7 +41,7 @@ export default wrap(async (req) => {
     const body = await req.json();
     const s = { ...cfg.settings };
     for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in (body.settings || {})) s[k] = body.settings[k];
-    s.maxLines = Math.max(1, Math.min(10, +s.maxLines || 1));
+    s.maxLines = Math.max(1, Math.min(3, +s.maxLines || 1));
     const next = { ...cfg, settings: s };
     if (body.trust) next.trust = { ...(cfg.trust || {}), ...body.trust };
     await setJ("config", "app", next);

@@ -1,4 +1,4 @@
-// Multi-line power dialing (1–10 lines) with "always hear hello", async voicemail detection,
+// Multi-line power dialing (1–3 lines) with "always hear hello", async voicemail detection,
 // automatic voicemail drop, and a compliant message for any second answer.
 //  POST /api/dialer/power/start   {lines}
 //  POST /api/dialer/power/dial    {session, leads:[{id,phone,name,state}]}
