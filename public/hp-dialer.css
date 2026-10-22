@@ -795,3 +795,8 @@ html.hp-pro .hpdk.callbar{border-radius:0;border-width:1px 0 0;border-color:rgba
 #hpdDock.hpdl-mini .hpdk-end{width:100%}
 #hpdDock.hpdl.hpdl-mini{max-height:calc(100vh - 16px);overflow-y:auto}
 #hpdDock.hpdl-mini .hpdk-chip{padding:7px 6px;font-size:12px}
+#hpdDock.hpdl-mini .hpdl-lines{display:flex;flex-direction:column;gap:6px}
+#hpdDock.hpdl-mini .hpdl-line{all:unset;cursor:pointer;box-sizing:border-box;display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:9px 11px;border-radius:12px;background:rgba(255,255,255,.045);border:1px solid var(--line,rgba(255,255,255,.1))}
+#hpdDock.hpdl-mini .hpdl-line b{font-size:13.5px}#hpdDock.hpdl-mini .hpdl-line .num{grid-column:1;font-size:12px;opacity:.7}
+#hpdDock.hpdl-mini .hpdl-line em{grid-row:1/3;grid-column:2;align-self:center;font-style:normal;font-size:12px;font-weight:700;color:#FFB547}
+#hpdDock.hpdl-mini .hpdl-line[data-s="done"] em{color:#9aa4b2}#hpdDock.hpdl-mini .hpdl-line[data-s="live"]{border-color:#3BD38B}

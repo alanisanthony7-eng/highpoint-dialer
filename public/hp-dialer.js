@@ -372,7 +372,7 @@
       title: "Start calling?",
       body: `<p>You're about to start a session of <b>${n}</b> lead${n === 1 ? "" : "s"} from <b>${esc(listName())}</b>.</p><p class="hpd-sm">The first lead won't ring until you press Start session.</p>`,
       ok: "Start session",
-      onOk: () => { if (S.ps || S.call || S.power) return; if (S.status !== "ready") setStatus("ready", true); S.ps = { ids, i: -1, talked: new Set(), paused: false, hold: null }; phoneNext(); renderHome(); },
+      onOk: () => { if (S.ps || S.call || S.power) return; if (S.status !== "ready") setStatus("ready", true); S.ps = { ids, i: -1, talked: new Set(), paused: false, hold: null }; phoneNext(); renderHome(); dock(); },
     });
   }
   // After a call someone answered and you logged, a session doesn't dial on by itself: Resume, Pause or Stop.
@@ -1787,7 +1787,7 @@
       const g = lsGet("hpd.cardPos", null), w = Math.min(350, innerWidth - 16);
       st.transform = "none"; st.animation = "none"; st.width = w + "px";
       st.left = Math.max(4, Math.min(g?.x ?? innerWidth - w - 20, innerWidth - w - 4)) + "px";
-      st.top = Math.max(4, Math.min(g?.y ?? 72, innerHeight - 120)) + "px";
+      st.top = Math.max(4, Math.min(g?.y ?? 104, innerHeight - 120)) + "px";
     }
   }
   // Drag the contact card by any part of it that isn't a button or field.
@@ -1843,19 +1843,34 @@
     // voicemails never pop it up: they only move the slim bar. With a client's full profile open the bar sits under it instead.
     const pfOpen = !!PF.id && !$("#hpdProfile")?.hidden, sess0 = S.ps || P;
     const afterCall = !onCall && !!l && !sess0?.holdMsg && !!(S.phoneLead || S.callLead || sess0?.hold || P?.waitingDispo);
-    const bar = pfOpen || !(l && (onCall || afterCall));
+    const bar = pfOpen || !(sess0 || S.call || (l && (onCall || afterCall))); // pressing Start brings the card up and it stays for the whole session
     f.classList.remove("hpdl", "hpdl-mini", "hpdk", "wide"); f.classList.add("hpdk");
     f.classList.toggle("callbar", bar); document.body.classList.toggle("hpd-bar", bar);
     const two = l && S.settings?.record && ["CA", "CT", "DE", "FL", "IL", "MD", "MA", "MI", "MT", "NV", "NH", "OR", "PA", "WA"].includes(String(l.state || "").toUpperCase());
     f.classList.remove("min"); placeDock(f, bar ? "bar" : "card");
-    if (!bar) {
+    if (!bar && !(l && (onCall || afterCall))) {
+      // dialing: who is ringing, or why it paused. Same small movable card; the client's details fill it in when they pick up.
+      f.classList.remove("hpdk", "idle-ready"); f.classList.add("hpdl", "hpdl-mini");
+      S.consoleLead = null;
+      const legs = consoleLegs();
+      f.innerHTML = `<div class="hpdl-h"><span class="hpdk-state" data-tone="${tone}"><i></i>${esc(state)}</span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${sess0 ? `<button type="button" class="hpdl-b end" id="hpdkStop">End session</button>` : ""}</div>
+        ${sess0?.holdMsg || (sess0?.hold && sess0.paused) ? nextRowHTML(sess0)
+          : legs.length ? `<div class="hpdl-lines">${legs.map((g) => `<button type="button" class="hpdl-line" data-s="${esc(g.st)}" data-lead="${esc(g.lead?.id || "")}"><b>${esc(g.lead ? D.fullName(g.lead) : g.name || fmt(g.to))}</b><span class="num">${esc(fmt(g.lead?.phone || g.to))}</span><em>${esc(g.released ? "Stopped" : g.label)}</em></button>`).join("")}</div>`
+          : `<p class="hpd-sm hpdl-wait">${P?.paused ? "Paused." : "Getting the next leads…"}</p>`}
+        ${S.ps && !sess0.hold ? `<button type="button" class="hpdl-b" id="hpdkSkip">Skip${legs.length > 1 ? " these" : ""}</button>` : P ? `<button type="button" class="hpdl-b ${P.paused ? "on" : ""}" id="hpdkPause">${P.paused ? "Resume" : "Pause"}</button>` : ""}`;
+      $("#hpdkSkip", f)?.addEventListener("click", () => phoneNext());
+      $("#hpdkPause", f)?.addEventListener("click", togglePause);
+      $("#hpdkStop", f)?.addEventListener("click", () => (S.ps ? phoneEnd() : stopPower()));
+      $$("[data-next]", f).forEach((b) => (b.onclick = () => (b.dataset.next === "go" ? sessGo(true) : b.dataset.next === "pause" ? sessGo(false) : (S.ps ? phoneEnd() : stopPower()))));
+      $$(".hpdl-line", f).forEach((b) => (b.onclick = () => b.dataset.lead && openProfile(b.dataset.lead, { keepList: true })));
+    } else if (!bar) {
       // just the client's contact card and the call buttons: no console, no stretch / minimize, nothing else to open
       f.classList.remove("hpdk", "idle-ready"); f.classList.add("hpdl", "hpdl-mini");
       S.consoleLead = l.id;
       const hist = l.callCount ? `Called ${l.callCount}×` + (l.lastDisposition ? ` · last: ${esc(l.lastDisposition)}` : "") : "First call";
       const noteV = S.dockNoteFor === l.id ? S.dockNote || "" : "";
       const holdNow = sess0?.hold === l.id;
-      f.innerHTML = `<div class="hpdl-h"><span class="hpdk-state" data-tone="${tone}"><i></i>${onCall ? "Connected" : "Call ended"}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${sess0 ? `<button type="button" class="hpdl-b end" id="hpdkStop">End session</button>` : ""}</div>
+      f.innerHTML = `<div class="hpdl-h"><span class="hpdk-state" data-tone="${tone}"><i></i>${onCall ? (live ? "Connected" : state) : "Call ended"}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${sess0 ? `<button type="button" class="hpdl-b end" id="hpdkStop">End session</button>` : ""}</div>
         <div class="hpdl-who hpdl-c" data-s="live" data-lead="${esc(l.id)}" title="Open the full client profile"><span class="hpdk-av" data-tone="${tone}">${esc(ini)}</span><b class="hpdl-nm">${esc(D.fullName(l))}</b><span class="hpdl-ph num">${esc(fmt(l.phone))}</span>
           <span class="hpdl-meta">${esc(l.state || "")}${clock ? ` · ${esc(clock.txt)} local` : ""}${l.age ? ` · Age ${esc(l.age)}` : ""}${l.product ? ` · ${esc(l.product)}` : ""}</span>${idLine(l) ? `<span class="hpdl-id">${idLine(l)}</span>` : ""}
           <span class="hpdl-hist">${hist} · <em class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</em></span>

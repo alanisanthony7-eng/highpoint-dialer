@@ -218,7 +218,7 @@ if (SERVE) {
     // batch 1: rang out, busy, voicemail ring together; each logs itself with its reason; no popup; the next batch dials on its own
     await until(async () => (await nDials()) === 3, "three lines to ring together");
     check(true, "three leads ring at once");
-    check(await page.evaluate(() => !document.querySelector("#hpdDock.hpdl-mini") && document.querySelector("#hpdDock")?.classList.contains("callbar")), "while lines ring (and when nobody picks up) only the slim bar shows: no popout");
+    check(await page.evaluate(() => { const d = document.querySelector("#hpdDock"); return !!d && d.classList.contains("hpdl-mini") && !d.classList.contains("callbar") && /Ringing/.test(d.innerText) && d.querySelectorAll(".hpdl-line").length === 3; }), "pressing Start brings the small card up straight away, listing the three lines ringing (no bottom bar)");
     const logged = async (id, what) => (await until(async () => { const r = await rows(id); return r.length ? r : null; }, what))[0];
     const a = await logged(ids[0], "lead 1's log"), b = await logged(ids[1], "lead 2's log"), c = await logged(ids[2], "lead 3's log");
     check(a.outcome === "No answer" && a.note === "Rang out" && a.hpSid, "rang out: No answer · Rang out");
