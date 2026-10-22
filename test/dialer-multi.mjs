@@ -230,16 +230,17 @@ if (SERVE) {
     // batch 2: one human among rings: the human connects, the others are released and logged No answer
     await until(talking, "the human to connect");
     check(true, "a person answering connects to you (Connected)");
+    check(await page.evaluate(() => { const p = document.querySelector("#hpdProfile"), d = document.querySelector("#hpdDock"); return !!p && !p.hidden && p.innerText.includes(window.hpDesk.fullName(window.hpDesk.leads.get(window.hpDialer.liveLead))) && d.classList.contains("callbar") && !d.classList.contains("hpdl") && !d.querySelector("#hpdkWide,#hpdkMin"); }), "the client's contact card opens when they pick up; no floating console, stretch or minimize buttons");
     const who = await page.evaluate(() => window.hpDialer.liveLead);
     await until(async () => { const dd = await page.evaluate(() => [...window.hpDesk.calls.values()].map((x) => x.note)); return dd.filter((n) => n === "Another lead answered first").length >= 2; }, "the other two lines to be released and logged");
     check(true, "the lines that were still ringing are released and logged No answer");
     const before = await nDials();
     await page.locator("#hpdkHang").click();
-    await page.locator('#hpdDock [data-dz="ni"]').waitFor();
-    await page.locator('#hpdDock [data-dz="ni"]').click();
+    await page.locator('#hpdProfile [data-pdz="ni"]').waitFor();
+    await page.locator('#hpdProfile [data-pdz="ni"]').click();
     await page.locator('#hpdDock [data-next="go"]').waitFor();
     check((await rows(who))[0]?.outcome === "Not interested", "logging the answered call saves its result");
-    check(await page.locator("#hpdDock [data-next]").count() === 3, "Resume, Pause and Stop appear right under the log");
+    check(await page.locator("#hpdDock [data-next]").count() === 2 && await page.locator("#hpdkStop").count() === 1, "Resume, Pause and End session appear right under the log");
     await wait(2500);
     check((await nDials()) === before, "nothing dials until you choose");
     await page.locator('#hpdDock [data-next="pause"]').click();
@@ -297,7 +298,7 @@ if (SERVE) {
         await wait(1500);
         if (how === "agent") await page.locator("#hpdkHang").click();
         else if (how === "lead") await realFetch(ORIGIN + "/__sim/lead-hangup?to=" + wph, { method: "POST" });
-        if (how !== "log") { await until(async () => !(await talking()), `${N} line(s): the call to end (${how})`); await page.locator('#hpdDock [data-dz="ni"]').click(); }
+        if (how !== "log") { await until(async () => !(await talking()), `${N} line(s): the call to end (${how})`); await page.locator('#hpdProfile [data-pdz="ni"]').click(); }
         else await page.evaluate((id) => window.hpDesk.autoLog(id, "Not interested", {}), who);
         if (how !== "agent") { // with the client's profile open the controls are the slim bar: Resume has to work there too
           await page.evaluate((id) => window.hpDialer.openProfile(id), who);
@@ -351,7 +352,7 @@ if (SERVE) {
     check((await nDials()) === dials0, "refused leads are never dialed");
     const dockTxt = await page.locator("#hpdDock").innerText(); if (!/couldn.t be called/.test(dockTxt)) console.log("DOCK:", dockTxt.replace(/\s+/g, " ").slice(0, 500), "| SESSION", JSON.stringify(await page.evaluate(() => window.hpDialer.session)));
     check(/couldn.t be called/.test(dockTxt), "the pause says why (couldn't be called)");
-    await page.locator('#hpdDock [data-next="stop"]').click();
+    await page.locator("#hpdkStop").click();
     await until(async () => !(await page.evaluate(() => window.hpDialer.session)), "Stop to end the paused session");
     await api("/api/dialer/setup", "PUT", { settings: { quietHours: { start: 0, end: 24 }, maxAttempts24h: 50, stateRules: { NY: { start: 0, end: 24, max24h: 50 } } } });
 
@@ -367,7 +368,7 @@ if (SERVE) {
     const dropTxt = await page.locator("#hpdDock").innerText(); if (!/dropping before they ring/.test(dropTxt)) console.log("DOCK:", dropTxt.replace(/\s+/g, " ").slice(0, 400), "| SESSION", JSON.stringify(await page.evaluate(() => window.hpDialer.session)));
     check(/dropping before they ring/.test(dropTxt), "calls that drop before ringing pause with an explanation");
     check((await noAns()) === noAns0, "nothing was logged No answer for lines that never rang");
-    await page.locator('#hpdDock [data-next="stop"]').click();
+    await page.locator("#hpdkStop").click();
     await until(async () => !(await page.evaluate(() => window.hpDialer.session)), "Stop to end the paused session");
     await realFetch(ORIGIN + "/__sim/fail-dial?on=0", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     console.log("ALL PASSED");
