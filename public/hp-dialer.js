@@ -1557,7 +1557,7 @@
       <div class="hpd-grid2" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">
         ${f("hsCo", "Company name spoken in messages", s.company)}
         ${f("hsCb", "Call-back number for messages", s.callbackNumber, 'inputmode="tel" placeholder="(305) 555-0100"')}
-        ${f("hsLines", "Max lines per agent (1-3)", s.maxLines, 'type="number" min="1" max="3"')}
+        ${f("hsLines", "Max lines per agent (1-10)", s.maxLines, 'type="number" min="1" max="10"')}
         ${f("hsAb", "Abandoned-call limit %", s.abandonCap, 'type="number" min="1" max="10" step="0.5"')}
         ${f("hsBuy", "Numbers each agent can buy", s.agentMaxNumbers || 5, 'type="number" min="1" max="50"')}
       </div>
@@ -2525,7 +2525,7 @@
         <div class="hph-ctl">
           <label class="hph-sel"><span>Calling list</span><select id="hphSrc" ${S.power ? "disabled" : ""}><option value="all" ${S.src === "all" ? "selected" : ""}>All my leads (${[...D.leads.values()].filter(dialable).length})</option>${S.camps.length ? `<optgroup label="My campaigns">${S.camps.map((c) => `<option value="c:${esc(c.id)}" ${S.src === "c:" + c.id ? "selected" : ""}>${esc(c.name)} (${c.ids.length})${c.paused ? " · paused" : ""}</option>`).join("")}</optgroup>` : ""}<optgroup label="Pipeline">${["new", "contacted", "appointment", "application"].map((id) => `<option value="p:${id}" ${S.src === "p:" + id ? "selected" : ""}>${esc(pipeName(id))} (${[...D.leads.values()].filter((l) => (l.stage || "new") === id && dialable(l)).length})</option>`).join("")}</optgroup>${myLists().length ? `<optgroup label="My lists">${myLists().map((x) => `<option value="l:${esc(x.id)}" ${S.src === "l:" + x.id ? "selected" : ""}>${esc(x.name)} (${D.listCount ? D.listCount(x) : 0})</option>`).join("")}</optgroup>` : ""}${sources.length ? `<optgroup label="Imported lists">${sources.map((c) => `<option value="s:${esc(c.name)}" ${S.src === "s:" + c.name ? "selected" : ""}>${esc(c.name)} (${c.total})</option>`).join("")}</optgroup>` : ""}</select></label>
           <label class="hph-sel"><span>Who to call</span><select id="hphFilter" ${S.power ? "disabled" : ""}>${FILTERS.map(([k, n]) => `<option value="${k}" ${S.filter === k ? "selected" : ""}>${n} (${fCount[k]})</option>`).join("")}</select></label>
-          ${oneLine ? `<p class="hpd-sm" style="margin:0;align-self:center">Your phone is one line at a time.</p>` : `<div class="hph-lines" role="group" aria-label="Lines">${[1, 2, 3].map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power || S.ps ? "disabled" : ""}>${n}</button>`).join("")}</div>`}
+          ${oneLine ? `<p class="hpd-sm" style="margin:0;align-self:center">Your phone is one line at a time.</p>` : `<div class="hph-lines" role="group" aria-label="Lines">${Array.from({ length: Math.max(S.settings.maxLines || 3, 1) }, (_, i) => i + 1).map((n) => `<button type="button" data-hl="${n}" aria-pressed="${lines === n}" ${n > (S.settings.maxLines || 3) || S.power || S.ps ? "disabled" : ""}>${n}</button>`).join("")}</div>`}
           ${psFlow ? (S.ps ? `<button type="button" class="btn" id="hphPsSkip">Skip</button><button type="button" class="btn hpd-hang" id="hphPsEnd">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphPsGo" ${q.length ? "" : "disabled"}>${I.phone} Start calling</button>`) : S.power ? `<button type="button" class="btn" id="hphPause">${S.power.paused ? "Resume" : "Pause"}</button><button type="button" class="btn hpd-hang" id="hphStop">End session</button>` : `<button type="button" class="btn primary hph-go" id="hphGo" ${q.length && !S.call ? "" : "disabled"}>${I.phone} Start calling</button>`}
         </div>
       </div>
@@ -2618,7 +2618,7 @@
     el.innerHTML = `<div class="panel stack hds">
       <h2>Dialer settings</h2><p class="hpd-sm" style="margin:0">These are yours alone. They save on this device and apply right away.</p>
       <h3>Calling</h3>
-      ${row("Lines at once", `Ring up to ${maxL} leads together. The first to answer comes to you.`, `<div class="hph-lines" id="dsLines">${[1, 2, 3].map((n) => `<button type="button" data-n="${n}" aria-pressed="${Math.min(S.lines, maxL) === n}" ${n > maxL ? "disabled" : ""}>${n}</button>`).join("")}</div>`)}
+      ${row("Lines at once", `Ring up to ${maxL} leads together. The first to answer comes to you.`, `<div class="hph-lines" id="dsLines">${Array.from({ length: Math.max(maxL, 1) }, (_, i) => i + 1).map((n) => `<button type="button" data-n="${n}" aria-pressed="${Math.min(S.lines, maxL) === n}" ${n > maxL ? "disabled" : ""}>${n}</button>`).join("")}</div>`)}
       ${tx ? row("Ring for", "How long to let each lead ring before hanging up and moving on.", `<select id="dsRingSec">${[10, 15, 20, 25, 30, 40, 50, 60].map((n) => `<option value="${n}" ${+snd.ringSec === n ? "selected" : ""}>${n} seconds</option>`).join("")}</select>`) : ""}
       ${row("Wrap-up after a call", "Seconds you get to log the result before it's marked Contacted.", `<input type="number" id="dsWrap" min="10" max="120" value="${Math.min(120, Math.max(10, +S.wrapSec || 30))}"><span class="hpd-sm">seconds</span>`)}
       ${tx ? row("Keep dialing after wrap-up", "Off: the dialer waits for you to press Skip before the next lead.", sw("dsNext", snd.autoNext !== false)) : ""}
