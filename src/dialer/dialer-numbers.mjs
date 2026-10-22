@@ -30,11 +30,9 @@ function health(n, settings, rep) {
   else if (rep?.spam_risk === "medium") { if (status !== "flagged") status = "watch"; why.push(`carriers rate it medium spam risk${cat}`); }
   if (dials >= 60 && rate < 0.06) { status = status === "flagged" ? status : "watch"; why.push(`only ${(rate * 100).toFixed(1)}% of calls answered this week`); }
   if (answered >= 20 && shortRate > 0.45) { status = status === "flagged" ? status : "watch"; why.push(`${Math.round(shortRate * 100)}% of answers hang up within 10s`); }
-  const age = (Date.now() - (n.boughtAt || 0)) / 864e5;
-  if (age < settings.rampDays) why.push(`warming up (day ${Math.floor(age) + 1} of ${settings.rampDays})`);
   const td = n.days?.[today()] || {};
   const reputation = rep ? { risk: rep.spam_risk || null, category: rep.spam_category || null, scores: { maturity: rep.maturity_score ?? null, connection: rep.connection_score ?? null, engagement: rep.engagement_score ?? null, sentiment: rep.sentiment_score ?? null }, at: rep.last_refreshed_at || null } : null;
-  return { status, why, week: { dials, answered, short, answerRate: rate }, todayDials: td.dials || 0, cap: numberCap(n, settings), reputation };
+  return { status, why, week: { dials, answered, short, answerRate: rate }, todayDials: td.dials || 0, cap: null, reputation };
 }
 
 export default wrap(async (req) => {
@@ -53,7 +51,7 @@ export default wrap(async (req) => {
       .map((n) => ({ ...n, days: undefined, billing: n.billing && (user.admin || n.owner === user.identity) ? { price: n.billing.price, status: n.billing.status } : undefined, mine: n.owner === user.identity, ownerName: agents[n.owner] || (n.owner === user.identity ? user.name : n.owner ? "Agent" : "Team"), health: health(n, S, rep[n.e164]) }))
       .sort((a, b) => (b.mine - a.mine) || a.e164.localeCompare(b.e164));
     const t = await numberTerms(user);
-    return json({ numbers: list, agents: user.admin ? agents : undefined, settings: { agentMaxNumbers: maxNumbers(S), dailyCapPerNumber: S.dailyCapPerNumber },
+    return json({ numbers: list, agents: user.admin ? agents : undefined, settings: { agentMaxNumbers: maxNumbers(S) },
       buy: { charged: t.charged, price: t.price, connected: t.connected, card: publicCard(t.card), allowed: true } });
   }
 

@@ -13,7 +13,7 @@ html.hp-pro .hp-scrim{background:linear-gradient(180deg,rgba(6,4,12,.06) 0,rgba(
 /* Horizon glow rising behind the grid */
 html.hp-pro body::before{
   content:"";display:block;position:fixed;left:0;right:0;bottom:0;height:46vh;z-index:0;pointer-events:none;
-  background:radial-gradient(ellipse 70% 100% at 50% 100%,rgba(255,46,136,.30),rgba(255,158,61,.10) 45%,transparent 72%);
+  background:radial-gradient(ellipse 70% 100% at 50% 100%,color-mix(in srgb,var(--theme-accent,#FF4FA3) 30%,transparent),color-mix(in srgb,var(--theme-accent-2,#FF9E3D) 10%,transparent) 45%,transparent 72%);
   mix-blend-mode:screen;
 }
 
@@ -21,8 +21,8 @@ html.hp-pro body::before{
 html.hp-pro body::after{
   content:"";display:block!important;position:fixed;top:auto!important;left:-35%;right:-35%;bottom:-8vh;height:52vh;z-index:0;pointer-events:none;
   background:
-    linear-gradient(90deg,rgba(255,79,163,.6) 1px,transparent 1px) 0 0/72px 72px,
-    linear-gradient(0deg,rgba(255,158,61,.55) 1px,transparent 1px) 0 0/72px 72px;
+    linear-gradient(90deg,color-mix(in srgb,var(--theme-accent,#FF4FA3) 60%,transparent) 1px,transparent 1px) 0 0/72px 72px,
+    linear-gradient(0deg,color-mix(in srgb,var(--theme-accent-2,#FF9E3D) 55%,transparent) 1px,transparent 1px) 0 0/72px 72px;
   mix-blend-mode:normal;
   transform:perspective(520px) rotateX(64deg);transform-origin:50% 100%;
   -webkit-mask-image:linear-gradient(0deg,#000 8%,transparent 88%);mask-image:linear-gradient(0deg,#000 8%,transparent 88%);
@@ -34,23 +34,23 @@ html.hp-pro body::after{
 
 /* ---------- 2. Glass surfaces with depth ---------- */
 html.hp-pro :is(.panel,.hero,.kpis>div,.col,.rank-card,.tiles>*,.hph-card){
-  background:linear-gradient(165deg,rgba(255,255,255,.085),rgba(255,255,255,.016) 42%,rgba(255,46,136,.035))!important;
+  background:linear-gradient(165deg,rgba(255,255,255,.085),rgba(255,255,255,.016) 42%,color-mix(in srgb,var(--theme-accent,#FF4FA3) 3.5%,transparent))!important;
   border:1px solid rgba(255,255,255,.085)!important;
   border-radius:18px!important;
   -webkit-backdrop-filter:blur(16px) saturate(150%);backdrop-filter:blur(16px) saturate(150%);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 1px 0 rgba(0,0,0,.4),0 34px 64px -30px rgba(0,0,0,.95)!important;
   transition:transform .45s cubic-bezier(.2,.8,.2,1),box-shadow .45s,border-color .3s,background .3s;
 }
-html.hp-pro .col{border-top:2px solid rgba(255,79,163,.55)!important}
-html.hp-pro .hero{box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 44px 90px -34px rgba(0,0,0,.95),0 0 0 1px rgba(255,79,163,.14)!important}
+html.hp-pro .col{border-top:2px solid color-mix(in srgb,var(--theme-accent,#FF4FA3) 55%,transparent)!important}
+html.hp-pro .hero{box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 44px 90px -34px rgba(0,0,0,.95),0 0 0 1px color-mix(in srgb,var(--theme-accent,#FF4FA3) 14%,transparent)!important}
 
 /* Pointer spotlight + tilt: hp-tilt.js sets --mx/--my/--rx/--ry while the pointer is over a surface */
 html.hp-pro .hp3-hot{
   background:
-    radial-gradient(380px circle at var(--mx,50%) var(--my,0%),rgba(255,79,163,.20),transparent 62%),
-    linear-gradient(165deg,rgba(255,255,255,.10),rgba(255,255,255,.02) 42%,rgba(255,46,136,.045))!important;
-  border-color:rgba(255,79,163,.36)!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 40px 72px -28px rgba(255,46,136,.38),0 0 0 1px rgba(255,79,163,.18)!important;
+    radial-gradient(380px circle at var(--mx,50%) var(--my,0%),color-mix(in srgb,var(--theme-accent,#FF4FA3) 20%,transparent),transparent 62%),
+    linear-gradient(165deg,rgba(255,255,255,.10),rgba(255,255,255,.02) 42%,color-mix(in srgb,var(--theme-accent,#FF4FA3) 4.5%,transparent))!important;
+  border-color:color-mix(in srgb,var(--theme-accent,#FF4FA3) 36%,transparent)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 40px 72px -28px color-mix(in srgb,var(--theme-accent,#FF4FA3) 38%,transparent),0 0 0 1px color-mix(in srgb,var(--theme-accent,#FF4FA3) 18%,transparent)!important;
 }
 html.hp-pro .kpis>div.hp3-hot,html.hp-pro .tiles>.hp3-hot,html.hp-pro .rank-card.hp3-hot{
   transform:perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateY(-4px);
@@ -58,10 +58,10 @@ html.hp-pro .kpis>div.hp3-hot,html.hp-pro .tiles>.hp3-hot,html.hp-pro .rank-card
 html.hp-pro .kpis{perspective:1100px}
 
 /* KPI numbers pop off the tile */
-html.hp-pro .kpis>div .num,html.hp-pro .kpis>div b{text-shadow:0 2px 0 rgba(0,0,0,.45),0 0 18px rgba(255,46,136,.25)}
+html.hp-pro .kpis>div .num,html.hp-pro .kpis>div b{text-shadow:0 2px 0 rgba(0,0,0,.45),0 0 18px color-mix(in srgb,var(--theme-accent,#FF4FA3) 25%,transparent)}
 
 /* Hero headline: extruded 3D lettering */
-html.hp-pro .hero h1{text-shadow:0 1px 0 #B0205C,0 2px 0 #8A1447,0 3px 0 #640D33,0 4px 0 #3F0820,0 22px 34px rgba(255,46,136,.45)!important}
+html.hp-pro .hero h1{text-shadow:0 1px 0 #B0205C,0 2px 0 #8A1447,0 3px 0 #640D33,0 4px 0 #3F0820,0 22px 34px color-mix(in srgb,var(--theme-accent,#FF4FA3) 45%,transparent)!important}
 
 /* ---------- 3. Buttons: keycaps and glass ---------- */
 html.hp-pro .btn:not(.primary){
@@ -71,17 +71,17 @@ html.hp-pro .btn:not(.primary){
   transition:transform .18s,box-shadow .25s,border-color .25s,background .25s!important;
 }
 html.hp-pro .btn:not(.primary):hover{
-  transform:translateY(-2px);border-color:rgba(255,79,163,.5)!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 14px 26px -12px rgba(255,46,136,.5)!important;
+  transform:translateY(-2px);border-color:color-mix(in srgb,var(--theme-accent,#FF4FA3) 50%,transparent)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 14px 26px -12px color-mix(in srgb,var(--theme-accent,#FF4FA3) 50%,transparent)!important;
 }
 html.hp-pro .btn.primary{
-  background:linear-gradient(180deg,#FF5AA0 0%,#FF2E88 55%,#E0196F 100%)!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 5px 0 #7A1140,0 16px 28px -12px rgba(255,46,136,.8)!important;
+  background:linear-gradient(180deg,#FF5AA0 0%,var(--theme-accent,#FF4FA3) 55%,#E0196F 100%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 5px 0 #7A1140,0 16px 28px -12px color-mix(in srgb,var(--theme-accent,#FF4FA3) 80%,transparent)!important;
   transition:transform .15s,box-shadow .2s!important;
 }
 html.hp-pro .btn.primary:hover{
   transform:translateY(-2px);filter:none!important;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 7px 0 #7A1140,0 22px 34px -12px rgba(255,46,136,.9)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 7px 0 #7A1140,0 22px 34px -12px color-mix(in srgb,var(--theme-accent,#FF4FA3) 90%,transparent)!important;
 }
 html.hp-pro .btn.primary:active{
   transform:translateY(4px)!important;
@@ -91,14 +91,14 @@ html.hp-pro .btn.primary:active{
 /* ---------- 4. Rail, nav and top bar ---------- */
 html.hp-pro .rail{
   background:linear-gradient(180deg,rgba(14,8,22,.92),rgba(7,4,13,.97))!important;
-  border-right:1px solid rgba(255,79,163,.16)!important;
-  box-shadow:16px 0 44px -26px rgba(255,46,136,.35)!important;
+  border-right:1px solid color-mix(in srgb,var(--theme-accent,#FF4FA3) 16%,transparent)!important;
+  box-shadow:16px 0 44px -26px color-mix(in srgb,var(--theme-accent,#FF4FA3) 35%,transparent)!important;
 }
 html.hp-pro .nav{transition:transform .25s cubic-bezier(.2,.8,.2,1),background .2s,color .2s!important}
 html.hp-pro .nav:hover{transform:translateX(4px)}
 html.hp-pro .topbar{
   background:rgba(10,6,18,.58)!important;
-  box-shadow:0 1px 0 rgba(255,46,136,.38),0 14px 30px -22px rgba(0,0,0,.9)!important;
+  box-shadow:0 1px 0 color-mix(in srgb,var(--theme-accent,#FF4FA3) 38%,transparent),0 14px 30px -22px rgba(0,0,0,.9)!important;
 }
 
 /* ---------- 5. Inputs, tables, toasts ---------- */
@@ -108,17 +108,17 @@ html.hp-pro textarea{
   box-shadow:inset 0 2px 6px rgba(0,0,0,.45)!important;
 }
 html.hp-pro input:focus,html.hp-pro select:focus,html.hp-pro textarea:focus{
-  outline:none;border-color:rgba(255,79,163,.7)!important;
-  box-shadow:0 0 0 3px rgba(255,46,136,.18),inset 0 2px 6px rgba(0,0,0,.45)!important;
+  outline:none;border-color:color-mix(in srgb,var(--theme-accent,#FF4FA3) 70%,transparent)!important;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--theme-accent,#FF4FA3) 18%,transparent),inset 0 2px 6px rgba(0,0,0,.45)!important;
 }
 html.hp-pro .tablewrap{
   background:rgba(8,4,14,.55)!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:18px!important;
   box-shadow:0 30px 60px -32px rgba(0,0,0,.95)!important;overflow:hidden;
 }
-html.hp-pro table tbody tr:hover{background:linear-gradient(90deg,rgba(255,46,136,.10),rgba(255,158,61,.04) 60%,transparent)!important}
+html.hp-pro table tbody tr:hover{background:linear-gradient(90deg,color-mix(in srgb,var(--theme-accent,#FF4FA3) 10%,transparent),color-mix(in srgb,var(--theme-accent-2,#FF9E3D) 4%,transparent) 60%,transparent)!important}
 html.hp-pro .toast{
   -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
-  box-shadow:0 22px 44px -18px rgba(0,0,0,.9),0 0 0 1px rgba(255,79,163,.3),inset 0 1px 0 rgba(255,255,255,.14)!important;
+  box-shadow:0 22px 44px -18px rgba(0,0,0,.9),0 0 0 1px color-mix(in srgb,var(--theme-accent,#FF4FA3) 30%,transparent),inset 0 1px 0 rgba(255,255,255,.14)!important;
 }
 
 /* ---------- 6. Motion preferences ---------- */
@@ -141,24 +141,24 @@ html.hp-pro .fex-stage>summary::-webkit-details-marker{display:none}
 html.hp-pro .fex-stage>summary>span{flex:1}
 html.hp-pro .fex-stage>summary .btn{padding:6px 12px;font-size:12px}
 html.hp-pro .fex-say{margin:8px 16px;padding:9px 12px;border-left:2px solid #5FB8FF;border-radius:0 10px 10px 0;background:rgba(95,184,255,.07);line-height:1.55;font-size:14px}
-html.hp-pro .fex-say.obj{border-left-color:#FF9E3D;background:rgba(255,158,61,.09);font-weight:700}
+html.hp-pro .fex-say.obj{border-left-color:var(--theme-accent-2,#FF9E3D);background:color-mix(in srgb,var(--theme-accent-2,#FF9E3D) 9%,transparent);font-weight:700}
 html.hp-pro .fex-note{margin:6px 16px;color:#8E95A6;font-style:italic;font-size:13px;line-height:1.5}
-html.hp-pro .fex-h{margin:14px 16px 2px;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:#FF7DBA}
+html.hp-pro .fex-h{margin:14px 16px 2px;font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:color-mix(in srgb,var(--theme-accent,#FF4FA3) 70%,#fff)}
 
 /* ---------- 9. Incoming call prompt: glass, neon edge, keycap answer and decline ---------- */
 html.hp-pro .hpd-incoming{
   width:min(352px,calc(100vw - 32px));padding:18px;gap:16px;border-radius:24px;
-  background:radial-gradient(260px circle at 0% 0%,rgba(255,79,163,.24),transparent 70%),linear-gradient(165deg,rgba(44,18,60,.97),rgba(14,6,22,.98));
+  background:radial-gradient(260px circle at 0% 0%,color-mix(in srgb,var(--theme-accent,#FF4FA3) 24%,transparent),transparent 70%),linear-gradient(165deg,rgba(44,18,60,.97),rgba(14,6,22,.98));
   -webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);
-  border:1px solid rgba(255,79,163,.42);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 30px 70px -20px rgba(0,0,0,.9),0 0 0 6px rgba(255,46,136,.08),0 0 48px -8px rgba(255,46,136,.45);
+  border:1px solid color-mix(in srgb,var(--theme-accent,#FF4FA3) 42%,transparent);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 30px 70px -20px rgba(0,0,0,.9),0 0 0 6px color-mix(in srgb,var(--theme-accent,#FF4FA3) 8%,transparent),0 0 48px -8px color-mix(in srgb,var(--theme-accent,#FF4FA3) 45%,transparent);
 }
-html.hp-pro .hpd-in-h{display:flex;align-items:center;gap:9px;font:800 11px/1 var(--f-ui,system-ui);letter-spacing:.16em;text-transform:uppercase;color:#FF7DBA}
-html.hp-pro .hpd-in-h i{width:8px;height:8px;border-radius:50%;background:#FF2E88;flex:none;animation:hp3dRing 1.6s ease-out infinite}
-@keyframes hp3dRing{0%{box-shadow:0 0 0 0 rgba(255,46,136,.6)}100%{box-shadow:0 0 0 12px rgba(255,46,136,0)}}
+html.hp-pro .hpd-in-h{display:flex;align-items:center;gap:9px;font:800 11px/1 var(--f-ui,system-ui);letter-spacing:.16em;text-transform:uppercase;color:color-mix(in srgb,var(--theme-accent,#FF4FA3) 70%,#fff)}
+html.hp-pro .hpd-in-h i{width:8px;height:8px;border-radius:50%;background:var(--theme-accent,#FF4FA3);flex:none;animation:hp3dRing 1.6s ease-out infinite}
+@keyframes hp3dRing{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--theme-accent,#FF4FA3) 60%,transparent)}100%{box-shadow:0 0 0 12px color-mix(in srgb,var(--theme-accent,#FF4FA3) 0%,transparent)}}
 html.hp-pro .hpd-in-who{display:flex;align-items:center;gap:14px;min-width:0}
 html.hp-pro .hpd-in-who>div{min-width:0}
-html.hp-pro .hpd-in-av{width:56px;height:56px;border-radius:18px;display:grid;place-items:center;flex:none;font-weight:850;font-size:18px;letter-spacing:.02em;color:#fff;background:linear-gradient(160deg,#FF5AA0,#FF9E3D);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 8px 22px -6px rgba(255,46,136,.7)}
+html.hp-pro .hpd-in-av{width:56px;height:56px;border-radius:18px;display:grid;place-items:center;flex:none;font-weight:850;font-size:18px;letter-spacing:.02em;color:#fff;background:linear-gradient(160deg,#FF5AA0,var(--theme-accent-2,#FF9E3D));box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 8px 22px -6px color-mix(in srgb,var(--theme-accent,#FF4FA3) 70%,transparent)}
 html.hp-pro .hpd-in-who b{display:block;font-size:20px;font-weight:800;letter-spacing:-.01em;line-height:1.15;overflow-wrap:anywhere}
 html.hp-pro .hpd-in-who .hpd-sm{display:block;margin-top:4px;font-variant-numeric:tabular-nums;color:#A9B0C0}
 html.hp-pro .hpd-in-acts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -183,22 +183,22 @@ html.hp-pro .hpd-incoming .btn.hpd-in-rej:active{transform:translateY(4px);box-s
 
 /* ---------- 10. Call dock (the popup while dialing): glass, the Highpoint mark, keycap call controls ---------- */
 html.hp-pro .hpdk{
-  background:radial-gradient(300px circle at 100% 0%,rgba(255,79,163,.2),transparent 70%),linear-gradient(165deg,rgba(44,18,60,.97),rgba(12,5,20,.98));
+  background:radial-gradient(300px circle at 100% 0%,color-mix(in srgb,var(--theme-accent,#FF4FA3) 20%,transparent),transparent 70%),linear-gradient(165deg,rgba(44,18,60,.97),rgba(12,5,20,.98));
   -webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);
-  border:1px solid rgba(255,79,163,.36);border-radius:24px;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 34px 80px -20px rgba(0,0,0,.92),0 0 0 6px rgba(255,46,136,.07),0 0 46px -10px rgba(255,46,136,.5);
+  border:1px solid color-mix(in srgb,var(--theme-accent,#FF4FA3) 36%,transparent);border-radius:24px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 34px 80px -20px rgba(0,0,0,.92),0 0 0 6px color-mix(in srgb,var(--theme-accent,#FF4FA3) 7%,transparent),0 0 46px -10px color-mix(in srgb,var(--theme-accent,#FF4FA3) 50%,transparent);
 }
 html.hp-pro .hpdk.min{border-radius:999px;background:linear-gradient(165deg,rgba(44,18,60,.97),rgba(12,5,20,.98))}
 html.hp-pro .hpdk-head{padding:14px 14px 12px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
 html.hp-pro .hpdk-mk{display:inline-flex;align-items:center;gap:9px;padding:6px 11px 6px 8px;border-radius:14px;background:linear-gradient(160deg,rgba(255,255,255,.16),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 6px 14px -8px rgba(0,0,0,.8)}
-html.hp-pro .hpdk-mk svg{width:30px;height:22px;flex:none;filter:drop-shadow(0 0 10px rgba(255,46,136,.45))}
+html.hp-pro .hpdk-mk svg{width:30px;height:22px;flex:none;filter:drop-shadow(0 0 10px color-mix(in srgb,var(--theme-accent,#FF4FA3) 45%,transparent))}
 html.hp-pro .hpdk-mk b{font:800 10px/1 var(--f-ui,system-ui);letter-spacing:.2em;text-transform:uppercase;color:#FF9CC8}
 html.hp-pro .hpdk-state{padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);font-size:12px;letter-spacing:.02em}
-html.hp-pro .hpdk-av{width:52px;height:52px;border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 8px 22px -6px rgba(255,46,136,.7)}
+html.hp-pro .hpdk-av{width:52px;height:52px;border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 8px 22px -6px color-mix(in srgb,var(--theme-accent,#FF4FA3) 70%,transparent)}
 html.hp-pro .hpdk-av[data-tone="live"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 3px rgba(59,211,139,.3),0 0 22px -2px rgba(59,211,139,.6)}
 html.hp-pro .hpdk-id b{font-size:18px}
 html.hp-pro .hpdk .hpdk-rb svg{background:linear-gradient(160deg,rgba(255,255,255,.14),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 8px 16px -8px rgba(0,0,0,.9)}
-html.hp-pro .hpdk .hpdk-rb:hover svg{border-color:rgba(255,79,163,.6);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 10px 22px -8px rgba(255,46,136,.6);transform:translateY(-2px)}
+html.hp-pro .hpdk .hpdk-rb:hover svg{border-color:color-mix(in srgb,var(--theme-accent,#FF4FA3) 60%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 10px 22px -8px color-mix(in srgb,var(--theme-accent,#FF4FA3) 60%,transparent);transform:translateY(-2px)}
 html.hp-pro .hpdk .hpdk-rb.on svg{background:linear-gradient(180deg,#FFFFFF,#E9E4F2);color:#14101F;border-color:#fff;box-shadow:0 0 18px rgba(255,255,255,.35)}
 html.hp-pro .hpdk .hpdk-end,html.hp-pro .hpdk .hpdk-call{border-radius:16px;padding:14px;font-size:15px;transition:transform .15s,box-shadow .2s}
 html.hp-pro .hpdk .hpdk-end{background:linear-gradient(180deg,#FF5A6A 0%,#D92B45 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 5px 0 #7A0F22,0 16px 28px -12px rgba(255,60,90,.8)}
@@ -207,7 +207,7 @@ html.hp-pro .hpdk .hpdk-end:hover,html.hp-pro .hpdk .hpdk-call:hover{transform:t
 html.hp-pro .hpdk .hpdk-end:active,html.hp-pro .hpdk .hpdk-call:active{transform:translateY(4px);filter:none}
 html.hp-pro .hpdk .hpdk-chip{border-radius:12px;background:linear-gradient(160deg,rgba(255,255,255,.1),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 4px 0 rgba(0,0,0,.45);transition:transform .12s,box-shadow .15s}
 html.hp-pro .hpdk .hpdk-chip:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.45)}
-html.hp-pro .hpdk .hpdk-chip.k-appt{background:linear-gradient(180deg,#FF5AA0,#FF2E88);border-color:transparent;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 4px 0 #7A1140}
+html.hp-pro .hpdk .hpdk-chip.k-appt{background:linear-gradient(180deg,#FF5AA0,var(--theme-accent,#FF4FA3));border-color:transparent;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 4px 0 #7A1140}
 html.hp-pro .hpdk .hpdk-chip.k-sold{background:linear-gradient(180deg,#4BE593,#1FBF6A);border-color:transparent;color:#04150B;box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 4px 0 #0E7A41}
 html.hp-pro .hpdk .hpdk-chip.k-dnc,html.hp-pro .hpdk .hpdk-chip.k-bad{color:#FF9AAA}
 @media (prefers-reduced-motion:reduce){html.hp-pro .hpdk .hpdk-rb:hover svg,html.hp-pro .hpdk .hpdk-end:hover,html.hp-pro .hpdk .hpdk-call:hover{transform:none}}

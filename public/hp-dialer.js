@@ -1097,7 +1097,7 @@
           const unpaid = n.payPaused || /past_due|unpaid/.test(n.billing?.status || "");
           return `<tr><td><b class="num">${esc(fmt(n.e164))}</b><br><span class="hpd-sm">${esc(n.state || "")}${n.label ? " · " + esc(n.label) : ""}${n.billing ? ` · ${usd(n.billing.price)}/mo` : ""}</span></td>
           <td><span class="hpd-h ${status}" title="${esc((h.why || []).join("; "))}">${{ healthy: "Healthy", watch: "Watch", flagged: "Flagged", paused: "Paused" }[status] || "—"}</span>${unpaid ? `<br><span class="hpd-sm" style="color:var(--hp-bad)">Monthly payment failed. Replace your card to turn it back on.</span>` : h.why?.length ? `<br><span class="hpd-sm">${esc(h.why[0])}</span>` : ""}${h.reputation?.risk === "low" ? `<br><span class="hpd-sm">carriers rate it low risk</span>` : ""}</td>
-          <td><span class="num">${h.todayDials || 0}</span><span class="hpd-sm"> / ${h.cap || "—"}</span><div class="hpd-meter"><i style="width:${Math.min(100, ((h.todayDials || 0) / (h.cap || 1)) * 100)}%;${(h.todayDials || 0) >= (h.cap || 1) ? "background:var(--hp-warn)" : ""}"></i></div></td>
+          <td><span class="num">${h.todayDials || 0}</span><span class="hpd-sm"> today</span><div class="hpd-meter"><i style="width:${Math.min(100, ((h.todayDials || 0) / 150) * 100)}%;${(h.todayDials || 0) >= (h.cap || 1) ? "background:var(--hp-warn)" : ""}"></i></div></td>
           <td class="hide-sm num">${h.week?.dials ? pct(h.week.answered, h.week.dials) + "%" : "—"}<br><span class="hpd-sm">${h.week?.dials || 0} dials</span></td>
           <td>${S.me?.admin ? `<select data-own="${esc(n.e164)}" style="width:auto">${agentOpts(n.owner)}</select>` : esc(n.mine ? "You" : n.ownerName)}</td>
           <td><div class="hpd-flex" style="justify-content:flex-end">
@@ -1195,7 +1195,7 @@
       <ul class="hpd-check">
         <li class="done"><span><b>A-level STIR/SHAKEN</b> on every number you own through Telnyx, the strongest “this caller is real” signal carriers get.</span></li>
         <li><span><b>Register your business, set your caller name and see each number's carrier rating</b> in the Trust Hub.</span></li>
-        <li class="done"><span><b>Built in:</b> daily caps per number, 14-day warm-up for new numbers, local presence rotation, calling-hour and per-lead attempt limits, opt-out on press 9.</span></li>
+        <li class="done"><span><b>Built in:</b> no limit on how many calls a number can make, local presence rotation, calling-hour rules (plus the few states that cap repeat calls by law), opt-out on press 9.</span></li>
       </ul>
       ${S.me?.admin ? `<div><button class="btn primary" id="hpdOpenTrust" type="button">Open Trust Hub</button></div>` : `<span class="hpd-sm">Your admin manages this in the Trust Hub.</span>`}
     </div>`;
@@ -1404,7 +1404,7 @@
     const k = (v, l, sub = "") => `<div><span class="num">${v}</span><span class="muted">${l}</span>${sub ? `<span class="delta">${sub}</span>` : ""}</div>`;
     const maxD = Math.max(1, ...a.byDay.map((d) => d.dials));
     const W = 640, Hh = 160, bw = W / Math.max(1, a.byDay.length);
-    const chart = `<svg viewBox="0 0 ${W} ${Hh + 22}" role="img" aria-label="Dials and connects per day"><defs><linearGradient id="hpdG" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E88"/><stop offset="1" stop-color="#FF9E3D"/></linearGradient></defs>
+    const chart = `<svg viewBox="0 0 ${W} ${Hh + 22}" role="img" aria-label="Dials and connects per day"><defs><linearGradient id="hpdG" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--theme-accent,#FF2E88)"/><stop offset="1" stop-color="var(--theme-accent-2,#FF9E3D)"/></linearGradient></defs>
       ${a.byDay.map((d, i) => { const h1 = (d.dials / maxD) * Hh, h2 = (d.connects / maxD) * Hh, x = i * bw + bw * 0.18, w = bw * 0.64; return `<g><title>${d.day}: ${d.dials} dials, ${d.connects} conversations, ${d.appts} appts</title><rect x="${x}" y="${Hh - h1}" width="${w}" height="${h1}" rx="3" fill="rgba(255,255,255,.12)"/><rect x="${x}" y="${Hh - h2}" width="${w}" height="${h2}" rx="3" fill="url(#hpdG)"/>${a.byDay.length <= 31 && (a.byDay.length <= 10 || i % Math.ceil(a.byDay.length / 10) === 0) ? `<text x="${x + w / 2}" y="${Hh + 15}" fill="#9AA1AE" font-size="10" text-anchor="middle">${d.day.slice(5)}</text>` : ""}</g>`; }).join("")}</svg>`;
     const hours = Array.from({ length: 14 }, (_, i) => i + 8);
     const hmax = Math.max(1, ...hours.map((h) => t.hours?.[h]?.dials || 0));
@@ -1559,10 +1559,7 @@
         ${f("hsCb", "Call-back number for messages", s.callbackNumber, 'inputmode="tel" placeholder="(305) 555-0100"')}
         ${f("hsLines", "Max lines per agent (1-3)", s.maxLines, 'type="number" min="1" max="3"')}
         ${f("hsAb", "Abandoned-call limit %", s.abandonCap, 'type="number" min="1" max="10" step="0.5"')}
-        ${f("hsCap", "Daily dials per number", s.dailyCapPerNumber, 'type="number" min="10" max="300"')}
-        ${f("hsAtt", "Max calls per lead per 24h", s.maxAttempts24h, 'type="number" min="1" max="10"')}
         ${f("hsBuy", "Numbers each agent can buy", s.agentMaxNumbers || 5, 'type="number" min="1" max="50"')}
-        ${f("hsRamp", "Warm-up days for new numbers", s.rampDays, 'type="number" min="0" max="30"')}
       </div>
       ${c("hsRec", "Record calls (both sides)", s.record)}
       <p class="hpd-sm" style="margin:6px 0">Recording: calls are still recorded and saved for playback. No "this call may be recorded" announcement is played to the lead.</p>
@@ -1587,7 +1584,7 @@
         const mx = rest.match(/max(\d+)/i); if (mx) r.max24h = +mx[1]; if (/nosun/i.test(rest)) r.noSunday = true; const ss = rest.match(/sun(\d+)/i); if (ss) r.sunStart = +ss[1];
         rules[m[1].toUpperCase()] = r;
       }
-      const settings = { company: $("#hsCo").value, callbackNumber: d10($("#hsCb").value), maxLines: +$("#hsLines").value, abandonCap: +$("#hsAb").value, dailyCapPerNumber: +$("#hsCap").value, maxAttempts24h: +$("#hsAtt").value, agentMaxNumbers: +$("#hsBuy").value, rampDays: +$("#hsRamp").value, record: $("#hsRec").checked, recordNotice: false, recordNoticeMode: "always", transcribe: $("#hsTx").checked, transcribeEngine: $("#hsTxE").value, localPresence: $("#hsLp").checked, sharedPool: $("#hsPool").checked, amdAutoSkip: $("#hsAmd").checked, inboundGreeting: $("#hsGreet").value, stateRules: rules };
+      const settings = { company: $("#hsCo").value, callbackNumber: d10($("#hsCb").value), maxLines: +$("#hsLines").value, abandonCap: +$("#hsAb").value, agentMaxNumbers: +$("#hsBuy").value, record: $("#hsRec").checked, recordNotice: false, recordNoticeMode: "always", transcribe: $("#hsTx").checked, transcribeEngine: $("#hsTxE").value, localPresence: $("#hsLp").checked, sharedPool: $("#hsPool").checked, amdAutoSkip: $("#hsAmd").checked, inboundGreeting: $("#hsGreet").value, stateRules: rules };
       try { const r = await api("/setup", { method: "PUT", body: { settings } }); S.settings = r.settings; toast("Dialer settings saved"); } catch (e) { toast(e.message); }
     };
     $("#hpdDncAdd", el).onclick = async () => { const nums = $("#hpdDncN").value.split(/[\n,;]+/).map(d10).filter((x) => x.length === 10); if (!nums.length) return; await api("/calls/dnc", { method: "POST", body: { numbers: nums } }); toast(`${nums.length} added to Do Not Call`); $("#hpdDncN").value = ""; };
@@ -1883,7 +1880,9 @@
         : `<div class="hpdk-dz-h">Log the call${sess0 ? " · next lead dials after" : ""}</div><textarea id="hpdlNote" rows="2" placeholder="Note for this call (optional)">${esc(noteV)}</textarea>
           <div class="hpdk-dz">${DZ.map(([k, t]) => `<button type="button" class="hpdk-chip k-${k}" data-dz="${k}" ${S.dockPend === k ? 'aria-pressed="true"' : ""}>${t}</button>`).join("")}</div>
           ${S.dockPend ? `<div class="hpdl-when"><span>${S.dockPend === "appt" ? "Appointment" : "Call back"} time</span><input type="datetime-local" id="hpdlAt" value="${esc(S.dockAt || "")}"><button type="button" class="hpdl-b on" id="hpdlSave">Save</button></div>` : ""}
-          ${!S.call && !sess0 ? `<button type="button" class="hpdl-b" id="hpdkRedial">Call again</button>` : ""}`}`;
+          ${!S.call && !sess0 ? `<button type="button" class="hpdl-b" id="hpdkRedial">Call again</button>` : ""}`}}
+        <div class="hpc-slot hpdl-cp" id="hpdlCopilot" data-lead="${esc(l.id)}"></div>`;
+      try { window.hpCopilot?.refresh?.(); } catch {}
       const doDispo = async (k) => {
         if (k === "dnc") api("/calls/dnc", { method: "POST", body: { number: l.phone, reason: "Agent marked Do Not Call" } }).catch(() => {});
         const when = S.dockAt ? new Date(S.dockAt).getTime() : 0;
@@ -2536,8 +2535,8 @@
           <div style="--c:#3BD38B"><b class="num">${t.connects || 0}</b><span>Conversations</span></div>
           <div style="--c:#B58CFF"><b class="num">${dur(t.talkSec || 0)}</b><span>Talk time</span></div>
           <div style="--c:#FFB547"><b class="num">${t.appts || 0}</b><span>Appointments</span></div>
-          <div style="--c:#FF9E3D"><b class="num">${soldToday}</b><span>Sold</span></div>
-          <div style="--c:#FF4FA3"><b class="num">${pct(t.answered || 0, t.dials || 0)}%</b><span>Answered</span></div>
+          <div style="--c:var(--theme-accent-2,#FF9E3D)"><b class="num">${soldToday}</b><span>Sold</span></div>
+          <div style="--c:var(--theme-accent,#FF4FA3)"><b class="num">${pct(t.answered || 0, t.dials || 0)}%</b><span>Answered</span></div>
         </div>
         ${board ? `<div class="hph-score" aria-label="Scoreboard"><div><span class="label">Sold this month</span><b class="num gold">${board.soldM}</b></div><div><span class="label">AP this month</span><b class="num gold">${moneyOf(board.apM)}</b></div><div><span class="label">Sold (your book)</span><b class="num">${board.sold}</b></div><div><span class="label">Submitted AP</span><b class="num">${moneyOf(board.submittedAp)}</b></div></div>` : ""}</div>
       <div class="hph-card"><div class="row" style="justify-content:space-between"><h3>Campaigns</h3><button type="button" class="hpf-link" id="hphAll">New campaign</button></div>
@@ -2699,8 +2698,8 @@
       m.innerHTML = `<div class="hph-mbox">
         <div class="hph-mtop"><h2>Who are we calling?</h2><input type="search" id="hpmQ" placeholder="Search name, phone, state, tag" value="${esc(q)}"><button type="button" class="hpf-x" id="hpmX" aria-label="Close">✕</button></div>
         <div class="hph-mbody">
-          <aside><span class="hph-ml">Call from</span><button type="button" data-k="all" aria-pressed="${key === "all"}"><i style="background:#FF4FA3"></i>All my leads<b class="num">${[...D.leads.values()].length.toLocaleString()}</b></button>
-            <span class="hph-ml">Imported lists</span>${campaigns().filter((c) => c.name !== "No campaign").slice(0, 12).map((c) => `<button type="button" data-k="s:${esc(c.name)}" aria-pressed="${key === "s:" + c.name}"><i style="background:#FF9E3D"></i>${esc(c.name)}<b class="num">${c.total}</b></button>`).join("")}<button type="button" id="hpmImport" class="hph-mlink">+ Import leads…</button>
+          <aside><span class="hph-ml">Call from</span><button type="button" data-k="all" aria-pressed="${key === "all"}"><i style="background:var(--theme-accent,#FF4FA3)"></i>All my leads<b class="num">${[...D.leads.values()].length.toLocaleString()}</b></button>
+            <span class="hph-ml">Imported lists</span>${campaigns().filter((c) => c.name !== "No campaign").slice(0, 12).map((c) => `<button type="button" data-k="s:${esc(c.name)}" aria-pressed="${key === "s:" + c.name}"><i style="background:var(--theme-accent-2,#FF9E3D)"></i>${esc(c.name)}<b class="num">${c.total}</b></button>`).join("")}<button type="button" id="hpmImport" class="hph-mlink">+ Import leads…</button>
             ${S.camps.length ? `<span class="hph-ml">My campaigns</span>${S.camps.map((c) => `<button type="button" data-k="c:${esc(c.id)}" aria-pressed="${key === "c:" + c.id}"><i style="background:#3BD38B"></i>${esc(c.name)}<b class="num">${c.ids.length}</b></button>`).join("")}` : ""}
             <div class="hph-keys"><span><kbd>Ctrl A</kbd> tick everyone shown</span><span><kbd>⇧ click</kbd> tick a range</span><span><kbd>Ctrl ↵</kbd> create the campaign</span><span><kbd>/</kbd> search</span></div>
           </aside>

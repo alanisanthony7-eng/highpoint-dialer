@@ -231,7 +231,7 @@ if (SERVE) {
     // batch 2: one human among rings: the human connects, the others are released and logged No answer
     await until(talking, "the human to connect");
     check(true, "a person answering connects to you (Connected)");
-    check(await page.evaluate(() => { const d = document.querySelector("#hpdDock"), nm = window.hpDesk.fullName(window.hpDesk.leads.get(window.hpDialer.liveLead)); return !!d && d.classList.contains("hpdl-mini") && d.innerText.includes(nm) && !d.querySelector("#hpdkWide,#hpdkMin,#hpdlCopilot,#hpdlTx") && document.querySelector("#hpdProfile")?.hidden !== false; }), "when a person picks up the small contact card appears: client details and call buttons only");
+    check(await page.evaluate(() => { const d = document.querySelector("#hpdDock"), nm = window.hpDesk.fullName(window.hpDesk.leads.get(window.hpDialer.liveLead)); return !!d && d.classList.contains("hpdl-mini") && d.innerText.includes(nm) && !!d.querySelector("#hpdlCopilot") && !d.querySelector("#hpdkWide,#hpdkMin,#hpdlTx") && document.querySelector("#hpdProfile")?.hidden !== false; }), "when a person picks up the small contact card appears: client details, Copilot and call buttons");
     const box0 = await page.locator("#hpdDock").boundingBox();
     await page.mouse.move(box0.x + 8, box0.y + 6); await page.mouse.down(); await page.mouse.move(box0.x - 120, box0.y + 90, { steps: 6 }); await page.mouse.up();
     const box1 = await page.locator("#hpdDock").boundingBox();

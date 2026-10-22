@@ -40,5 +40,5 @@ body{overflow-x:clip}
 /* pipeline column "Dial" button */
 .col>header{display:flex;align-items:center;gap:8px}
 .col>header h3{flex:1;min-width:0}
-.colDial{font:700 11px var(--f-ui,system-ui);letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:999px;border:1px solid var(--hp-a,var(--accent,#ff4fa3));background:transparent;color:var(--hp-a,var(--accent,#ff4fa3));cursor:pointer}
-.colDial:hover{background:var(--hp-a,var(--accent,#ff4fa3));color:#fff}
+.colDial{font:700 11px var(--f-ui,system-ui);letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:999px;border:1px solid var(--hp-a,var(--accent,var(--theme-accent,#FF4FA3)));background:transparent;color:var(--hp-a,var(--accent,var(--theme-accent,#FF4FA3)));cursor:pointer}
+.colDial:hover{background:var(--hp-a,var(--accent,var(--theme-accent,#FF4FA3)));color:#fff}

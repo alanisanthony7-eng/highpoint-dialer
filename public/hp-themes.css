@@ -561,3 +561,12 @@ html.hp-pro :is(.hph-via button[aria-pressed="true"],.hph-lines button[aria-pres
 html.hp-pro :is(.hph-camp .hpd-meter i,.hpd-frow[data-s="live"],.gs-bar i){background:var(--pro-grad)!important;box-shadow:none!important}
 html.hp-pro .hph-via button[aria-pressed="true"],html.hp-pro .hph-lines button[aria-pressed="true"]{
   background:var(--pro-grad)!important;border-color:transparent!important}
+
+/* Pink belongs to Miami only. Every other theme takes its accents from its own palette. */
+html:not([data-theme="miami"]):root{
+  --accent:var(--theme-accent);--accent-2:var(--theme-accent-2);--accent-3:var(--theme-accent-2);
+  --accent-soft:var(--theme-soft);--glow:var(--theme-glow);
+  --fill-1:var(--theme-accent);--fill-2:var(--theme-accent-2);
+  --pink:var(--theme-accent);--hot:var(--theme-accent);--orange:var(--theme-accent-2);
+  --cyan:var(--theme-accent);--violet:var(--theme-accent-2);--sky:var(--theme-accent);
+}

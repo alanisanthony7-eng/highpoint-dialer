@@ -219,12 +219,9 @@ export function callWindow(num, settings, leadState) {
 }
 
 /* ---------- caller-ID picker (local presence + rotation caps + ramp) ---------- */
-export function numberCap(n, settings) {
-  const age = (Date.now() - (n.boughtAt || 0)) / 864e5;
-  const cap = settings.dailyCapPerNumber;
-  if (n.paused) return 0;
-  if (age >= settings.rampDays) return cap;
-  return Math.max(15, Math.round(cap * Math.min(1, (age + 1) / settings.rampDays)));
+// No daily limit on how many calls a number can make: only a paused number is held back.
+export function numberCap(n) {
+  return n.paused ? 0 : Infinity;
 }
 export async function pickCallerId(user, leadNum, settings, prefer) {
   const all = (await getJ("numbers", "all")) || {};
@@ -234,10 +231,10 @@ export async function pickCallerId(user, leadNum, settings, prefer) {
   const pick = (list) => (only ? list.filter((n) => only.has(n.e164)) : list);
   const mine = pick(Object.values(all).filter((n) => n.owner === user.identity && !n.released));
   const team = settings.sharedPool ? pick(Object.values(all).filter((n) => !n.released && (n.shared || !n.owner))) : [];
-  const usable = (n) => ((n.days?.[day]?.dials) || 0) < numberCap(n, settings);
+  const usable = (n) => !n.paused;
   if (prefer) { const p = all[prefer]; if (p && !p.released && (p.owner === user.identity || p.shared || !p.owner || user.admin) && usable(p)) return p; }
   const ac = to10(leadNum).slice(0, 3), st = stateOf(leadNum);
-  const byLoad = (a, b) => ((a.days?.[day]?.dials) || 0) / numberCap(a, settings) - ((b.days?.[day]?.dials) || 0) / numberCap(b, settings);
+  const byLoad = (a, b) => ((a.days?.[day]?.dials) || 0) - ((b.days?.[day]?.dials) || 0); // spread calls evenly across numbers
   const tiers = settings.localPresence ? [
     (n) => n.areaCode === ac, (n) => n.state === st, (n) => (NEAR[st] || []).includes(n.state), () => true,
   ] : [() => true];
@@ -288,10 +285,13 @@ export async function preflight(user, leadNum, settings, leadState, { override }
   }
   const w = callWindow(n, settings, leadState);
   if (!w.ok && !(override && user.admin)) return { ok: false, why: w.why };
-  const max = Math.min(settings.maxAttempts24h || 99, w.rule?.max24h || 99);
+  const max = w.rule?.max24h || 0; // only a state's own legal rule limits repeat calls; there is no general cap
+  if (max) {
   const tries = await attempts24h(n);
-  if (tries >= max && !(override && user.admin)) return { ok: false, why: `Already called ${tries}× in the last 24 hours (limit ${max}${w.rule?.max24h ? " in " + w.st : ""}).` };
+  if (tries >= max && !(override && user.admin)) return { ok: false, why: `Already called ${tries}× in the last 24 hours (${w.st} law allows ${max}).` };
   return { ok: true, tries };
+  }
+  return { ok: true, tries: 0 };
 }
 
 /* ---------- call log + analytics aggregates ---------- */
