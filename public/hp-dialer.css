@@ -784,3 +784,14 @@ html.hp-pro .hpdk.callbar{border-radius:0;border-width:1px 0 0;border-color:rgba
 .hp-score .gold,.hph-score .gold{color:#FFD36A}
 .hph-score{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:8px}
 @media (max-width:760px){.hp-score,.hph-score{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* the small movable contact card: the client and the call buttons, nothing else */
+#hpdDock.hpdl.hpdl-mini{position:fixed;width:350px;max-width:calc(100vw - 8px);padding:10px;gap:8px;border-radius:16px;cursor:grab;touch-action:none;animation:none}
+#hpdDock.hpdl.hpdl-mini.moving{cursor:grabbing;opacity:.94}
+#hpdDock.hpdl-mini .hpdl-who{cursor:pointer}
+#hpdDock.hpdl-mini .hpdk-ctl{display:flex;gap:6px}#hpdDock.hpdl-mini .hpdk-ctl .hpdk-rb{flex:1}
+#hpdDock.hpdl-mini .hpdk-dz{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+#hpdDock.hpdl-mini textarea{all:unset;box-sizing:border-box;width:100%;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.25);border:1px solid var(--line,rgba(255,255,255,.12));font-size:13px;min-height:40px;white-space:pre-wrap;cursor:text}
+#hpdDock.hpdl-mini .hpdk-end{width:100%}
+#hpdDock.hpdl.hpdl-mini{max-height:calc(100vh - 16px);overflow-y:auto}
+#hpdDock.hpdl-mini .hpdk-chip{padding:7px 6px;font-size:12px}

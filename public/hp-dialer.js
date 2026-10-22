@@ -372,7 +372,7 @@
       title: "Start calling?",
       body: `<p>You're about to start a session of <b>${n}</b> lead${n === 1 ? "" : "s"} from <b>${esc(listName())}</b>.</p><p class="hpd-sm">The first lead won't ring until you press Start session.</p>`,
       ok: "Start session",
-      onOk: () => { if (S.ps || S.call || S.power) return; S.ps = { ids, i: -1, talked: new Set(), paused: false, hold: null }; phoneNext(); renderHome(); },
+      onOk: () => { if (S.ps || S.call || S.power) return; if (S.status !== "ready") setStatus("ready", true); S.ps = { ids, i: -1, talked: new Set(), paused: false, hold: null }; phoneNext(); renderHome(); },
     });
   }
   // After a call someone answered and you logged, a session doesn't dial on by itself: Resume, Pause or Stop.
@@ -525,7 +525,6 @@
     S.call = leg.call; S.callLead = lead.id; S.phoneLead = lead.id; S.callSid = leg.sid || leg.call.sid; S.callTalked = true; S.justLogged = null; (S.ps.talked = S.ps.talked || new Set()).add(lead.id); S.sidByLead.set(lead.id, S.callSid); S.txByLead.set(lead.id, []);
     window.hpDesk.callStart(lead.id);
     multiDraw(B); renderPhone(); renderHome();
-    try { openProfile(lead.id, { keepList: true }); } catch {} // the client's contact card opens the moment they pick up
     setChip("live", "On call"); livePoll(); PF.liveAt = Date.now(); beep();
   }
   function multiGone(P, B, leg) {
@@ -1778,43 +1777,31 @@
   }
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.getElementById("hpdInfo")?.remove(); });
   /* where the call console sits: centered by default; drag its header to move it, drag its corner to resize it, or stretch it out */
-  S.consoleWide = lsGet("hpd.consoleWide", false);
+  S.consoleWide = false; try { localStorage.removeItem("hpd.consoleWide"); localStorage.removeItem("hpd.consoleGeo"); } catch {} // the old stretch-out console is gone
   function placeDock(f, variant) {
     if (f.dataset.v === variant) return;
     f.dataset.v = variant;
     const st = f.style;
     st.left = st.top = st.right = st.bottom = st.width = st.height = st.transform = st.animation = "";
-    if (variant === "card") {
-      const g = lsGet("hpd.consoleGeo", null), W = Math.min(960, innerWidth - 24);
-      st.transform = "none"; st.animation = "none";
-      st.width = Math.min(g?.w || W, innerWidth - 8) + "px"; if (g?.h) st.height = Math.min(g.h, innerHeight - 8) + "px";
-      st.left = Math.max(0, Math.min(g?.x ?? Math.round((innerWidth - (g?.w || W)) / 2), innerWidth - 160)) + "px";
-      st.top = Math.max(0, Math.min(g?.y ?? 112, innerHeight - 80)) + "px";
-    } else if (variant === "min") {
-      const pos = lsGet("hpd.dockPos", null); if (pos) { st.left = Math.max(4, Math.min(pos[0], innerWidth - 340)) + "px"; st.top = Math.max(4, Math.min(pos[1], innerHeight - 160)) + "px"; st.right = "auto"; st.bottom = "auto"; }
+    if (variant === "card") { // the movable contact card: where you left it, otherwise the top right
+      const g = lsGet("hpd.cardPos", null), w = Math.min(350, innerWidth - 16);
+      st.transform = "none"; st.animation = "none"; st.width = w + "px";
+      st.left = Math.max(4, Math.min(g?.x ?? innerWidth - w - 20, innerWidth - w - 4)) + "px";
+      st.top = Math.max(4, Math.min(g?.y ?? 72, innerHeight - 120)) + "px";
     }
   }
+  // Drag the contact card by any part of it that isn't a button or field.
   function wireDock(f) {
     if (f._wired) return; f._wired = true;
-    const geo = () => lsGet("hpd.consoleGeo", {}) || {};
     f.addEventListener("pointerdown", (e) => {
-      if (f.dataset.v !== "card" || f.classList.contains("wide")) return;
-      const r = f.getBoundingClientRect();
-      if (e.clientX > r.right - 22 && e.clientY > r.bottom - 22) { f._resizing = true; return; } // the corner handle: the browser resizes, we remember the size
-      const h = e.target.closest(".hpdl-h"); if (!h || e.target.closest("button,input,textarea,select,a")) return;
-      const dx = e.clientX - r.left, dy = e.clientY - r.top;
-      h.setPointerCapture(e.pointerId); f.classList.add("moving");
-      h.onpointermove = (m) => { f.style.left = Math.max(0, Math.min(innerWidth - 120, m.clientX - dx)) + "px"; f.style.top = Math.max(0, Math.min(innerHeight - 60, m.clientY - dy)) + "px"; };
-      h.onpointerup = () => { h.onpointermove = h.onpointerup = null; f.classList.remove("moving"); lsSet("hpd.consoleGeo", { ...geo(), x: parseInt(f.style.left), y: parseInt(f.style.top), w: geo().w || Math.round(f.getBoundingClientRect().width) }); };
+      if (f.dataset.v !== "card" || e.button > 0 || e.target.closest("button,input,textarea,select,a,.hpdl-who")) return;
+      const r = f.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+      try { f.setPointerCapture(e.pointerId); } catch {}
+      f.classList.add("moving");
+      f.onpointermove = (m) => { f.style.left = Math.max(0, Math.min(innerWidth - 120, m.clientX - dx)) + "px"; f.style.top = Math.max(0, Math.min(innerHeight - 60, m.clientY - dy)) + "px"; };
+      f.onpointerup = f.onpointercancel = () => { f.onpointermove = f.onpointerup = f.onpointercancel = null; f.classList.remove("moving"); lsSet("hpd.cardPos", { x: parseInt(f.style.left), y: parseInt(f.style.top) }); };
     });
-    addEventListener("pointerup", () => { f._resizing = false; });
-    addEventListener("mouseup", () => { f._resizing = false; });
-    f.addEventListener("dblclick", (e) => { if (f.dataset.v === "card" && e.target.closest(".hpdl-h") && !e.target.closest("button")) { lsSet("hpd.consoleGeo", null); f.dataset.v = ""; dock(); toast("Window put back in the middle"); } });
-    if (window.ResizeObserver) new ResizeObserver(() => {
-      if (!f._resizing || f.dataset.v !== "card" || f.classList.contains("wide")) return;
-      const r = f.getBoundingClientRect();
-      lsSet("hpd.consoleGeo", { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: f.style.height ? Math.round(r.height) : undefined });
-    }).observe(f);
+    f.addEventListener("dblclick", (e) => { if (f.dataset.v === "card" && !e.target.closest("button,input,textarea")) { lsSet("hpd.cardPos", null); f.dataset.v = ""; dock(); toast("Card put back in the corner"); } });
   }
   function consoleLegs() {
     const D = window.hpDesk, B = S.ps?.batch;
@@ -1852,12 +1839,61 @@
     const onCall = !!(S.call || P?.connected || (cell && S.phoneLead));
     // With a client's profile open, the call controls are a slim bar along its bottom edge instead of a card on top of it.
     // The profile already has the client, the dispositions and the call tools, so the bar only carries the live controls.
-    const bar = true; // one layout: a slim call bar; the client's contact card is the profile above it
-    f.classList.remove("hpdl"); f.classList.add("hpdk");
+    // The small movable contact card shows only once a person has picked up (and while you log the call). Ringing, no-answers and
+    // voicemails never pop it up: they only move the slim bar. With a client's full profile open the bar sits under it instead.
+    const pfOpen = !!PF.id && !$("#hpdProfile")?.hidden, sess0 = S.ps || P;
+    const afterCall = !onCall && !!l && !sess0?.holdMsg && !!(S.phoneLead || S.callLead || sess0?.hold || P?.waitingDispo);
+    const bar = pfOpen || !(l && (onCall || afterCall));
+    f.classList.remove("hpdl", "hpdl-mini", "hpdk", "wide"); f.classList.add("hpdk");
     f.classList.toggle("callbar", bar); document.body.classList.toggle("hpd-bar", bar);
     const two = l && S.settings?.record && ["CA", "CT", "DE", "FL", "IL", "MD", "MA", "MI", "MT", "NV", "NH", "OR", "PA", "WA"].includes(String(l.state || "").toUpperCase());
-    f.classList.remove("min"); placeDock(f, "bar");
-    if (bar) {
+    f.classList.remove("min"); placeDock(f, bar ? "bar" : "card");
+    if (!bar) {
+      // just the client's contact card and the call buttons: no console, no stretch / minimize, nothing else to open
+      f.classList.remove("hpdk", "idle-ready"); f.classList.add("hpdl", "hpdl-mini");
+      S.consoleLead = l.id;
+      const hist = l.callCount ? `Called ${l.callCount}×` + (l.lastDisposition ? ` · last: ${esc(l.lastDisposition)}` : "") : "First call";
+      const noteV = S.dockNoteFor === l.id ? S.dockNote || "" : "";
+      const holdNow = sess0?.hold === l.id;
+      f.innerHTML = `<div class="hpdl-h"><span class="hpdk-state" data-tone="${tone}"><i></i>${onCall ? "Connected" : "Call ended"}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>${prog ? `<span class="hpdl-prog">${prog}</span>` : ""}<span class="hpdl-sp"></span>${sess0 ? `<button type="button" class="hpdl-b end" id="hpdkStop">End session</button>` : ""}</div>
+        <div class="hpdl-who hpdl-c" data-s="live" data-lead="${esc(l.id)}" title="Open the full client profile"><span class="hpdk-av" data-tone="${tone}">${esc(ini)}</span><b class="hpdl-nm">${esc(D.fullName(l))}</b><span class="hpdl-ph num">${esc(fmt(l.phone))}</span>
+          <span class="hpdl-meta">${esc(l.state || "")}${clock ? ` · ${esc(clock.txt)} local` : ""}${l.age ? ` · Age ${esc(l.age)}` : ""}${l.product ? ` · ${esc(l.product)}` : ""}</span>${idLine(l) ? `<span class="hpdl-id">${idLine(l)}</span>` : ""}
+          <span class="hpdl-hist">${hist} · <em class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</em></span>
+          ${two ? `<span class="hpdl-warn">${esc(String(l.state).toUpperCase())} needs everyone's consent to record. Tell the lead the call is recorded.</span>` : ""}</div>
+        ${onCall && !cell ? `<div class="hpdk-ctl"><button type="button" class="hpdk-rb ${S.muted ? "on" : ""}" id="hpdkMute">${S.muted ? I.micoff : I.mic}<span>${S.muted ? "Unmute" : "Mute"}</span></button><button type="button" class="hpdk-rb ${S.dockPad ? "on" : ""}" id="hpdkPadBtn">${I.pad}<span>Keypad</span></button><button type="button" class="hpdk-rb" id="hpdkVm">${I.vm}<span>Drop VM</span></button></div>
+          ${S.dockPad ? `<div class="hpdk-pad">${["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((k) => `<button type="button" data-k="${k}">${k}</button>`).join("")}</div>` : ""}
+          <button type="button" class="hpdk-end" id="hpdkHang">${I.phone}<span>End call</span></button>`
+        : cell && onCall ? `<button type="button" class="hpdk-call" id="hpdkTel">${I.phone}<span>Call on my phone</span></button>`
+        : holdNow ? nextRowHTML(sess0)
+        : `<div class="hpdk-dz-h">Log the call${sess0 ? " · next lead dials after" : ""}</div><textarea id="hpdlNote" rows="2" placeholder="Note for this call (optional)">${esc(noteV)}</textarea>
+          <div class="hpdk-dz">${DZ.map(([k, t]) => `<button type="button" class="hpdk-chip k-${k}" data-dz="${k}" ${S.dockPend === k ? 'aria-pressed="true"' : ""}>${t}</button>`).join("")}</div>
+          ${S.dockPend ? `<div class="hpdl-when"><span>${S.dockPend === "appt" ? "Appointment" : "Call back"} time</span><input type="datetime-local" id="hpdlAt" value="${esc(S.dockAt || "")}"><button type="button" class="hpdl-b on" id="hpdlSave">Save</button></div>` : ""}
+          ${!S.call && !sess0 ? `<button type="button" class="hpdl-b" id="hpdkRedial">Call again</button>` : ""}`}`;
+      const doDispo = async (k) => {
+        if (k === "dnc") api("/calls/dnc", { method: "POST", body: { number: l.phone, reason: "Agent marked Do Not Call" } }).catch(() => {});
+        const when = S.dockAt ? new Date(S.dockAt).getTime() : 0;
+        const lab = await window.hpDesk.dispoDirect(l.id, k, { note: (S.dockNote || "").trim(), at: when || undefined });
+        S.dockNote = ""; S.dockNoteFor = ""; S.dockAt = ""; S.dockPend = null; toast(`${D.fullName(l)}: ${lab}`); dock();
+      };
+      $("#hpdlNote", f)?.addEventListener("input", (e) => { S.dockNote = e.target.value; S.dockNoteFor = l.id; });
+      $("#hpdlAt", f)?.addEventListener("input", (e) => { S.dockAt = e.target.value; });
+      $("#hpdlSave", f)?.addEventListener("click", () => { if (S.dockAt) doDispo(S.dockPend); else toast("Pick a date and time first"); });
+      $$(".hpdk-chip", f).forEach((b) => (b.onclick = () => {
+        const k = b.dataset.dz;
+        if (k === "cb" || k === "appt") { if (!S.dockAt) { const d = new Date(Date.now() + 864e5); d.setMinutes(0); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); S.dockAt = d.toISOString().slice(0, 16); } S.dockPend = k; dock(); return; }
+        doDispo(k);
+      }));
+      $$("[data-next]", f).forEach((b) => (b.onclick = () => (b.dataset.next === "go" ? sessGo(true) : b.dataset.next === "pause" ? sessGo(false) : (S.ps ? phoneEnd() : stopPower()))));
+      $("#hpdkMute", f)?.addEventListener("click", () => { toggleMute(); dock(); });
+      $("#hpdkPadBtn", f)?.addEventListener("click", () => { S.dockPad = !S.dockPad; dock(); });
+      $$(".hpdk-pad [data-k]", f).forEach((bb) => (bb.onclick = () => dtmf(bb.dataset.k)));
+      $("#hpdkVm", f)?.addEventListener("click", dropVm);
+      $("#hpdkHang", f)?.addEventListener("click", hangup);
+      $("#hpdkTel", f)?.addEventListener("click", () => ringMyPhone(l));
+      $("#hpdkRedial", f)?.addEventListener("click", () => dialLead(l, true));
+      $("#hpdkStop", f)?.addEventListener("click", () => (S.ps ? phoneEnd() : stopPower()));
+      $(".hpdl-who", f)?.addEventListener("click", () => openProfile(l.id, { keepList: true }));
+    } else if (bar) {
       f.innerHTML = `<div class="hpdk-row">
         <span class="hpdk-state" data-tone="${tone}"><i></i>${esc(state)}<b class="num" id="hpdkClock">${S.dockLiveAt ? mmss(Date.now() - S.dockLiveAt) : ""}</b></span>
         ${prog ? `<span class="hpdk-prog" title="${prog}">${prog}</span>` : ""}
@@ -2161,11 +2197,22 @@
     S.status = next; S.statusAt = Date.now(); lsSet("hpd.status", next);
     const lab = $(".hpd-status"); if (lab) lab.dataset.s = next; const sel = $("#hpdStatus"); if (sel && sel.value !== next) sel.value = next;
     if (quiet) return;
+    // A phone session is already running: Ready carries on with it (never a second session), anything else pauses it.
+    if (S.ps) {
+      const P = S.ps, nm = STATUSES.find((x) => x[0] === next)?.[1] || next;
+      if (next === "ready") { if (P.paused || P.hold) sessGo(true); else toast("You're Ready. Dialing continues."); return; }
+      if (!P.paused) {
+        if (P.batch && !P.batch.winner) { multiCancel(true); pauseWhy(P, `Status: ${nm}. Dialing is paused. Set yourself to Ready to continue.`, P.back?.[0] || P.ids[Math.max(0, P.i)]); }
+        else if (!S.call && !P.batch) pauseWhy(P, `Status: ${nm}. Dialing is paused. Set yourself to Ready to continue.`, P.hold || P.ids[Math.max(0, P.i)]);
+        else { P.paused = true; toast(`Status: ${nm}. Dialing pauses after this call.`); dock(); renderHome(); }
+      }
+      return;
+    }
     // Ready = dial. Anything else pauses the dialer after the current call.
     if (next === "ready") {
       if (S.power?.paused) togglePause();
       else if (!S.power && !S.call) {
-        if (campaignQueue().length && S.ready !== false) { S.mode = "power"; lsSet("hpd.mode", "power"); if ($("#v-dialer")?.hidden) window.hpDesk.go("dialer"); renderPhone(); startPower(); }
+        if (campaignQueue().length && S.ready !== false) { if ($("#v-dialer")?.hidden) window.hpDesk.go("dialer"); if (S.provider === "telnyx" || S.via === "phone") startPhoneSession(); else { S.mode = "power"; lsSet("hpd.mode", "power"); renderPhone(); startPower(); } }
         else toast("You're Ready. Pick a campaign with leads to start dialing.");
       }
     } else if (S.power && !S.power.paused) { togglePause(); toast(`Status: ${STATUSES.find((s) => s[0] === next)[1]}. Dialing paused${S.power.connected ? " after this call" : ""}.`); }
@@ -2592,7 +2639,7 @@
     $("#dsDingTest", el).onclick = () => ding(true);
     $("#dsDingK", el).onchange = (e) => { snd.dingKind = e.target.value; save(); ding(true); };
     $("#dsSpkTest", el).onclick = () => { applyDevices(); ding(true); };
-    $("#dsResetWin", el).onclick = () => { lsSet("hpd.consoleGeo", null); S.consoleWide = false; lsSet("hpd.consoleWide", false); const f = document.getElementById("hpdDock"); if (f) { f.dataset.v = ""; dock(); } toast("Calling window reset"); };
+    $("#dsResetWin", el).onclick = () => { lsSet("hpd.cardPos", null); const f = document.getElementById("hpdDock"); if (f) { f.dataset.v = ""; dock(); } toast("Calling window reset"); };
     // devices
     const spk = $("#dsSpk", el), mic = $("#dsMic", el), note = $("#dsDevNote", el);
     const fill = async (ask) => {

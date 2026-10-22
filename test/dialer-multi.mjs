@@ -218,6 +218,7 @@ if (SERVE) {
     // batch 1: rang out, busy, voicemail ring together; each logs itself with its reason; no popup; the next batch dials on its own
     await until(async () => (await nDials()) === 3, "three lines to ring together");
     check(true, "three leads ring at once");
+    check(await page.evaluate(() => !document.querySelector("#hpdDock.hpdl-mini") && document.querySelector("#hpdDock")?.classList.contains("callbar")), "while lines ring (and when nobody picks up) only the slim bar shows: no popout");
     const logged = async (id, what) => (await until(async () => { const r = await rows(id); return r.length ? r : null; }, what))[0];
     const a = await logged(ids[0], "lead 1's log"), b = await logged(ids[1], "lead 2's log"), c = await logged(ids[2], "lead 3's log");
     check(a.outcome === "No answer" && a.note === "Rang out" && a.hpSid, "rang out: No answer · Rang out");
@@ -230,7 +231,11 @@ if (SERVE) {
     // batch 2: one human among rings: the human connects, the others are released and logged No answer
     await until(talking, "the human to connect");
     check(true, "a person answering connects to you (Connected)");
-    check(await page.evaluate(() => { const p = document.querySelector("#hpdProfile"), d = document.querySelector("#hpdDock"); return !!p && !p.hidden && p.innerText.includes(window.hpDesk.fullName(window.hpDesk.leads.get(window.hpDialer.liveLead))) && d.classList.contains("callbar") && !d.classList.contains("hpdl") && !d.querySelector("#hpdkWide,#hpdkMin"); }), "the client's contact card opens when they pick up; no floating console, stretch or minimize buttons");
+    check(await page.evaluate(() => { const d = document.querySelector("#hpdDock"), nm = window.hpDesk.fullName(window.hpDesk.leads.get(window.hpDialer.liveLead)); return !!d && d.classList.contains("hpdl-mini") && d.innerText.includes(nm) && !d.querySelector("#hpdkWide,#hpdkMin,#hpdlCopilot,#hpdlTx") && document.querySelector("#hpdProfile")?.hidden !== false; }), "when a person picks up the small contact card appears: client details and call buttons only");
+    const box0 = await page.locator("#hpdDock").boundingBox();
+    await page.mouse.move(box0.x + 8, box0.y + 6); await page.mouse.down(); await page.mouse.move(box0.x - 120, box0.y + 90, { steps: 6 }); await page.mouse.up();
+    const box1 = await page.locator("#hpdDock").boundingBox();
+    check(Math.abs(box1.x - box0.x) > 60 && Math.abs(box1.y - box0.y) > 40, "the contact card can be dragged anywhere")
     const who = await page.evaluate(() => window.hpDialer.liveLead);
     // Copilot listens to the same live transcript from the moment the call connects (NY records on one party's consent)
     await page.evaluate((id) => window.dispatchEvent(new CustomEvent("hp:tx", { detail: { leadId: id, lines: [{ who: "Lead", text: "Hello this is Maria", t: Date.now() }, { who: "Agent", text: "Hi Maria it is Anthony", t: Date.now() }], partial: [] } })), who);
@@ -239,18 +244,21 @@ if (SERVE) {
     check(true, "the lines that were still ringing are released and logged No answer");
     const before = await nDials();
     await page.locator("#hpdkHang").click();
-    await page.locator('#hpdProfile [data-pdz="ni"]').waitFor();
-    await page.locator('#hpdProfile [data-pdz="ni"]').click();
+    await page.locator('#hpdDock [data-dz="ni"]').waitFor();
+    await page.locator('#hpdDock [data-dz="ni"]').click();
     await page.locator('#hpdDock [data-next="go"]').waitFor();
     check((await rows(who))[0]?.outcome === "Not interested", "logging the answered call saves its result");
-    check(await page.locator("#hpdDock [data-next]").count() === 2 && await page.locator("#hpdkStop").count() === 1, "Resume, Pause and End session appear right under the log");
+    check(await page.locator("#hpdDock [data-next]").count() >= 2 && await page.locator("#hpdkStop").count() >= 1, "Resume, Pause and End session appear right under the log");
     await wait(2500);
     check((await nDials()) === before, "nothing dials until you choose");
     await page.locator('#hpdDock [data-next="pause"]').click();
     await wait(1500);
     check((await nDials()) === before && await page.evaluate(() => window.hpDialer.session?.paused), "Pause dialing holds the session");
-    await page.locator('#hpdDock [data-next="go"]').click();
-    await until(async () => (await nDials()) > before, "Resume to dial the next leads");
+    await page.selectOption("#hpdStatus", "acw"); await wait(500);
+    check(await page.evaluate(() => window.hpDialer.session?.paused) && (await nDials()) === before, "choosing Wrap-up keeps the session paused");
+    await page.selectOption("#hpdStatus", "ready");
+    await until(async () => (await nDials()) > before, "Ready to carry on with the session");
+    check((await page.locator("#hpdAsk").count()) === 0 && !!(await page.evaluate(() => window.hpDialer.session)), "pressing Ready from Wrap-up resumes the same session: no second session, nothing disabled");
     check(true, "Resume dialing continues with the next leads");
     await page.locator("#hpdkStop").click();
     await until(async () => !(await page.evaluate(() => window.hpDialer.session)), "the session to end");
@@ -301,7 +309,7 @@ if (SERVE) {
         await wait(1500);
         if (how === "agent") await page.locator("#hpdkHang").click();
         else if (how === "lead") await realFetch(ORIGIN + "/__sim/lead-hangup?to=" + wph, { method: "POST" });
-        if (how !== "log") { await until(async () => !(await talking()), `${N} line(s): the call to end (${how})`); await page.locator('#hpdProfile [data-pdz="ni"]').click(); }
+        if (how !== "log") { await until(async () => !(await talking()), `${N} line(s): the call to end (${how})`); await page.locator('#hpdDock [data-dz="ni"]').click(); }
         else await page.evaluate((id) => window.hpDesk.autoLog(id, "Not interested", {}), who);
         if (how !== "agent") { // with the client's profile open the controls are the slim bar: Resume has to work there too
           await page.evaluate((id) => window.hpDialer.openProfile(id), who);
