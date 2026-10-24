@@ -2686,15 +2686,18 @@
 
   /* "Who are we calling?" picker → campaigns */
   function openPicker() {
-    const D = window.hpDesk; let key = S.src, f = "everyone", q = "", onlyPicked = false;
+    const D = window.hpDesk; let key = S.src, f = "everyone", q = "", st = "", onlyPicked = false;
     const picked = new Set(); let lastIdx = -1;
     const m = document.createElement("div"); m.className = "hpd hph-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-label", "Who are we calling?");
     document.body.append(m);
-    const rows = () => { let r = applyFilter(sourceLeads(key), f).filter((l) => !q || [D.fullName(l), l.phone, l.state, l.source, ...(l.tags || [])].join(" ").toLowerCase().includes(q) || (d10(q).length >= 3 && d10(l.phone).includes(d10(q)))); if (onlyPicked) r = r.filter((l) => picked.has(l.id)); return r; };
+    const rows = () => { let r = applyFilter(sourceLeads(key), f).filter((l) => !st || String(l.state || "").trim().toUpperCase() === st).filter((l) => !q || [D.fullName(l), l.phone, l.state, l.source, ...(l.tags || [])].join(" ").toLowerCase().includes(q) || (d10(q).length >= 3 && d10(l.phone).includes(d10(q)))); if (onlyPicked) r = r.filter((l) => picked.has(l.id)); return r; };
     const first = (n) => { picked.clear(); rows().filter(dialable).slice(0, n).forEach((l) => picked.add(l.id)); draw(); };
     const draw = () => {
       const r = rows(), base = sourceLeads(key), counts = Object.fromEntries(FILTERS.map(([k]) => [k, applyFilter(base, k).length]));
       const pickedLeads = [...picked].map((id) => D.leads.get(id)).filter(Boolean); const out = pickedLeads.filter((l) => !leadClock(l).ok).length;
+      const byState = {}; applyFilter(sourceLeads(key), f).forEach((l) => { const x = String(l.state || "").trim().toUpperCase(); if (x) byState[x] = (byState[x] || 0) + 1; });
+      if (st && !byState[st]) st = "";
+      const stateOpts = Object.keys(byState).sort().map((x) => `<option value="${esc(x)}" ${x === st ? "selected" : ""}>${esc(x)} (${byState[x].toLocaleString()})</option>`).join("");
       m.innerHTML = `<div class="hph-mbox">
         <div class="hph-mtop"><h2>Who are we calling?</h2><input type="search" id="hpmQ" placeholder="Search name, phone, state, tag" value="${esc(q)}"><button type="button" class="hpf-x" id="hpmX" aria-label="Close">✕</button></div>
         <div class="hph-mbody">
@@ -2705,7 +2708,7 @@
           </aside>
           <section>
             <div class="hph-fchips" role="group" aria-label="Who to show">${FILTERS.map(([k, n, c, hint]) => `<button type="button" data-f="${k}" aria-pressed="${f === k}" title="${esc(hint)}"><i style="background:${c}"></i>${n}<b class="num">${counts[k].toLocaleString()}</b></button>`).join("")}</div>
-            <div class="hph-mbar"><label class="hpd-flex hpd-sm"><input type="checkbox" id="hpmAll" ${r.length && r.every((l) => picked.has(l.id)) ? "checked" : ""}> ${r.length.toLocaleString()} shown</label><span class="hpd-sm" style="margin-left:auto">Pick first</span>${[25, 50, 100, 250].map((n) => `<button type="button" class="hph-pf" data-first="${n}">${n}</button>`).join("")}</div>
+            <div class="hph-mbar"><label class="hpd-flex hpd-sm"><input type="checkbox" id="hpmAll" ${r.length && r.every((l) => picked.has(l.id)) ? "checked" : ""}> ${r.length.toLocaleString()} shown</label><select id="hpmState" aria-label="State" class="hph-st"><option value="">All states</option>${stateOpts}</select><span class="hpd-sm" style="margin-left:auto">Pick first</span>${[25, 50, 100, 250].map((n) => `<button type="button" class="hph-pf" data-first="${n}">${n}</button>`).join("")}</div>
             <div class="hph-mtable"><table class="hpd-tbl"><thead><tr><th></th><th>Name</th><th>Phone</th><th>State · their time</th><th class="hide-sm">Last call</th><th>Stage</th></tr></thead><tbody>
             ${r.slice(0, 400).map((l, i) => { const k = leadClock(l); return `<tr data-i="${i}" data-id="${esc(l.id)}" class="${picked.has(l.id) ? "on" : ""}"><td><input type="checkbox" aria-label="Pick ${esc(D.fullName(l))}" ${picked.has(l.id) ? "checked" : ""}></td><td><b>${esc(D.fullName(l))}</b></td><td class="num">${esc(fmt(l.phone))}</td><td class="num ${k.ok ? "ok" : "late"}">${esc(k.st)} · ${esc(k.txt)}</td><td class="hide-sm hpd-sm">${l.lastCallAt ? ago(l.lastCallAt) : "Never"}</td><td><span class="hph-stage s-${esc(l.stage || "new")}">${esc(D.stageName(l.stage || "new"))}</span></td></tr>`; }).join("") || `<tr><td colspan="6" class="hpd-sm" style="padding:20px">No leads here.</td></tr>`}
             ${r.length > 400 ? `<tr><td colspan="6" class="hpd-sm">Showing the first 400. Use "Pick first" or the header checkbox to pick from all ${r.length.toLocaleString()}.</td></tr>` : ""}
@@ -2730,6 +2733,7 @@
       const qi = $("#hpmQ"); qi.oninput = () => { q = qi.value.trim().toLowerCase(); const pos = qi.selectionStart; draw(); const n = $("#hpmQ"); n.focus(); n.setSelectionRange(pos, pos); };
       $$("[data-k]", m).forEach((b) => (b.onclick = () => { key = b.dataset.k; lastIdx = -1; draw(); }));
       $$("[data-f]", m).forEach((b) => (b.onclick = () => { f = b.dataset.f; lastIdx = -1; draw(); }));
+      $("#hpmState").onchange = (e) => { st = e.target.value; lastIdx = -1; draw(); };
       $$("[data-first]", m).forEach((b) => (b.onclick = () => first(+b.dataset.first)));
       $("#hpmAll").onchange = (e) => { rows().forEach((l) => (e.target.checked ? picked.add(l.id) : picked.delete(l.id))); draw(); };
       $$("tr[data-id]", m).forEach((tr) => (tr.onclick = (e) => {

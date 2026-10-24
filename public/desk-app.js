@@ -301,17 +301,20 @@ const stageOpts=(withAll)=>(withAll?`<option value="">All stages</option>`:"")+S
 $("#fStage").innerHTML=stageOpts(true); $("#impStage").innerHTML=stageOpts(false); $("#dqStage").innerHTML=stageOpts(true);
 const sel=new Set(); let cPage=1, cFilterKey=null, cLastIdx=-1, cRows=[], cShown=[], bulkBusy=false;
 function contactRows(){
-  const q=$("#q").value.trim().toLowerCase(), st=$("#fStage").value, pr=$("#fProduct").value, so=$("#fSource").value;
+  const q=$("#q").value.trim().toLowerCase(), st=$("#fStage").value, pr=$("#fProduct").value, so=$("#fSource").value, sa=($("#fState")?.value||"");
   const qd=digits(q);
-  return filteredLeads().filter(l=>(!st||(l.stage||"new")===st)&&(!pr||l.product===pr)&&(!so||l.source===so)&&(!q||[fullName(l),l.email,l.state,l.source,(l.tags||[]).join(" ")].join(" ").toLowerCase().includes(q)||(qd.length>=3&&normPhone(l.phone).includes(qd))))
+  return filteredLeads().filter(l=>(!st||(l.stage||"new")===st)&&(!pr||l.product===pr)&&(!so||l.source===so)&&(!sa||String(l.state||"").trim().toUpperCase()===sa)&&(!q||[fullName(l),l.email,l.state,l.source,(l.tags||[]).join(" ")].join(" ").toLowerCase().includes(q)||(qd.length>=3&&normPhone(l.phone).includes(qd))))
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 }
 function renderContacts(){
   fillListSelects();renderListChips();
   const sources=[...new Set(filteredLeads().map(l=>l.source).filter(Boolean))].sort();
   const cur=$("#fSource").value; $("#fSource").innerHTML=`<option value="">All sources</option>`+sources.map(s=>`<option ${s===cur?"selected":""}>${esc(s)}</option>`).join("");
+  const stN={};filteredLeads().forEach(l=>{const x=String(l.state||"").trim().toUpperCase();if(x)stN[x]=(stN[x]||0)+1});
+  const curSt=$("#fState").value; $("#fState").innerHTML=`<option value="">All states</option>`+Object.keys(stN).sort().map(x=>`<option value="${esc(x)}" ${x===curSt?"selected":""}>${esc(x)} (${stN[x]})</option>`).join("");
+  if(curSt&&!stN[curSt])$("#fState").value="";
   const rows=contactRows();
-  const fk=[activeListId,$("#q").value.trim().toLowerCase(),$("#fStage").value,$("#fProduct").value,$("#fSource").value].join("\u0001");
+  const fk=[activeListId,$("#q").value.trim().toLowerCase(),$("#fStage").value,$("#fProduct").value,$("#fSource").value,$("#fState").value].join("\u0001");
   if(fk!==cFilterKey){cFilterKey=fk;cPage=1;sel.clear();cLastIdx=-1}
   if(sel.size){const inRows=new Set(rows.map(l=>l.id));for(const id of sel)if(!inRows.has(id))sel.delete(id)}
   const size=pageSize(), pg=pageWindow(rows.length,cPage,size); cPage=pg.page;
@@ -329,7 +332,7 @@ function renderContacts(){
     cLastIdx=i; syncSel()});
   paintPager(rows.length,pg,size); syncSel();
 }
-function clearClientFilters(){["#q","#fStage","#fProduct","#fSource"].forEach(s=>{const el=$(s);if(el)el.value=""});if(activeListId)setActiveList("");else renderContacts();$("#q")?.focus()}
+function clearClientFilters(){["#q","#fStage","#fProduct","#fSource","#fState"].forEach(s=>{const el=$(s);if(el)el.value=""});if(activeListId)setActiveList("");else renderContacts();$("#q")?.focus()}
 /* ---------- clients: pages, selection, bulk actions ---------- */
 const PAGE_SIZES=[20,50,100], PAGE_DEFAULT=50;
 function pageWindow(total,page,size){const pages=Math.max(1,Math.ceil(total/size));page=Math.min(Math.max(1,Math.floor(page)||1),pages);const start=(page-1)*size,nums=[];for(let n=1;n<=pages;n++){if(n===1||n===pages||Math.abs(n-page)<=1)nums.push(n);else if(nums[nums.length-1]!=="…")nums.push("…")}return{page,pages,start,end:Math.min(total,start+size),nums}}
@@ -476,7 +479,7 @@ async function bulkDeleteLeads(ids,o={}){
   }catch(e){toast("Couldn't delete: "+(e.message||e));col?.refresh();return false}
   finally{bulkBusy=false;window.dispatchEvent(new Event("hp:leadchange"));renderAll()}
 }
-["#q","#fStage","#fProduct","#fSource"].forEach(s=>$(s).addEventListener("input",renderContacts));
+["#q","#fStage","#fProduct","#fSource","#fState"].forEach(s=>$(s).addEventListener("input",renderContacts));
 $("#fList")?.addEventListener("change",()=>setActiveList($("#fList").value));
 
 /* ---------- CSV ---------- */
