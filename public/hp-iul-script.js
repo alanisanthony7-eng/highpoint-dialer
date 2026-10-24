@@ -3,11 +3,6 @@
 window.HP_IUL = {
   title: "Creamteam IUL Framework",
   stages: [
-    { title: "Tax talk", items: [
-      { k: "say", x: "Tax code 7702 states that life insurance is not a taxable asset. So when they pull from this policy" },
-      { k: "say", x: "With 401k’s, as you know withdrawals are taxed as ordinary income, so annually that’s 30-40% of what you’ve already brought in. So having something on top of that to supplement is a great way to be able to have it diversified, that way you don’t have all your eggs in one basket, because worst part is, people work for 20-40 years then the market flips upside down and people lose their entire portfolio, that’s why IUL’s are great because when done the right way, it protects that money that you started off with the 0% floor." },
-      { k: "note", x: "Show illustration, explain how they’ll be able to use the policy the RIGHT way. Ask what their main goal was (cash value / protection / both)." }
-    ] },
     { title: "Open", items: [
       { k: "say", x: "Hey [Name]?" },
       { k: "say", x: "Hey , yea hey  this is Anthony, im trying to send you your portfolio on the IUL illustration you were looking in to, Just wanted to clarify with you here real quick was it for the cash value growth or the protection side of it." },
@@ -79,6 +74,11 @@ window.HP_IUL = {
       { k: "say", x: "I just want to make sure — that start date and monthly amount are comfortable for you, correct?" },
       { k: "note", x: "Pause and confirm." },
       { k: "say", x: "Perfect. Now before I let you go, who else in your family might want to take advantage of this type of tax-free protection and growth plan? I can help them get set up with the same benefits while rates are low." }
+    ] },
+    { title: "Tax talk", items: [
+      { k: "say", x: "Tax code 7702 states that life insurance is not a taxable asset. So when they pull from this policy" },
+      { k: "say", x: "With 401k’s, as you know withdrawals are taxed as ordinary income, so annually that’s 30-40% of what you’ve already brought in. So having something on top of that to supplement is a great way to be able to have it diversified, that way you don’t have all your eggs in one basket, because worst part is, people work for 20-40 years then the market flips upside down and people lose their entire portfolio, that’s why IUL’s are great because when done the right way, it protects that money that you started off with the 0% floor." },
+      { k: "note", x: "Show illustration, explain how they’ll be able to use the policy the RIGHT way. Ask what their main goal was (cash value / protection / both)." }
     ] }
   ]
 };
