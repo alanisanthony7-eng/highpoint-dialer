@@ -1,7 +1,7 @@
 // Telnyx: REST helper, one-click setup, per-agent browser-phone tokens, numbers
 import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
-import { env, json, bad, requireUser, wrap, httpErr, getJ, setJ, updateJ, listKeys, config as loadConfig, to10, e164, AREA, siteUrl, saveCall, patchCallBySid, aggregate } from "../lib/hp.mjs";
+import { env, json, bad, requireUser, wrap, httpErr, getJ, setJ, updateJ, listKeys, store, config as loadConfig, to10, e164, AREA, siteUrl, saveCall, patchCallBySid, aggregate } from "../lib/hp.mjs";
 import { redact } from "../lib/redact.mjs";
 import { trustRoute } from "./trust.mjs";
 import { amdDial, amdLeadEvent, amdAgentAnswered, amdAgentGone } from "./amd.mjs";
@@ -208,8 +208,22 @@ function scrub(v, k = "") {
   if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([kk, vv]) => [kk, scrub(vv, kk)]));
   return v;
 }
+// One key per entry: parallel lines send many events at the same moment, and a single shared list lost
+// writes (and eventually stopped logging) whenever two of them raced.
 export async function logEvent(entry) {
-  await updateJ("txlog", "recent", (a) => [...(Array.isArray(a) ? a : []), { at: Date.now(), ...entry }].slice(-40), []);
+  const at = Date.now();
+  const e = { at, ...entry }; if (e.body && JSON.stringify(e.body).length > 3000) e.body = { note: "payload too long to keep" };
+  await setJ("txlog", `e-${String(at).padStart(14, "0")}-${Math.random().toString(36).slice(2, 7)}`, e);
+  if (Math.random() < 0.15) { // keep the newest 60
+    const keys = (await listKeys("txlog", "e-")).sort();
+    for (const k of keys.slice(0, Math.max(0, keys.length - 60))) await store("txlog").delete(k).catch(() => {});
+  }
+}
+async function readEvents() {
+  const keys = (await listKeys("txlog", "e-")).sort().slice(-40);
+  const rows = (await Promise.all(keys.map((k) => getJ("txlog", k).catch(() => null)))).filter(Boolean);
+  const old = (await getJ("txlog", "recent").catch(() => null)) || [];
+  return [...old, ...rows].sort((a, b) => (a.at || 0) - (b.at || 0)).slice(-40);
 }
 // The lead's number is the far end of the call. A SIP address (an agent's browser) is never a lead.
 const leadOf = (p) => { const v = String((/out/i.test(p.direction || "") ? p.to : p.from) || ""); return /sip:|@/i.test(v) ? "" : to10(v); };
@@ -607,7 +621,7 @@ export const telnyxRoute = wrap(async (req, action) => {
   if (action === "setup" && req.method === "POST") return json({ ok: true, ...(await txSetup()) });
   if (action === "log") { // admin: the last webhook events, with transcript text and numbers masked
     const cfg = await loadConfig();
-    return json({ webhook: `${siteUrl()}/api/telnyx/events`, publicKey: (await telnyxKey().catch(() => null)) ? "ok" : "missing (set TELNYX_PUBLIC_KEY)", connection: cfg.tx?.connId || null, hookErr: cfg.tx?.hookErr || null, inboundApp: cfg.tx?.appId || null, inboundAppErr: cfg.tx?.appErr || null, voicemailDetection: cfg.tx?.parkAt ? "on" : cfg.tx?.parkErr || "off (press Connect)", events: (await getJ("txlog", "recent")) || [] });
+    return json({ webhook: `${siteUrl()}/api/telnyx/events`, publicKey: (await telnyxKey().catch(() => null)) ? "ok" : "missing (set TELNYX_PUBLIC_KEY)", connection: cfg.tx?.connId || null, hookErr: cfg.tx?.hookErr || null, inboundApp: cfg.tx?.appId || null, inboundAppErr: cfg.tx?.appErr || null, voicemailDetection: cfg.tx?.parkAt ? "on" : cfg.tx?.parkErr || "off (press Connect)", events: await readEvents() });
   }
   if (action === "get") { // admin read-only look at the Telnyx account (diagnostics)
     const path = new URL(req.url).searchParams.get("p") || "";

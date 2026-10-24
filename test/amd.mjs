@@ -311,4 +311,11 @@ await sendEvent("call.initiated", NR.lp);
 await sendEvent("call.hangup", { ...NR.lp, hangup_cause: "timeout" });
 ok(await state(NR) === "ended", "rang out: Ringing → Ended, never Connected");
 
+// The admin log keeps up when many lines send events at the same moment
+const logBefore = (await call("boss", "/api/telnyx/log")).j.events.length;
+await Promise.all(Array.from({ length: 30 }, (_, i) => sendEvent("call.initiated", { call_control_id: "burst" + i, call_session_id: "bs" + i, direction: "outgoing", from: "+13055550100", to: "+13055550" + String(100 + i) })));
+const ev = (await call("boss", "/api/telnyx/log")).j.events;
+ok(ev.length >= Math.min(40, logBefore + 25), `the admin log keeps nearly every event from a burst of 30 at once (${ev.length} kept)`);
+ok(ev.every((e, i, a) => !i || a[i - 1].at <= e.at), "log entries come back oldest to newest");
+
 console.log("done");
