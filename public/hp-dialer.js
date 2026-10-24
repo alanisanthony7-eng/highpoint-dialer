@@ -2686,15 +2686,17 @@
 
   /* "Who are we calling?" picker → campaigns */
   function openPicker() {
-    const D = window.hpDesk; let key = S.src, f = "everyone", q = "", st = "", onlyPicked = false;
+    const D = window.hpDesk; let key = S.src, f = "everyone", q = "", st = "", onlyPicked = false, keepTable = true;
     const picked = new Set(); let lastIdx = -1;
     const m = document.createElement("div"); m.className = "hpd hph-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-label", "Who are we calling?");
     document.body.append(m);
     const rows = () => { let r = applyFilter(sourceLeads(key), f).filter((l) => !st || String(l.state || "").trim().toUpperCase() === st).filter((l) => !q || [D.fullName(l), l.phone, l.state, l.source, ...(l.tags || [])].join(" ").toLowerCase().includes(q) || (d10(q).length >= 3 && d10(l.phone).includes(d10(q)))); if (onlyPicked) r = r.filter((l) => picked.has(l.id)); return r; };
-    const first = (n) => { picked.clear(); rows().filter(dialable).slice(0, n).forEach((l) => picked.add(l.id)); draw(); };
+    const first = (n) => { keepTable = false; picked.clear(); rows().filter(dialable).slice(0, n).forEach((l) => picked.add(l.id)); draw(); };
     const draw = () => {
       const r = rows(), base = sourceLeads(key), counts = Object.fromEntries(FILTERS.map(([k]) => [k, applyFilter(base, k).length]));
       const pickedLeads = [...picked].map((id) => D.leads.get(id)).filter(Boolean); const out = pickedLeads.filter((l) => !leadClock(l).ok).length;
+      // every tick redraws the whole window: keep where the lists were scrolled to
+      const keep = { t: keepTable ? ($(".hph-mtable", m)?.scrollTop || 0) : 0, a: $(".hph-mbody aside", m)?.scrollTop || 0 }; keepTable = true;
       const byState = {}; applyFilter(sourceLeads(key), f).forEach((l) => { const x = String(l.state || "").trim().toUpperCase(); if (x) byState[x] = (byState[x] || 0) + 1; });
       if (st && !byState[st]) st = "";
       const stateOpts = Object.keys(byState).sort().map((x) => `<option value="${esc(x)}" ${x === st ? "selected" : ""}>${esc(x)} (${byState[x].toLocaleString()})</option>`).join("");
@@ -2720,6 +2722,7 @@
           <button type="button" class="btn" id="hpmCsv" ${picked.size ? "" : "disabled"}>Save ${picked.size} as a file</button><button type="button" class="btn primary" id="hpmGo" ${picked.size ? "" : "disabled"}>Create campaign with ${picked.size.toLocaleString()} leads</button>
           ${out ? `<p class="hph-warn">${out} of them are outside calling hours right now. The dialer skips those until it's calling time where they live.</p>` : ""}</div>
       </div>`;
+      const tb = $(".hph-mtable", m), sd = $(".hph-mbody aside", m); if (tb) tb.scrollTop = keep.t; if (sd) sd.scrollTop = keep.a;
       wire(r);
     };
     const close = () => { m.remove(); document.removeEventListener("keydown", keys); };
@@ -2730,10 +2733,10 @@
     };
     const wire = (r) => {
       $("#hpmX").onclick = close; m.onclick = (e) => { if (e.target === m) close(); };
-      const qi = $("#hpmQ"); qi.oninput = () => { q = qi.value.trim().toLowerCase(); const pos = qi.selectionStart; draw(); const n = $("#hpmQ"); n.focus(); n.setSelectionRange(pos, pos); };
-      $$("[data-k]", m).forEach((b) => (b.onclick = () => { key = b.dataset.k; lastIdx = -1; draw(); }));
-      $$("[data-f]", m).forEach((b) => (b.onclick = () => { f = b.dataset.f; lastIdx = -1; draw(); }));
-      $("#hpmState").onchange = (e) => { st = e.target.value; lastIdx = -1; draw(); };
+      const qi = $("#hpmQ"); qi.oninput = () => { keepTable = false; q = qi.value.trim().toLowerCase(); const pos = qi.selectionStart; draw(); const n = $("#hpmQ"); n.focus(); n.setSelectionRange(pos, pos); };
+      $$("[data-k]", m).forEach((b) => (b.onclick = () => { keepTable = false; key = b.dataset.k; lastIdx = -1; draw(); }));
+      $$("[data-f]", m).forEach((b) => (b.onclick = () => { keepTable = false; f = b.dataset.f; lastIdx = -1; draw(); }));
+      $("#hpmState").onchange = (e) => { keepTable = false; st = e.target.value; lastIdx = -1; draw(); };
       $$("[data-first]", m).forEach((b) => (b.onclick = () => first(+b.dataset.first)));
       $("#hpmAll").onchange = (e) => { rows().forEach((l) => (e.target.checked ? picked.add(l.id) : picked.delete(l.id))); draw(); };
       $$("tr[data-id]", m).forEach((tr) => (tr.onclick = (e) => {
@@ -2743,7 +2746,7 @@
         lastIdx = i; draw();
       }));
       $("#hpmClear").onclick = () => { picked.clear(); draw(); };
-      $("#hpmOnly").onchange = (e) => { onlyPicked = e.target.checked; draw(); };
+      $("#hpmOnly").onchange = (e) => { keepTable = false; onlyPicked = e.target.checked; draw(); };
       $("#hpmImport").onclick = () => { close(); D.go("import"); };
       $("#hpmGo").onclick = create;
       $("#hpmCsv").onclick = () => {
