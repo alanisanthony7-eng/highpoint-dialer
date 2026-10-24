@@ -34,7 +34,7 @@ async function call(who, path, body) {
   return { s: r.status, j: await r.json().catch(() => ({})) };
 }
 const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); if (!c) process.exitCode = 1; };
-const hi = { messages: [{ role: "user", content: "hi" }] };
+const hi = { messages: [{ role: "user", content: "hi" }], nocache: true };
 
 await call("rep", "/api/auth/signup", { email: "rep@hp.com", password: "password1", name: "Rep", invite: "HP2026", agree: true });
 
@@ -42,7 +42,7 @@ let r = await call("rep", "/api/ai", hi);
 ok(r.s === 200 && r.j.text === "Hello from Workers AI", "Workers AI answers when the AI binding is set");
 ok(cfAsked.at(-1).model === "@cf/google/gemma-4-26b-a4b-it" && asked.length === 0, "it uses Gemma 4 and does not call Anthropic");
 ok(cfAsked.at(-1).input.messages[0].role === "system" && /Highpoint Bot/.test(cfAsked.at(-1).input.messages[0].content) && /Heart attack/.test(cfAsked.at(-1).input.messages[0].content) && /packet/.test(cfAsked.at(-1).input.messages[0].content) && cfAsked.at(-1).input.messages[1].content === "hi", "the Highpoint knowledge prompt and the user's message both go to the model");
-ok(cfAsked.at(-1).input.temperature === 0.2 && cfAsked.at(-1).input.chat_template_kwargs?.enable_thinking === true, "answers stay conservative so rates are not invented");
+ok(cfAsked.at(-1).input.temperature === 0.2 && cfAsked.at(-1).input.chat_template_kwargs?.enable_thinking === false, "answers stay conservative so rates are not invented, and skip the slow thinking pass");
 
 env.ANTHROPIC_API_KEY = "sk-ant-should-not-be-used";
 await call("rep", "/api/ai", hi);
@@ -70,6 +70,26 @@ cfReply = () => ({ response: "Hello from Workers AI" });
 cfReply = () => { throw new Error("30000 neurons remaining would drop below 0 (3028)"); };
 r = await call("rep", "/api/ai", hi);
 ok(r.s === 429 && r.j.code === "quota" && /Workers AI/.test(r.j.error), "hitting the daily allowance says so, and still doesn't call Claude");
+
+// speed: no thinking pass, small prompts for notes, streaming, and instant repeats
+r = await call("rep", "/api/ai", { ...hi, think: true });
+ok(cfAsked.at(-1).input.chat_template_kwargs?.enable_thinking === true, "thinking can still be switched on per request");
+cfReply = () => ({ response: "Summary text" });
+const noteReq = { system: "You write CRM notes. Reply with JSON only.", messages: [{ role: "user", content: "Client: I take metformin. Agent: ok" }], mode: "copilot" };
+r = await call("rep", "/api/ai", noteReq);
+const noteSys = cfAsked.at(-1).input.messages[0].content;
+ok(noteSys === "You write CRM notes. Reply with JSON only." && cfAsked.at(-1).input.max_tokens === 900, "call notes skip the big product pack and cap the answer length");
+const before = cfAsked.length;
+r = await call("rep", "/api/ai", noteReq);
+ok(r.j.text === "Summary text" && r.j.cached === true && cfAsked.length === before, "the same question inside five minutes answers instantly without calling the model");
+r = await call("rep", "/api/ai", { messages: [{ role: "user", content: "stroke 2 years ago, who takes him?" }], nocache: true });
+ok(cfAsked.at(-1).input.max_tokens === 1800 && /Highpoint Bot/.test(cfAsked.at(-1).input.messages[0].content), "the Bot keeps its product knowledge");
+env.AI.run = async (model, input) => { cfAsked.push({ model, input }); if (!input.stream) return { response: "x" }; const enc = new TextEncoder(); return new ReadableStream({ start(c) { for (const w of ["Hel", "lo ", "there"]) c.enqueue(enc.encode(`data: ${JSON.stringify({ response: w })}\n\n`)); c.enqueue(enc.encode("data: [DONE]\n\n")); c.close(); } }); };
+const sr = await onRequest({ request: new Request("https://desk.example.com/api/ai", { method: "POST", headers: { "content-type": "application/json", cookie: jars.rep }, body: JSON.stringify({ ...hi, stream: true }) }), env, waitUntil: () => {} });
+const streamed = await sr.text();
+ok(/event-stream/.test(sr.headers.get("content-type")) && cfAsked.at(-1).input.stream === true && /"Hel"/.test(streamed) && /\[DONE\]/.test(streamed), "answers stream word by word when the desk asks for it");
+env.AI.run = async (model, input) => { cfAsked.push({ model, input }); const r = cfReply(model, input); if (r instanceof Error) throw r; return r; };
+cfReply = () => ({ response: "Hello from Workers AI" });
 
 delete env.AI;
 asked.length = 0;

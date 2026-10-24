@@ -214,6 +214,8 @@ export async function roomRoute(req, action) {
 const DEFAULT_CF = "@cf/google/gemma-4-26b-a4b-it";
 const FALLBACK_CF = "@cf/zai-org/glm-4.7-flash";
 const DEFAULT_CLAUDE = "claude-haiku-5-5";
+const AI_CACHE = new Map(); // repeat questions inside five minutes answer instantly (per server instance)
+async function hashStr(t) { const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(t)); return [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
 function stripThink(s) {
   return String(s || "").replace(/<(?:think|thought|reasoning)>[\s\S]*?<\/(?:think|thought|reasoning)>/gi, "").replace(/^\s*thinking[:\s]+[\s\S]*?\n\s*(?:answer|final)[:\s]+/i, "").trim();
 }
@@ -239,18 +241,47 @@ export async function aiRoute(req) {
   if (!messages.length) return json({ error: "Nothing to send" }, 400);
   const extra = String(b.system || "").trim();
   const asked = messages.map((m) => m.content).join("\n");
-  const system = [pickKnowledge(asked, { mode: b.mode }), extra].filter(Boolean).join("\n\n").slice(0, 14000);
+  // Copilot notes and fact pulls carry their own instructions, so the big product pack only slows them down.
+  const quick = ["copilot", "summary", "extract"].includes(String(b.mode || "").toLowerCase());
+  const system = [quick && extra ? "" : pickKnowledge(asked, { mode: b.mode }), extra].filter(Boolean).join("\n\n").slice(0, 14000);
   const chosen = String(env("HP_AI_MODEL") || "").trim();
+  const maxTokens = Math.max(200, Math.min(2500, +b.max_tokens || (quick ? 900 : 1800)));
+  const ckey = !b.stream && !b.nocache ? `${quick}|${await hashStr(chosen + "\u0001" + system + "\u0001" + asked + "\u0001" + maxTokens + "\u0001" + (b.think === true))}` : "";
+  const hit = ckey && AI_CACHE.get(ckey);
+  if (hit && Date.now() - hit.t < 5 * 60e3) return json({ text: hit.text, cached: true });
 
   if (ai?.run) {
     const retired = /llama-3(\.1)?-8b-instruct(?!-fp8)|glm-4\.7-flash/.test(chosen);
     const model = chosen.startsWith("@cf/") && !retired ? chosen : DEFAULT_CF;
-    const run = async (m) => aiText(await ai.run(m, {
+    // Thinking first makes every answer several times slower. It stays available with {think:true}.
+    const input = (m, stream) => ({
       messages: [{ role: "system", content: system }, ...messages],
-      max_tokens: 2500,
+      max_tokens: maxTokens,
       temperature: 0.2,
-      ...(m === DEFAULT_CF ? { chat_template_kwargs: { enable_thinking: true } } : {}),
-    }));
+      ...(stream ? { stream: true } : {}),
+      ...(m === DEFAULT_CF ? { chat_template_kwargs: { enable_thinking: b.think === true } } : {}),
+    });
+    const run = async (m) => aiText(await ai.run(m, input(m, false)));
+    if (b.stream === true) {
+      // Words reach the screen as they are written instead of after the whole answer.
+      try {
+        let out;
+        try { out = await ai.run(model, input(model, true)); }
+        catch (e) {
+          const detail = String(e?.message || e || "");
+          if (model !== FALLBACK_CF && /5028|deprecated|not found|unavailable/i.test(detail)) out = await ai.run(FALLBACK_CF, input(FALLBACK_CF, true));
+          else throw e;
+        }
+        if (out && typeof out.getReader === "function") return new Response(out, { headers: { "content-type": "text/event-stream", "cache-control": "no-store", "x-accel-buffering": "no" } });
+        const text = aiText(out);
+        if (!String(text).trim()) return json({ error: "The assistant didn't return an answer. Try again.", code: "empty" }, 502);
+        return json({ text });
+      } catch (e) {
+        const detail = String(e?.message || e || "");
+        if (/neuron|quota|limit|429|3028/i.test(detail)) return json({ error: "Today's free Workers AI allowance is used up. Try again tomorrow — extra use is billed in cents on a paid Workers plan, not Claude credits.", code: "quota" }, 429);
+        return json({ error: detail || "Assistant error" }, 502);
+      }
+    }
     try {
       let text;
       try { text = await run(model); }
@@ -260,6 +291,7 @@ export async function aiRoute(req) {
         else throw e;
       }
       if (!String(text).trim()) return json({ error: "The assistant didn't return an answer. Try again.", code: "empty" }, 502);
+      if (ckey) { AI_CACHE.set(ckey, { t: Date.now(), text }); if (AI_CACHE.size > 80) AI_CACHE.delete(AI_CACHE.keys().next().value); }
       return json({ text });
     } catch (e) {
       const detail = String(e?.message || e || "");
@@ -271,7 +303,7 @@ export async function aiRoute(req) {
   const ask = (model) => fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model, max_tokens: 1500, system, messages }),
+    body: JSON.stringify({ model, max_tokens: Math.min(maxTokens, 1500), system, messages }),
   });
   let model = chosen || DEFAULT_CLAUDE;
   if (!model.startsWith("claude-")) model = DEFAULT_CLAUDE;
