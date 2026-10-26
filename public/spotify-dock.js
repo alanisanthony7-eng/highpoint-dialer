@@ -317,16 +317,38 @@
   }
 
   /* ---------- auto pause on calls ---------- */
-  window.addEventListener("hp:callstart", () => {
-    if (!st.autoPause || !playing) return;
+  /* Pause only while a lead is actually on the line. Ringing leads, no-answers and the gap
+     between one lead and the next never touch the music; resume waits a beat so a quick
+     hang-up -> next connect doesn't flap play/pause. */
+  let callLive = false, watchT = 0, resumeT = 0;
+  const connected = () => { const d = window.hpDialer; return d && d.ready ? !!d.connected : true; };
+  function pauseForCall() {
+    if (pausedByCall || !st.autoPause || !playing) return;
     if (mode === "sdk" && player) player.pause(); else if (ctrl) ctrl.pause(); else return;
     pausedByCall = true; notify("Music paused for your call");
-  });
-  window.addEventListener("hp:callend", () => {
+  }
+  function resumeAfterCall() {
     if (!pausedByCall) return; pausedByCall = false;
     if (!st.autoResume) return;
     if (mode === "sdk" && player) player.resume(); else if (ctrl) ctrl.resume(); else return;
     notify("Music back on");
+  }
+  function watch() {
+    if (!callLive) return;
+    if (connected()) { clearTimeout(resumeT); resumeT = 0; pauseForCall(); }
+    else if (pausedByCall && !resumeT) resumeT = setTimeout(() => { resumeT = 0; if (callLive && !connected()) resumeAfterCall(); }, 2500);
+    watchT = setTimeout(watch, 350);
+  }
+  window.addEventListener("hp:callstart", () => { callLive = true; clearTimeout(resumeT); resumeT = 0; clearTimeout(watchT); watch(); });
+  window.addEventListener("hp:callend", () => {
+    // a ring ending or a call wrapping up: resume only once nothing is connected
+    clearTimeout(resumeT);
+    resumeT = setTimeout(() => {
+      resumeT = 0;
+      if (connected()) return;
+      resumeAfterCall();
+      if (!window.hpDialer?.session) { callLive = false; clearTimeout(watchT); }
+    }, 1200);
   });
 
   /* ---------- top bar button ---------- */
