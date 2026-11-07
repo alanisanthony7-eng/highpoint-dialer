@@ -12,6 +12,7 @@ import vm from "../../src/dialer/dialer-vm.mjs";
 import calls from "../../src/dialer/dialer-calls.mjs";
 import sms from "../../src/dialer/dialer-sms.mjs";
 import { telnyxRoute } from "../../src/telnyx/tx.mjs";
+import { wavvRoute } from "../../src/wavv/wavv.mjs";
 import { spotifyRoute } from "../../src/lib/spotify.mjs";
 import { followupsRoute, poke } from "../../src/lib/followups.mjs";
 import { leadsRoute } from "../../src/lib/leadpost.mjs";
@@ -34,6 +35,7 @@ async function health(env) {
     db,
     twilio: !!(env?.TWILIO_ACCOUNT_SID && env?.TWILIO_AUTH_TOKEN),
     telnyx: !!env?.TELNYX_API_KEY,
+    wavv: !!env?.WAVV_SDK_KEY,
     stripe: !!env?.STRIPE_SECRET_KEY,
     spotify: !!(env?.SPOTIFY_CLIENT_ID && env?.SPOTIFY_CLIENT_SECRET),
     email: !!(env?.RESEND_API_KEY && env?.HP_EMAIL_FROM),
@@ -62,6 +64,7 @@ export async function onRequest(ctx) {
       case "ai": return await aiRoute(req);
       case "dialer": { const h = DIALER[parts[1]]; if (h) return await h(req, c); break; }
       case "telnyx": return await telnyxRoute(req, parts[1]);
+      case "wavv": return await wavvRoute(req, parts[1]);
       case "spotify": return await spotifyRoute(req, parts[1]);
       case "followups": return await followupsRoute(req, parts[1]);
       case "cron": return await followupsRoute(req, "cron");

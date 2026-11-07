@@ -330,7 +330,8 @@ export async function aggregate(rec, kind) {
   };
   await updateJ("stats", `${day}/a/${rec.agent}`, apply, {});
   if (rec.from && kind !== "dispo") await updateJ("stats", `${day}/n/${rec.from}`, apply, {});
-  if (kind === "end" && rec.talkSec > 0 && rec.agent && rec.dir !== "in") await reportMinutes(rec);
+  // WAVV bills its own calling, so those minutes are never metered through our plan
+  if (kind === "end" && rec.talkSec > 0 && rec.agent && rec.dir !== "in" && rec.mode !== "wavv") await reportMinutes(rec);
   if (kind === "end" && rec.from) {
     if (rec.answered) await bumpNumber(rec.from, "answered");
     if (rec.answered && rec.talkSec < 10) await bumpNumber(rec.from, "short");

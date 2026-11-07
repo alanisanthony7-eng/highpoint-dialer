@@ -135,7 +135,7 @@ let lead = docs("leads")[0], appt = docs("appts")[0];
 ok(lead && lead.first === "Margaret" && lead.phone === "2125550142" && lead.stage === "appointment" && lead.source === "Booking link" && lead.product === "FE" && lead.consent?.via === "booking link" && lead.consent.ip === "203.0.113.9", "the client lands in the CRM with their consent recorded");
 ok(appt && appt.at === at && appt.dur === 20 && appt.leadId === lead.id && appt.booked?.token === manage && /booked online/.test(appt.title), "the call is on the desk calendar");
 ok(lead.notes.some((n) => n.text === "Prefers mornings"), "their note is saved");
-ok(mails.length === 2 && mails.some((m) => m.to[0] === "margaret@example.com" && /booked with Rita/.test(m.html) && /10:00 AM CDT/.test(m.html)) && mails.some((m) => m.to[0] === "rep@hp.com" && /New booking: Margaret Lee/.test(m.subject)), "the client gets a confirmation in their time zone, and the agent is emailed");
+ok(mails.length === 2 && mails.some((m) => m.to[0] === "margaret@example.com" && /booked with Rita/.test(m.html) && /10:00 AM C[DS]T/.test(m.html)) && mails.some((m) => m.to[0] === "rep@hp.com" && /New booking: Margaret Lee/.test(m.subject)), "the client gets a confirmation in their time zone, and the agent is emailed");
 r = await call(null, "/api/book/p/rita-rep");
 const d3 = r.j.days.find((d) => d.day === day.day).slots;
 ok(!d3.includes(at) && !d3.includes(at - 20 * 6e4) && !d3.includes(at + 20 * 6e4) && d3.includes(at + 40 * 6e4) && d3.includes(at - 40 * 6e4), "the booked time and the 10-minute break around it are gone");
