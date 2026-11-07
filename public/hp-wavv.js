@@ -135,10 +135,49 @@
     (head.firstElementChild || head).append(row);
   }
 
+  // The Dial page: a WAVV bar above the dialer home. renderHome() rewrites #hpdHome every 15 s, so the bar is its own sibling.
+  function queueNow() { try { return (window.hpDialer?.queue?.() || desk()?.dialQueue?.() || []).slice(); } catch { return []; } }
+  function mountBar() {
+    if (!status?.configured) return;
+    const home = document.getElementById("hpdHome");
+    if (!home) return;
+    let bar = document.getElementById("hpwBar");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "hpwBar"; bar.className = "hpd";
+      bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px;margin:0 0 10px;border-radius:14px;border:1px solid var(--hp-line,rgba(255,255,255,.12));background:rgba(255,255,255,.04)";
+      bar.innerHTML = '<b style="margin-right:6px">WAVV</b><span class="muted" id="hpwState" style="font-size:12px;margin-right:auto">Starting…</span>'
+        + '<button type="button" class="btn primary sm" data-w="open">Open WAVV dialer</button>'
+        + '<button type="button" class="btn sm" data-w="queue" title="Put today\'s call queue into WAVV as a call list">Send queue to WAVV</button>'
+        + '<button type="button" class="btn sm" data-w="messenger">Messages</button>'
+        + '<button type="button" class="btn sm" data-w="history">Call history</button>';
+      bar.addEventListener("click", async (e) => {
+        const b = e.target.closest("[data-w]"); if (!b) return;
+        b.disabled = true;
+        try {
+          const w = b.dataset.w;
+          if (w === "queue") {
+            const q = queueNow();
+            const n = await callList("Highpoint queue " + new Date().toLocaleDateString(), q);
+            if (n) toast(n + " leads sent to WAVV" + (q.length > 200 ? " (first 200)" : ""));
+          } else await show(w === "open" ? "dialer" : w);
+        } finally { b.disabled = false; }
+      });
+      (document.getElementById("hphMusic") || home).insertAdjacentElement("beforebegin", bar);
+      new MutationObserver(() => { bar.hidden = home.hidden; }).observe(home, { attributes: true, attributeFilter: ["hidden"] });
+    }
+    bar.hidden = home.hidden;
+    const st = bar.querySelector("#hpwState");
+    const want = sdk ? "Connected" : "Connecting…";
+    if (st && st.textContent !== want && !st.dataset.err) st.textContent = want; // only on change, or the observer would loop on its own write
+  }
+  new MutationObserver(() => mountBar()).observe(document.body, { childList: true, subtree: true });
+
   // learn at idle whether WAVV is on; if it is, get the SDK running so screen pops and call events work from the start
   async function boot() {
     try { status = await http("/status"); } catch { return; }
-    if (status.configured) start().catch(() => {});
+    mountBar();
+    if (status.configured) start().then(mountBar, () => { const st = document.querySelector("#hpwState"); if (st) { st.dataset.err = "1"; st.textContent = "Couldn't connect. Press Open WAVV dialer to see why."; } });
   }
   if ("requestIdleCallback" in window) requestIdleCallback(boot, { timeout: 4000 }); else setTimeout(boot, 1500);
 })();
