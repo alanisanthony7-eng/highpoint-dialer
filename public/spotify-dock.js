@@ -321,7 +321,7 @@
      between one lead and the next never touch the music; resume waits a beat so a quick
      hang-up -> next connect doesn't flap play/pause. */
   let callLive = false, watchT = 0, resumeT = 0;
-  const connected = () => { const d = window.hpDialer; return d && d.ready ? !!d.connected : true; };
+  const connected = () => { if (window.hpWavv?.active) return window.hpWavv.connected; const d = window.hpDialer; return d && d.ready ? !!d.connected : true; };
   function pauseForCall() {
     if (pausedByCall || !st.autoPause || !playing) return;
     if (mode === "sdk" && player) player.pause(); else if (ctrl) ctrl.pause(); else return;

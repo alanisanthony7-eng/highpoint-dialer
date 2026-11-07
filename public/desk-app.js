@@ -682,7 +682,7 @@ function openDrawer(id){
    </div>
    <div class="df">${id?`<button class="btn danger" id="dDel">Delete lead</button>`:"<span></span>"}<div class="row"><button class="btn" id="dCancel">Cancel</button><button class="btn primary" id="dSave">${id?"Save changes":"Add lead"}</button></div></div>`;
   if(id)showDock(id);
-  $("#drawer").hidden=false; $("#scrim").hidden=false; if(!P)$("#d_first").focus();
+  $("#drawer").hidden=false; if(id)try{window.hpWavv?.decorate(l)}catch{} $("#scrim").hidden=false; if(!P)$("#d_first").focus();
   $("#dClose").onclick=$("#dCancel").onclick=closeDrawer;
   if(P){
     const more=$("#dMore"); more.ontoggle=()=>{drawerMore=more.open};

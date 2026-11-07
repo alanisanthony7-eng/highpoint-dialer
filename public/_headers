@@ -1,7 +1,7 @@
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: microphone=(self)
+  Permissions-Policy: microphone=(self "https://app.wavv.com")
 /desk-app.js
   Cache-Control: no-cache
 /hp-dialer.js
@@ -91,4 +91,6 @@
 /hp-perf.css
   Cache-Control: no-cache
 /hp-3d.css
+  Cache-Control: no-cache
+/hp-wavv.js
   Cache-Control: no-cache
